@@ -1,22 +1,15 @@
-from pydantic import BaseModel, Field, EmailStr, field_validator
-from typing import Optional, Annotated
-from datetime import date
+from pydantic import BaseModel, field_validator, ConfigDict
+from typing import Optional, ClassVar
+from datetime import datetime
+import re
 
-
-UserId = Annotated[str, Field(min_length=10, max_length=30, description="Unique system-generated identifier")]
-DocumentType = Annotated[str, Field(pattern="^(CC|TI|CE|PTE|PAS)$", description="Document type: CC, TI, CE, PTE, PAS")]
-Identification = Annotated[str, Field(min_length=6, max_length=20, pattern="^[A-Za-z0-9]+$", description="Official identification code")]
-Name = Annotated[str, Field(min_length=2, max_length=30, description="User's first or last name")]
-Gender = Annotated[str, Field(pattern="^(Hombre|Mujer|Hermafrodita)$", description="User gender")]
-SexualIdentity = Annotated[str, Field(min_length=3, max_length=20, description="Sexual identity (e.g., Transgénero, Bisexual, etc.)")]
-Address = Annotated[str, Field(min_length=5, max_length=50, pattern="^[A-Za-z0-9#\\-\\s,]+$", description="Home address")]
-Country = Annotated[str, Field(min_length=2, max_length=50, description="Country of origin")]
-City = Annotated[str, Field(min_length=2, max_length=30, description="City or municipality")]
-Phone = Annotated[str, Field(pattern="^\\+?[0-9]{7,15}$", description="Phone number with optional country prefix")]
-Role = Annotated[str, Field(pattern="^(Docente|Estudiante|Invitado|Egresado|Administrativo)$", description="User role in the system")]
-
+# Importar tipos Annotated
+from app.schemas.types import *
+from app.core.patterns import Patterns
+from app.core.constants import ValidationMessages, Limits, Defaults
 
 class UserBase(BaseModel):
+<<<<<<< HEAD
     tipo_documento: DocumentType
     identificacion: Identification
     nombres: Name
@@ -38,24 +31,56 @@ class UserBase(BaseModel):
         rol = info.data.get("rol") if info.data else None
         if rol in ("Docente", "Estudiante") and not v.endswith("@unicesar.edu.co"):
             raise ValueError("Institutional email required (@unicesar.edu.co) for Docente or Estudiante roles")
+=======
+    tipo_documento: UserDocumentType
+    identificacion: UserIdentification
+    nombres: UserName
+    apellidos: UserName
+    genero: UserGender
+    identidad_sexual: UserSexualIdentity
+    fecha_nacimiento: datetime
+    direccion: UserAddress
+    pais: UserCountry
+    ciudad: UserCity
+    telefono: UserPhone
+    correo: UserEmail
+    contraseña: UserPassword
+    rol: UserRole
+    
+    # Dominios permitidos por rol
+    ALLOWED_DOMAINS: ClassVar = {
+        Role.DOCENTE: ["@unicesar.edu.co", "@prof.unicesar.edu.co"],
+        Role.ESTUDIANTE: ["@unicesar.edu.co"],
+        Role.ADMINISTRATIVO: ["@unicesar.edu.co"]
+    }
+    
+    @field_validator("correo")
+    def validate_institutional_email(cls, v, info):
+        rol = info.data.get("rol")
+        if rol in cls.ALLOWED_DOMAINS:
+            allowed_domains = cls.ALLOWED_DOMAINS[rol]
+            if not any(v.endswith(domain) for domain in allowed_domains):
+                raise ValueError(f"Correo institucional requerido ({', '.join(allowed_domains)}) para rol {rol}")
+>>>>>>> origin/Mateo
         return v
 
     @field_validator("contraseña")
     def validate_password_strength(cls, v):
-        import re
-        pattern = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9@]).{8,12}$"
-        if not re.match(pattern, v):
-            raise ValueError("Password must contain uppercase, lowercase, number, and a special character (excluding @)")
+        # Usar pattern del Core pero construir la regex completa
+        base_pattern = Patterns.PASSWORD.rstrip('$')
+        full_pattern = f"{base_pattern}.{{{Limits.PASSWORD_MIN},{Limits.PASSWORD_MAX}}}$"
+        if not re.match(full_pattern, v):
+            raise ValueError(ValidationMessages.INVALID_PASSWORD)
         return v
 
-    model_config = {
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
-                "tipo_documento": "CC",
+                "tipo_documento": DocumentType.CC,
                 "identificacion": "1023456789",
                 "nombres": "David José",
                 "apellidos": "Rodríguez González",
-                "genero": "Hombre",
+                "genero": Gender.HOMBRE,
                 "identidad_sexual": "Heterosexual",
                 "fecha_nacimiento": "2000-06-03",
                 "direccion": "Calle 45 #22-10, Barrio San José",
@@ -64,15 +89,15 @@ class UserBase(BaseModel):
                 "telefono": "+57301343343",
                 "correo": "david.rodriguez@unicesar.edu.co",
                 "contraseña": "Sass344#",
-                "rol": "Estudiante"
+                "rol": Role.ESTUDIANTE
             }
         }
-    }
-
+    )
 
 class UserCreate(UserBase):
     pass
 
+<<<<<<< HEAD
 
 class UserUpdate(BaseModel):
     tipo_documento: Optional[DocumentType] = None
@@ -93,3 +118,28 @@ class UserUpdate(BaseModel):
 
 class UserResponse(UserBase):
     id_usuario: str
+=======
+class UserUpdate(BaseModel):    
+    tipo_documento: Optional[UserDocumentType] = None
+    identificacion: Optional[UserIdentification] = None
+    nombres: Optional[UserName] = None
+    apellidos: Optional[UserName] = None
+    genero: Optional[UserGender] = None
+    identidad_sexual: Optional[UserSexualIdentity] = None
+    fecha_nacimiento: Optional[datetime] = None
+    direccion: Optional[UserAddress] = None
+    pais: Optional[UserCountry] = None
+    ciudad: Optional[UserCity] = None
+    telefono: Optional[UserPhone] = None
+    correo: Optional[UserEmail] = None
+    contraseña: Optional[UserPassword] = None
+    rol: Optional[UserRole] = None
+
+class UserResponse(UserBase):    
+    id_usuario: UserId
+    activo: bool = Field(default=Defaults.ACTIVE_STATUS)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+>>>>>>> origin/Mateo
