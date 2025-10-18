@@ -1,0 +1,17 @@
+# Entorno virtual
+venv/
+env/
+
+# Archivos de caché
+__pycache__/
+*.pyc
+
+# Archivos del sistema
+.DS_Store
+
+# Archivos de configuración local
+*.env
+
+# Ignorar entorno virtual de Python
+.venv/
+
