@@ -27,23 +27,7 @@ class EventBase(BaseModel):
     lugar: Optional[EventLocation] = None
     cupo_maximo: Optional[EventCapacity] = None
     permite_invitados: bool = Field(default=Defaults.EVENT_ALLOWS_GUESTS)
-    
-    @field_validator("fecha_inicio")
-    @classmethod
-    def validate_fecha_inicio(cls, v: datetime) -> datetime:
-        now = datetime.now(timezone.utc) if v.tzinfo else datetime.now()
-        if v < now:
-            raise ValueError(ValidationMessages.PAST_DATE)
-        return v
-    
-    @field_validator("fecha_fin")
-    @classmethod
-    def validate_fecha_fin(cls, v: datetime, info) -> datetime:
-        fecha_inicio = info.data.get("fecha_inicio")
-        if fecha_inicio and v <= fecha_inicio:
-            raise ValueError(ValidationMessages.INVALID_DATE_RANGE)
-        return v
-    
+
     @field_validator("nombre_evento", "descripcion", "lugar")
     @classmethod
     def validate_text_fields(cls, v: Optional[str]) -> Optional[str]:
@@ -67,7 +51,22 @@ class EventBase(BaseModel):
 
 
 class EventCreate(EventBase):
-    pass
+    """Validaciones que solo aplican al crear o editar eventos"""
+    @field_validator("fecha_inicio")
+    @classmethod
+    def validate_fecha_inicio(cls, v: datetime) -> datetime:
+        now = datetime.now(timezone.utc) if v.tzinfo else datetime.now()
+        if v < now:
+            raise ValueError(ValidationMessages.PAST_DATE)
+        return v
+    
+    @field_validator("fecha_fin")
+    @classmethod
+    def validate_fecha_fin(cls, v: datetime, info) -> datetime:
+        fecha_inicio = info.data.get("fecha_inicio")
+        if fecha_inicio and v <= fecha_inicio:
+            raise ValueError(ValidationMessages.INVALID_DATE_RANGE)
+        return v
 
 
 class EventUpdate(BaseModel):
@@ -81,6 +80,8 @@ class EventUpdate(BaseModel):
     cupo_maximo: Optional[EventCapacity] = None
     estado: Optional[EventState] = None
     permite_invitados: Optional[bool] = None
+
+    
 
 
 class EventStateChange(BaseModel):
@@ -113,7 +114,7 @@ class EventResponse(EventBase):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True,validate_assignment=False)
 
 
 class EventSummary(BaseModel):
@@ -127,4 +128,4 @@ class EventSummary(BaseModel):
     total_inscritos: int = 0
     total_proyectos: int = 0
     
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True,validate_assignment=False)

@@ -12,8 +12,6 @@ starlette==0.48.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.37.0
-<<<<<<< HEAD
-=======
 
 # Firebase
 firebase-admin==7.1.0
@@ -41,4 +39,3 @@ python-multipart==0.0.20
 
 # HTTP Client para Firebase Auth
 requests==2.31.0
->>>>>>> 04b5043 (Implementacion de Modulo Administrador: Docente, Materia, Grupo, Evento y Auth)
