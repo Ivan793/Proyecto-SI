@@ -1,17 +1,4 @@
 from fastapi import FastAPI
-<<<<<<< HEAD
-from app.routers import student_router, guest_router, graduate_router
-
-app = FastAPI(
-    title="API de Gestión de Usuarios - Universidad Popular del Cesar",
-    description="API para la gestión de estudiantes, invitados y egresados. Versión de prueba sin base de datos.",
-    version="2.1.0"
-)
-
-app.include_router(student_router.router)
-app.include_router(guest_router.router)
-app.include_router(graduate_router.router)
-=======
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging, sys
@@ -23,7 +10,7 @@ from app.exceptions.handlers import register_exception_handlers
 from slowapi.errors import RateLimitExceeded
 
 # Importar todos los routers de forma centralizada
-from app.routers import router as api_router
+from app.routers import graduate_router, guest_router, router as api_router, student_router
 
 # Configuración de logs
 logging.basicConfig(
@@ -70,6 +57,9 @@ register_exception_handlers(app)
 
 # Routers
 app.include_router(api_router)
+app.include_router(student_router.router)
+app.include_router(guest_router.router)
+app.include_router(graduate_router.router)
 
 # Health check
 @app.get("/", tags=["Health"])
@@ -79,4 +69,3 @@ async def root():
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {"firebase": "connected" if firebase_client._db else "disconnected"}
->>>>>>> origin/Mateo

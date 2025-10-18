@@ -9,29 +9,6 @@ from app.core.patterns import Patterns
 from app.core.constants import ValidationMessages, Limits, Defaults
 
 class UserBase(BaseModel):
-<<<<<<< HEAD
-    tipo_documento: DocumentType
-    identificacion: Identification
-    nombres: Name
-    apellidos: Name
-    genero: Gender
-    identidad_sexual: SexualIdentity
-    fecha_nacimiento: date
-    direccion: Address
-    pais: Country
-    ciudad: City
-    telefono: Phone
-    correo: EmailStr = Field(..., max_length=30, description="User email address")
-    contraseña: str = Field(..., min_length=8, max_length=12, description="User password")
-    rol: Role
-
-    # ✅ Corregido: se usa "info.data.get" en lugar de "values.get"
-    @field_validator("correo")
-    def validate_institutional_email(cls, v, info):
-        rol = info.data.get("rol") if info.data else None
-        if rol in ("Docente", "Estudiante") and not v.endswith("@unicesar.edu.co"):
-            raise ValueError("Institutional email required (@unicesar.edu.co) for Docente or Estudiante roles")
-=======
     tipo_documento: UserDocumentType
     identificacion: UserIdentification
     nombres: UserName
@@ -61,7 +38,6 @@ class UserBase(BaseModel):
             allowed_domains = cls.ALLOWED_DOMAINS[rol]
             if not any(v.endswith(domain) for domain in allowed_domains):
                 raise ValueError(f"Correo institucional requerido ({', '.join(allowed_domains)}) para rol {rol}")
->>>>>>> origin/Mateo
         return v
 
     @field_validator("contraseña")
@@ -97,28 +73,6 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     pass
 
-<<<<<<< HEAD
-
-class UserUpdate(BaseModel):
-    tipo_documento: Optional[DocumentType] = None
-    identificacion: Optional[Identification] = None
-    nombres: Optional[Name] = None
-    apellidos: Optional[Name] = None
-    genero: Optional[Gender] = None
-    identidad_sexual: Optional[SexualIdentity] = None
-    fecha_nacimiento: Optional[date] = None
-    direccion: Optional[Address] = None
-    pais: Optional[Country] = None
-    ciudad: Optional[City] = None
-    telefono: Optional[Phone] = None
-    correo: Optional[EmailStr] = None
-    contraseña: Optional[str] = None
-    rol: Optional[Role] = None
-
-
-class UserResponse(UserBase):
-    id_usuario: str
-=======
 class UserUpdate(BaseModel):    
     tipo_documento: Optional[UserDocumentType] = None
     identificacion: Optional[UserIdentification] = None
@@ -142,4 +96,3 @@ class UserResponse(UserBase):
     updated_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
->>>>>>> origin/Mateo
