@@ -32,10 +32,10 @@ class UserBase(BaseModel):
     contraseña: str = Field(..., min_length=8, max_length=12, description="User password")
     rol: Role
 
-    
+    # ✅ Corregido: se usa "info.data.get" en lugar de "values.get"
     @field_validator("correo")
-    def validate_institutional_email(cls, v, values):
-        rol = values.get("rol")
+    def validate_institutional_email(cls, v, info):
+        rol = info.data.get("rol") if info.data else None
         if rol in ("Docente", "Estudiante") and not v.endswith("@unicesar.edu.co"):
             raise ValueError("Institutional email required (@unicesar.edu.co) for Docente or Estudiante roles")
         return v
@@ -73,6 +73,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     pass
 
+
 class UserUpdate(BaseModel):
     tipo_documento: Optional[DocumentType] = None
     identificacion: Optional[Identification] = None
@@ -88,6 +89,7 @@ class UserUpdate(BaseModel):
     correo: Optional[EmailStr] = None
     contraseña: Optional[str] = None
     rol: Optional[Role] = None
+
 
 class UserResponse(UserBase):
     id_usuario: str
