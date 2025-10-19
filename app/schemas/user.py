@@ -21,7 +21,6 @@ class UserBase(BaseModel):
     ciudad: UserCity
     telefono: UserPhone
     correo: UserEmail
-    contraseña: UserPassword
     rol: UserRole
     
     # Dominios permitidos por rol
@@ -40,15 +39,6 @@ class UserBase(BaseModel):
                 raise ValueError(f"Correo institucional requerido ({', '.join(allowed_domains)}) para rol {rol}")
         return v
 
-    @field_validator("contraseña")
-    def validate_password_strength(cls, v):
-        # Usar pattern del Core pero construir la regex completa
-        base_pattern = Patterns.PASSWORD.rstrip('$')
-        full_pattern = f"{base_pattern}.{{{Limits.PASSWORD_MIN},{Limits.PASSWORD_MAX}}}$"
-        if not re.match(full_pattern, v):
-            raise ValueError(ValidationMessages.INVALID_PASSWORD)
-        return v
-
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -64,14 +54,20 @@ class UserBase(BaseModel):
                 "ciudad": "Valledupar",
                 "telefono": "+57301343343",
                 "correo": "david.rodriguez@unicesar.edu.co",
-                "contraseña": "Sass344#",
                 "rol": Role.ESTUDIANTE
             }
         }
     )
 
 class UserCreate(UserBase):
-    pass
+    contraseña: UserPassword
+    @field_validator("contraseña")
+    def validate_password_strength(cls, v):
+        base_pattern = Patterns.PASSWORD.rstrip('$')
+        full_pattern = f"{base_pattern}.{{{Limits.PASSWORD_MIN},{Limits.PASSWORD_MAX}}}$"
+        if not re.match(full_pattern, v):
+            raise ValueError(ValidationMessages.INVALID_PASSWORD)
+        return v
 
 class UserUpdate(BaseModel):    
     tipo_documento: Optional[UserDocumentType] = None

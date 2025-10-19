@@ -1,37 +1,42 @@
-from pydantic import BaseModel, Field, Annotated, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
-from datetime import date
+from datetime import datetime
 
-IdFirebase = Annotated[str, Field(min_length=5, max_length=50, description="ID generado por Firebase")]
-CodigoPrograma = Annotated[int, Field(gt=0, description="Código del programa académico")]
-Semestre = Annotated[int, Field(ge=1, le=10, description="Semestre actual (1-10)")]
-Anio = Annotated[int, Field(ge=1950, le=2100, description="Año (ej. 2023)")]
+from app.schemas.user import UserCreate, UserResponse
+from app.schemas.types import *
 
-class EstudianteBase(BaseModel):
-    id_usuario: IdFirebase
-    codigo_programa: CodigoPrograma
-    semestre: Semestre
-    anio_ingreso: Anio
+class StudentBase(BaseModel):
+    codigo_programa: str = Field(..., description="Código del programa académico")
+    semestre: int = Field(..., ge=1, le=20, description="Semestre actual del estudiante")
+    anio_ingreso: int = Field(..., ge=2000, le=2100, description="Año de ingreso del estudiante")
 
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "id_usuario": "L7Tz5A23fWx19oK9jK1a",
-                "codigo_programa": 12345,
-                "semestre": 3,
-                "anio_ingreso": 2023
-            }
-        }
-    }
+class StudentCreateWithUser(BaseModel):
+    usuario: UserCreate
+    codigo_programa: str
+    semestre: int
+    anio_ingreso: int
 
-class EstudianteCreate(EstudianteBase):
-    pass
+class StudentCreateWithExistingUser(BaseModel):
+    id_usuario: str
+    codigo_programa: str
+    semestre: int
+    anio_ingreso: int
 
-class EstudianteUpdate(BaseModel):
-    id_usuario: Optional[IdFirebase] = None
-    codigo_programa: Optional[CodigoPrograma] = None
-    semestre: Optional[Semestre] = None
-    anio_ingreso: Optional[Anio] = None
+class StudentUpdate(BaseModel):
+    codigo_programa: Optional[str] = None
+    semestre: Optional[int] = None
+    anio_ingreso: Optional[int] = None
+    activo: Optional[bool] = None
 
-class EstudianteResponse(EstudianteBase):
-    id_estudiante: IdFirebase
+class StudentResponse(StudentBase):
+    id_estudiante: str
+    id_usuario: str
+    activo: bool
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class StudentWithUserResponse(BaseModel):
+    estudiante: StudentResponse
+    usuario: UserResponse

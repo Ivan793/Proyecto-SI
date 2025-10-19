@@ -57,9 +57,6 @@ register_exception_handlers(app)
 
 # Routers
 app.include_router(api_router)
-app.include_router(student_router.router)
-app.include_router(guest_router.router)
-app.include_router(graduate_router.router)
 
 # Health check
 @app.get("/", tags=["Health"])
