@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from . import events, group, subject, teacher, teacher_subject, student
 
-router = APIRouter(prefix="/admin", tags=["Administrador"])
+router = APIRouter(prefix="/admin")
 
 router.include_router(events.router, prefix="/eventos")
 router.include_router(teacher.router, prefix="/profesores")
