@@ -9,6 +9,7 @@ from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.exceptions.handlers import register_exception_handlers
 from slowapi.errors import RateLimitExceeded
 
+<<<<<<< HEAD
 # Importar todos los routers
 from app.routers import (
     student_router,
@@ -16,6 +17,10 @@ from app.routers import (
     graduate_router,
     router as project_router
 )
+=======
+# Importar todos los routers de forma centralizada
+from app.routers import graduate_router, guest_router, router as api_router
+>>>>>>> Mateo
 
 # Configuración de logs
 logging.basicConfig(
@@ -64,6 +69,7 @@ app.include_router(student_router.router, prefix="/students", tags=["Estudiantes
 app.include_router(guest_router.router, prefix="/guests", tags=["Invitados"])
 app.include_router(graduate_router.router, prefix="/graduates", tags=["Egresados"])
 app.include_router(project_router, prefix="/projects", tags=["Proyectos"])
+
 
 # Health check
 @app.get("/", tags=["Health"])
