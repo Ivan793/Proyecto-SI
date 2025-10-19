@@ -1,5 +1,4 @@
 from fastapi import APIRouter
-
 from app.schemas.graduate import GraduateCreate, GraduateUpdate
 
 router = APIRouter(prefix="/egresados", tags=["Egresados"])
