@@ -9,8 +9,13 @@ from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.exceptions.handlers import register_exception_handlers
 from slowapi.errors import RateLimitExceeded
 
-# Importar todos los routers de forma centralizada
-from app.routers import graduate_router, guest_router, router as api_router, student_router
+# Importar todos los routers
+from app.routers import (
+    student_router,
+    guest_router,
+    graduate_router,
+    router as project_router
+)
 
 # Configuración de logs
 logging.basicConfig(
@@ -20,10 +25,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
+# Lifespan de la app
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Inicialización y cierre del ciclo de vida de la app."""
     logger.info("Iniciando ExpoSoftware API")
     firebase_client.initialize()
     logger.info("Firebase inicializado correctamente")
@@ -31,8 +35,7 @@ async def lifespan(app: FastAPI):
     firebase_client.close()
     logger.info("Firebase desconectado")
 
-
-# Crear app
+# Crear la app
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
@@ -51,12 +54,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 register_exception_handlers(app)
 
 # Routers
-app.include_router(api_router)
+app.include_router(student_router.router, prefix="/students", tags=["Estudiantes"])
+app.include_router(guest_router.router, prefix="/guests", tags=["Invitados"])
+app.include_router(graduate_router.router, prefix="/graduates", tags=["Egresados"])
+app.include_router(project_router, prefix="/projects", tags=["Proyectos"])
 
 # Health check
 @app.get("/", tags=["Health"])
