@@ -39,4 +39,4 @@ class StudentResponse(StudentBase):
 
 class StudentWithUserResponse(BaseModel):
     estudiante: StudentResponse
-    usuario: UserResponse
+    usuario: UserResponse  # Este ya incluye los nuevos campos: departamento, municipio, dirección_residencia, nacionalidad, pais_residencia

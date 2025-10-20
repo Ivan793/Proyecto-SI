@@ -1,58 +1,28 @@
-# app/repositories/guest_repository.py
-from typing import Dict, List
+from typing import Optional, List, Dict, Any
+import logging
 
-class GuestRepository:
+from .base_repository import BaseRepository
+from app.core.firebase import Collections
+
+logger = logging.getLogger(__name__)
+
+class GuestRepository(BaseRepository):
+    
     def __init__(self):
-        # Simulación de base de datos en memoria
-        self.fake_guests_db: List[Dict] = []
+        super().__init__(Collections.INVITADOS, "id_invitado")
 
-    # Crear invitado (creación en cascada simulada)
-    def create_guest(self, data: Dict):
-        new_guest = {
-            "id_invitado": f"inv_{len(self.fake_guests_db) + 1}",
-            "persona": data.get("persona"),
-            "id_sector": data.get("id_sector"),
-            "nombre_empresa": data.get("nombre_empresa")
-        }
-        self.fake_guests_db.append(new_guest)
-        return {
-            "mensaje": "✅ Invitado y persona creados exitosamente (simulado)",
-            "data": new_guest
-        }
+    async def get_guest_by_user_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Obtener invitado por el id del usuario relacionado"""
+        return await self.get_by_field("id_usuario", user_id)
 
-    # Obtener todos los invitados
-    def get_all_guests(self):
-        return {
-            "total": len(self.fake_guests_db),
-            "invitados": self.fake_guests_db
-        }
+    async def get_guests_by_sector(self, sector_id: str) -> List[Dict[str, Any]]:
+        """Obtener todos los invitados de un sector específico"""
+        return await self.get_all(filters={"id_sector": sector_id})
 
-    # Actualizar invitado (en cascada simulada)
-    def update_guest(self, id_invitado: str, data: Dict):
-        for guest in self.fake_guests_db:
-            if guest["id_invitado"] == id_invitado:
-                if "persona" in data:
-                    guest["persona"].update(data["persona"])
-                if "id_sector" in data:
-                    guest["id_sector"] = data["id_sector"]
-                if "nombre_empresa" in data:
-                    guest["nombre_empresa"] = data["nombre_empresa"]
+    async def get_guests_by_company(self, company_name: str) -> List[Dict[str, Any]]:
+        """Obtener todos los invitados de una empresa específica"""
+        return await self.get_all(filters={"nombre_empresa": company_name})
 
-                return {
-                    "mensaje": "✅ Invitado y persona actualizados exitosamente (simulado)",
-                    "data": guest
-                }
-        return {"mensaje": f"⚠️ No se encontró invitado con id {id_invitado}"}
-
-    # Eliminar invitado
-    def delete_guest(self, id_invitado: str):
-        for guest in self.fake_guests_db:
-            if guest["id_invitado"] == id_invitado:
-                self.fake_guests_db = [
-                    g for g in self.fake_guests_db if g["id_invitado"] != id_invitado
-                ]
-                return {"mensaje": f"✅ Invitado con id {id_invitado} eliminado correctamente"}
-        return {"mensaje": f"⚠️ No se encontró invitado con id {id_invitado}"}
-
-# ✅ Instancia global que otros módulos pueden importar
-guest_repository = GuestRepository()
+    async def get_active_guests(self) -> List[Dict[str, Any]]:
+        """Opcional: si se maneja un campo activo"""
+        return await self.get_all(filters={"activo": True})

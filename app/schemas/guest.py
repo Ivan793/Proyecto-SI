@@ -1,49 +1,53 @@
-from pydantic import BaseModel, Field
-from typing import Annotated
-from app.schemas.user import UserBase  # 👈 se usa para el registro en cascada
+# app/schemas/guest.py
 
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Optional
+from datetime import datetime
 
-IdSector = Annotated[str, Field(min_length=5, max_length=50, description="ID de sector en colección sectores")]
-NombreEmpresa = Annotated[str, Field(min_length=2, max_length=60, pattern="^[A-Za-z0-9\\s\\-\\.]+$", description="Nombre de la empresa")]
+from app.schemas.user import UserCreate, UserResponse
 
 
 class GuestBase(BaseModel):
-    id_sector: IdSector
-    nombre_empresa: NombreEmpresa
+    id_sector: str = Field(..., min_length=5, max_length=50, description="ID del sector al que pertenece el invitado")
+    nombre_empresa: str = Field(
+        ...,
+        min_length=2,
+        max_length=60,
+        pattern="^[A-Za-z0-9\\s\\-\\.]+$",
+        description="Nombre de la empresa o institución"
+    )
+
+class GuestCreateWithUser(BaseModel):
+    usuario: UserCreate
+    id_sector: str
+    nombre_empresa: str
 
 
-class GuestCreate(GuestBase):
-    usuario: UserBase  # 👈 Aquí se recibe todo el objeto de usuario en cascada
 
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "usuario": {
-                    "tipo_documento": "CC",
-                    "identificacion": "1009876543",
-                    "nombres": "Laura",
-                    "apellidos": "Torres",
-                    "genero": "Mujer",
-                    "identidad_sexual": "Heterosexual",
-                    "fecha_nacimiento": "2002-05-12",
-                    "direccion": "Calle 20 #10-33",
-                    "pais": "Colombia",
-                    "ciudad": "Valledupar",
-                    "telefono": "+573054445555",
-                    "correo": "laura.torres@unicesar.edu.co",
-                    "contraseña": "Contra55#",
-                    "rol": "Invitado"
-                },
-                "id_sector": "SEC001",
-                "nombre_empresa": "InnovaTech S.A.S."
-            }
-        }
-    }
+class GuestCreateWithExistingUser(BaseModel):
+    id_usuario: str
+    id_sector: str
+    nombre_empresa: str
+
+
+
+class GuestUpdate(BaseModel):
+    id_sector: Optional[str] = None
+    nombre_empresa: Optional[str] = None
+    activo: Optional[bool] = None
+
 
 
 class GuestResponse(GuestBase):
     id_invitado: str
     id_usuario: str
+    activo: bool = True
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GuestWithUserResponse(BaseModel):
+    invitado: GuestResponse
+    usuario: UserResponse

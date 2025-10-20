@@ -10,7 +10,7 @@ from app.exceptions.handlers import register_exception_handlers
 from slowapi.errors import RateLimitExceeded
 
 # Importar todos los routers de forma centralizada
-from app.routers import graduate_router, guest_router, router as api_router, student_router
+from app.routers import  router as api_router
 
 # Configuración de logs
 logging.basicConfig(
