@@ -75,12 +75,21 @@ UserCountry = Annotated[
     )
 ]
 
+UserDepartment = Annotated[
+    str,
+    Field(
+        min_length=2,
+        max_length=50,
+        description="Departamento del usuario"
+    )
+]
+
 UserCity = Annotated[
     str,
     Field(
-        min_length=Limits.CITY_MIN,
-        max_length=Limits.CITY_MAX,
-        description="Ciudad o municipio"
+        min_length=2,
+        max_length=50,
+        description="Municipio o ciudad del usuario"
     )
 ]
 
@@ -264,4 +273,24 @@ SearchText = Annotated[
 StatusActive = Annotated[
     bool,
     Field(description="Estado activo/inactivo del registro")
+]
+
+# ==================== TIPOS DE ESTUDIANTE ====================
+
+StudentId = Annotated[
+    str, 
+    Field(
+        min_length=Limits.USER_ID_MIN,
+        max_length=Limits.USER_ID_MAX,
+        description="Identificador único del estudiante"
+    )
+]
+
+StudentCode = Annotated[
+    str,
+    Field(
+        min_length=3,
+        max_length=20,
+        description="Código del estudiante dentro del programa académico"
+    )
 ]
