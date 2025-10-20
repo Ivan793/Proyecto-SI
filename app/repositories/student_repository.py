@@ -1,49 +1,27 @@
-# app/repositories/student_repository.py
-from typing import Dict, List
-from app.repositories.user_repository import create_user
+from typing import Optional, List, Dict, Any
+import logging
 
-# Simulación de base de datos en memoria
-fake_students_db: List[Dict] = []
+from .base_repository import BaseRepository
+from app.core.firebase import Collections
 
-# Crear estudiante junto con usuario (en cascada)
-def create_student(data: Dict):
-    # 1️⃣ Crear primero el usuario
-    user_data = data.get("usuario")
-    if not user_data:
-        return {"mensaje": "⚠️ Datos de usuario faltantes para creación en cascada"}
+logger = logging.getLogger(__name__)
+
+class StudentRepository(BaseRepository):
     
-    user_response = create_user(user_data)
-    id_usuario = user_response["data"]["id_usuario"]
+    def __init__(self):
+        super().__init__(Collections.ESTUDIANTES, "id_estudiante")
 
-    # 2️⃣ Crear estudiante asociado al usuario
-    new_student = {
-        "id_estudiante": f"est_{len(fake_students_db) + 1}",
-        "id_usuario": id_usuario,
-        "codigo_programa": data.get("codigo_programa"),
-        "semestre": data.get("semestre"),
-        "anio_ingreso": data.get("anio_ingreso")
-    }
-    fake_students_db.append(new_student)
+    async def get_students_by_program(self, program_code: str) -> List[Dict[str, Any]]:
+        return await self.get_all(filters={"codigo_programa": program_code})
 
-    return {
-        "mensaje": "✅ Estudiante y usuario creados exitosamente (simulado)",
-        "data": {
-            "usuario": user_response["data"],
-            "estudiante": new_student
-        }
-    }
+    async def get_active_students(self) -> List[Dict[str, Any]]:
+        return await self.get_all(filters={"activo": True})
 
-def get_all_students():
-    return {"total": len(fake_students_db), "estudiantes": fake_students_db}
+    async def get_student_by_user_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        return await self.get_by_field("id_usuario", user_id)
 
-def update_student(id_estudiante: str, data: Dict):
-    for student in fake_students_db:
-        if student["id_estudiante"] == id_estudiante:
-            for key, value in data.items():
-                if key in student:
-                    student[key] = value
-            return {
-                "mensaje": "✅ Estudiante actualizado exitosamente (simulado)",
-                "data": student
-            }
-    return {"mensaje": f"⚠️ No se encontró estudiante con id {id_estudiante}"}
+    async def get_students_by_semester(self, semester: int) -> List[Dict[str, Any]]:
+        return await self.get_all(filters={"semestre": semester})
+
+    async def get_students_by_admission_year(self, year: int) -> List[Dict[str, Any]]:
+        return await self.get_all(filters={"anio_ingreso": year})
