@@ -31,6 +31,12 @@ class Limits:
     # Ciudad
     CITY_MIN = 2
     CITY_MAX = 50
+    DEPARTMENT_MIN = 2
+    DEPARTMENT_MAX = 50
+    MUNICIPALITY_MIN = 2
+    MUNICIPALITY_MAX = 50
+    NATIONALITY_MIN = 2
+    NATIONALITY_MAX = 50
     
     # Categoría docente
     TEACHER_CATEGORY_MAX = 30
