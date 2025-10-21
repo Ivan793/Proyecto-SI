@@ -2,7 +2,7 @@
 from typing import List
 from app.repositories import teacher_repository
 from app.schemas.subject import SubjectBase
-from app.schemas.group import group
+from app.schemas.group import Grupo
 from app.schemas.proyect import Proyecto    
 
 def listar_asignaturas_docente(id_docente: str) -> List[SubjectBase]:
@@ -15,9 +15,9 @@ def listar_asignaturas_docente(id_docente: str) -> List[SubjectBase]:
     }) for r in raw]
     return asignaturas
 
-def listar_grupos_asignatura(asignatura_codigo: str) -> List[group]:
+def listar_grupos_asignatura(asignatura_codigo: str) -> List[Grupo]:
     raw = teacher_repository.get_grupos_por_asignatura(asignatura_codigo)
-    grupos = [group(**{
+    grupos = [Grupo(**{
         "id_grupo": r.get("id_grupo"),
         "nombre": r.get("nombre"),
         "semestre": r.get("semestre"),
