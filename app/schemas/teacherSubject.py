@@ -1,41 +1,39 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
+from datetime import datetime
+
+from app.schemas.types import *
+from app.core.constants import Defaults
 
 class TeacherSubjectBase(BaseModel):
-    id_docente: str = Field(
-        ...,
-        max_length=50,
-        description="Identificador del docente asignado (referencia lógica a Docentes)"
-    )
-    codigo_materia: str = Field(
-        ...,
-        max_length=8,
-        description="Código de la materia asignada (referencia a Materias)"
-    )
-    codigo_grupo: int = Field(
-        ...,
-        description="Código del grupo asignado (referencia a Grupos)"
-    )
-
-    class Config:
-        json_schema_extra = {
+    id_docente: TeacherId
+    codigo_materia: SubjectCode
+    codigo_grupo: GroupCode
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id_docente": "R9Kz4B19xUy78nQ6vT2s",
                 "codigo_materia": "MAT101",
                 "codigo_grupo": 202
             }
         }
+    )
 
 
 class TeacherSubjectCreate(TeacherSubjectBase):
     pass
 
 
-class TeacherSubjectResponse(TeacherSubjectBase):
-    id_docente_materia: str = Field(
-        ...,
-        max_length=30,
-        description="Identificador único de la asignación docente-materia-grupo, generado automáticamente por Firebase"
-    )
+class TeacherSubjectUpdate(BaseModel):
+    id_docente: Optional[TeacherId] = None
+    codigo_materia: Optional[SubjectCode] = None
+    codigo_grupo: Optional[GroupCode] = None
 
-    class Config:
-        orm_mode = True
+
+class TeacherSubjectResponse(TeacherSubjectBase):
+    id_docente_materia: TeacherSubjectId
+    activo: StatusActive = Field(default=Defaults.ACTIVE_STATUS)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)

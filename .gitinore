@@ -1,6 +1,0 @@
-# Entornos virtuales
-.venv/
-venv/
-
-# Archivos de entorno
-.env
