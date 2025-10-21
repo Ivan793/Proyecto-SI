@@ -1,6 +1,6 @@
 # repos/docentes_repo.py
 from typing import List, Dict
-from config.firebase_config import db
+from repos.firebase_client import db
 
 # NOTA: estos métodos asumen la estructura de colecciones comentada arriba.
 # Ajusta nombres de colección/atributos según tu Firestore.
@@ -55,7 +55,4 @@ def get_proyectos_por_asignaturas(codigos_asignaturas: List[str]) -> List[Dict]:
             result.append(obj)
     return result
 
-def get_all_materias():
-    materias_ref = db.collection("materias").stream()
-    materias = [m.to_dict() for m in materias_ref]
-    return materias
+nombre = "Francisco"

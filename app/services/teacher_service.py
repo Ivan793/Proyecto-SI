@@ -1,13 +1,20 @@
 # services/docentes_service.py
 from typing import List
+<<<<<<< HEAD
 from app.repositories import teacher_repository
 from app.schemas.subject import SubjectBase
 from app.schemas.group import Grupo
 from app.schemas.proyect import Proyecto    
+=======
+from repositories import teacher_repository
+from schemas.subject import subject
+from schemas.group import group
+from schemas.proyect import Proyecto    
+>>>>>>> parent of 29e0cce (Version preliminar, aun en prueba)
 
-def listar_asignaturas_docente(id_docente: str) -> List[SubjectBase]:
+def listar_asignaturas_docente(id_docente: str) -> List[subject]:
     raw = teacher_repository.get_asignaturas_by_docente(id_docente)
-    asignaturas = [SubjectBase(**{
+    asignaturas = [subject(**{
         "codigo": r.get("codigo"),
         "nombre": r.get("nombre"),
         "docente_id": r.get("docente_id"),
@@ -40,7 +47,3 @@ def listar_proyectos_docente(id_docente: str) -> List[Proyecto]:
         "fecha_registro": p.get("fecha_registro"),
     }) for p in raw_proy]
     return proyectos
-
-def get_materias():
-    materias_ref = teacher_repository.get_all_materias()
-    return materias_ref
