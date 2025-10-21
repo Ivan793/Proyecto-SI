@@ -1,53 +1,111 @@
-# app/schemas/guest.py
-
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional, Dict
 from datetime import datetime
 
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.types import *
+from app.schemas.user import UserCreate
+from app.core.constants import Defaults
 
 
+# ---------------------------
+# Base del invitado
+# ---------------------------
 class GuestBase(BaseModel):
-    id_sector: str = Field(..., min_length=5, max_length=50, description="ID del sector al que pertenece el invitado")
-    nombre_empresa: str = Field(
-        ...,
-        min_length=2,
-        max_length=60,
-        pattern="^[A-Za-z0-9\\s\\-\\.]+$",
-        description="Nombre de la empresa o institución"
+    institucion_origen: Optional[str] = Field(default=None, description="Institución de la cual proviene el invitado")
+    motivo_visita: Optional[str] = Field(default=None, description="Motivo de la visita del invitado")
+    activo: bool = Field(default=Defaults.ACTIVE_STATUS)
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "institucion_origen": "Universidad del Norte",
+                "motivo_visita": "Conferencia sobre Inteligencia Artificial",
+                "activo": True
+            }
+        }
     )
 
-class GuestCreateWithUser(BaseModel):
-    usuario: UserCreate
-    id_sector: str
-    nombre_empresa: str
+
+# ---------------------------
+# Crear invitado con todos los campos de usuario + campos de invitado (CASCADA)
+# ---------------------------
+class GuestCreateWithUser(UserCreate, GuestBase):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                # Datos del usuario
+                "tipo_documento": "CC",
+                "identificacion": "1001234567",
+                "nombres": "Laura",
+                "apellidos": "Castillo Ríos",
+                "genero": "Mujer",
+                "identidad_sexual": "Heterosexual",
+                "fecha_nacimiento": "1992-11-20",
+                "nacionalidad": "Colombia",
+                "pais_residencia": "Colombia",
+                "departamento": "Atlántico",
+                "municipio": "Barranquilla",
+                "direccion_residencia": "Carrera 45 #32-15",
+                "telefono": "+573002223334",
+                "correo": "Anderson@uninorte.edu.co",
+                "contraseña": "Invitado123#",
+                "rol": "Invitado",
+                # Datos del invitado
+                "institucion_origen": "Universidad del Norte",
+                "motivo_visita": "Conferencia sobre IA aplicada a la educación",
+                "activo": True
+            }
+        }
+    )
 
 
+# ---------------------------
+# Crear invitado asignando a usuario existente
+# ---------------------------
+class GuestCreateWithExistingUser(GuestBase):
+    id_usuario: UserId
 
-class GuestCreateWithExistingUser(BaseModel):
-    id_usuario: str
-    id_sector: str
-    nombre_empresa: str
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id_usuario": "abc12345",
+                "institucion_origen": "SENA",
+                "motivo_visita": "Capacitación docente",
+                "activo": True
+            }
+        }
+    )
 
 
-
+# ---------------------------
+# Actualizar invitado
+# ---------------------------
 class GuestUpdate(BaseModel):
-    id_sector: Optional[str] = None
-    nombre_empresa: Optional[str] = None
+    institucion_origen: Optional[str] = None
+    motivo_visita: Optional[str] = None
     activo: Optional[bool] = None
 
 
-
-class GuestResponse(GuestBase):
+# ---------------------------
+# Respuesta del invitado
+# ---------------------------
+class GuestResponse(BaseModel):
     id_invitado: str
-    id_usuario: str
-    activo: bool = True
+    id_usuario: UserId
+    institucion_origen: Optional[str] = None
+    motivo_visita: Optional[str] = None
+    activo: bool = Field(default=Defaults.ACTIVE_STATUS)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
+# ---------------------------
+# Respuesta invitado con usuario
+# ---------------------------
 class GuestWithUserResponse(BaseModel):
     invitado: GuestResponse
-    usuario: UserResponse
+    usuario: Dict  # Se mantiene como dict para evitar importación circular
+
+    model_config = ConfigDict(from_attributes=True)

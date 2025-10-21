@@ -1,12 +1,22 @@
-# app/exceptions/guest_exceptions.py
+from typing import Optional
+from .base_exceptions import NotFoundException, ConflictException, DependencyException
 
-class GuestNotFoundException(Exception):
+
+class GuestNotFoundException(NotFoundException):
     def __init__(self, guest_id: str):
-        self.guest_id = guest_id
-        super().__init__(f"Invitado con id {guest_id} no encontrado")
+        super().__init__(resource="Invitado", identifier=guest_id)
 
 
-class GuestAlreadyExistsException(Exception):
-    def __init__(self, email: str):
-        self.email = email
-        super().__init__(f"Invitado con email {email} ya existe")
+class GuestAlreadyExistsException(ConflictException):
+    def __init__(self, user_id: str):
+        super().__init__(
+            message=f"Ya existe un invitado asociado al usuario {user_id}",
+            conflict_field="id_usuario"
+        )
+
+
+class GuestHasDependenciesException(DependencyException):
+    def __init__(self, guest_id: str):
+        super().__init__(
+            message=f"No se puede eliminar o desactivar el invitado {guest_id} porque tiene dependencias activas"
+        )

@@ -1,46 +1,64 @@
-from typing import Dict, List
+from typing import Optional, List, Dict, Any
+import logging
+from .base_repository import BaseRepository
+from app.core.firebase import Collections
 
-# Simulación de base de datos en memoria
-fake_graduates_db: List[Dict] = []
-
-
-def create(data: Dict):
-    # Validamos que venga el id_usuario antes de crear
-    if "id_usuario" not in data or not data["id_usuario"]:
-        raise ValueError("Falta el campo id_usuario al crear egresado")
-
-    new_graduate = {
-        "id_egresado": f"grad_{len(fake_graduates_db) + 1}",
-        "id_usuario": data["id_usuario"],  # ✅ aseguramos que se guarde correctamente
-        "anio_finalizacion": data.get("anio_finalizacion"),
-        "titulado": data.get("titulado"),
-        "codigo_programa": data.get("codigo_programa")
-    }
-
-    fake_graduates_db.append(new_graduate)
-    return new_graduate
+logger = logging.getLogger(__name__)
 
 
-def get_all():
-    return {"total": len(fake_graduates_db), "egresados": fake_graduates_db}
+class GraduateRepository(BaseRepository):
+    def __init__(self):
+        super().__init__(Collections.EGRESADOS, "id_egresado")
 
+    async def get_active_graduates(self) -> List[Dict[str, Any]]:
+        try:
+            graduates = await self.get_all(filters={"activo": True})
+            logger.info(f"{len(graduates)} egresados activos obtenidos.")
+            return graduates
+        except Exception as e:
+            logger.error(f"Error al obtener egresados activos: {e}")
+            return []
 
-def get_by_id(id_egresado: str):
-    return next((g for g in fake_graduates_db if g["id_egresado"] == id_egresado), None)
+    async def get_graduate_by_user_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        try:
+            graduate = await self.get_by_field("id_usuario", user_id)
+            if graduate:
+                logger.info(f"Egresado encontrado para usuario {user_id}.")
+            else:
+                logger.warning(f"No se encontró egresado para usuario {user_id}.")
+            return graduate
+        except Exception as e:
+            logger.error(f"Error al obtener egresado por usuario {user_id}: {e}")
+            return None
 
+    async def get_all_paginated(self, filters: Optional[Dict[str, Any]] = None, page: int = 1, limit: int = 20):
+        try:
+            all_data = await self.get_all(filters)
+            total = len(all_data)
+            start = (page - 1) * limit
+            end = start + limit
+            return all_data[start:end], total
+        except Exception as e:
+            logger.error(f"Error al obtener egresados paginados: {e}")
+            return [], 0
 
-def update(id_egresado: str, data: Dict):
-    for graduate in fake_graduates_db:
-        if graduate["id_egresado"] == id_egresado:
-            graduate.update(data)
-            return {
-                "mensaje": "✅ Egresado actualizado exitosamente (simulado)",
-                "data": graduate
-            }
-    return {"mensaje": f"⚠️ No se encontró egresado con id {id_egresado}"}
-
-
-def delete(id_egresado: str):
-    global fake_graduates_db
-    fake_graduates_db = [g for g in fake_graduates_db if g["id_egresado"] != id_egresado]
-    return {"mensaje": "🗑️ Egresado eliminado correctamente"}
+    def get_user_fields(self, data: dict) -> dict:
+        user_fields = {
+            "nombres": data.get("nombres"),
+            "apellidos": data.get("apellidos"),
+            "correo": data.get("correo"),
+            "contraseña": data.get("contraseña"),
+            "rol": data.get("rol", "egresado"),
+            "identificacion": data.get("identificacion"),
+            "tipo_documento": data.get("tipo_documento"),
+            "telefono": data.get("telefono"),
+            "fecha_nacimiento": data.get("fecha_nacimiento"),
+            "genero": data.get("genero"),
+            "identidad_sexual": data.get("identidad_sexual"),
+            "nacionalidad": data.get("nacionalidad"),
+            "pais_residencia": data.get("pais_residencia"),
+            "departamento": data.get("departamento"),
+            "municipio": data.get("municipio"),
+            "direccion_residencia": data.get("direccion_residencia"),
+        }
+        return {k: v for k, v in user_fields.items() if v is not None}
