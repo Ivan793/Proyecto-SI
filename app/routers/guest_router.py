@@ -25,16 +25,14 @@ async def create_guest_with_user(guest_data: GuestCreateWithUser):
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 
-
-# Obtener todos los invitados
-
+# ✅ Obtener solo invitados activos
 @router.get(
     "",
     response_model=list[GuestResponse],
-    summary="Listar todos los invitados"
+    summary="Listar todos los invitados activos"
 )
 async def get_all_guests():
-    guests, _ = await guest_service.get_all_guests(active_only=False)
+    guests, _ = await guest_service.get_all_guests(active_only=True)
     return guests
 
 
@@ -59,7 +57,7 @@ async def get_guest(guest_id: str):
 )
 async def update_guest(guest_id: str, guest_data: GuestUpdate):
     """
-    Actualiza los datos de un invitado existente.
+    Actualiza los datos de un invitado existente (no permite cambiar correo, cédula ni programa).
     """
     try:
         return await guest_service.update_guest(guest_id, guest_data)

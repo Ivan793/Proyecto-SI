@@ -38,7 +38,7 @@ class GraduateService:
 
             payload = graduate_data.model_dump()
 
-            # preparacion usuario (quitamos campos de egresado)
+            # preparación usuario (quitamos campos de egresado)
             user_dict = dict(payload)
             user_dict.pop("programa_academico", None)
             user_dict.pop("año_graduacion", None)
@@ -97,10 +97,10 @@ class GraduateService:
         return GraduateResponse(**new_graduate)
 
     # ---------------------------
-    # Obtener todos los egresados
+    # Obtener todos los egresados (solo activos)
     # ---------------------------
-    async def get_all_graduates(self, active_only: bool = False, page: int = 1, limit: int = 20):
-        filters = {"activo": True} if active_only else {}
+    async def get_all_graduates(self, page: int = 1, limit: int = 20):
+        filters = {"activo": True}  # ✅ Solo activos
         graduates, total = await self.graduate_repo.get_all_paginated(filters, page, limit)
 
         for g in graduates:
@@ -112,10 +112,7 @@ class GraduateService:
     # Obtener egresado por ID
     # ---------------------------
     async def get_graduate(self, graduate_id: str) -> GraduateResponse:
-        # Intentar buscar por id_egresado (document id)
         graduate = await self.graduate_repo.get_by_id(graduate_id)
-
-        # Si no hay resultado, intentar buscar por id_usuario (por si enviaron el id de usuario)
         if not graduate:
             graduate = await self.graduate_repo.get_by_field("id_usuario", graduate_id)
 
@@ -126,26 +123,29 @@ class GraduateService:
         return GraduateResponse(**graduate)
 
     # ---------------------------
-    # Actualizar egresado
+    # Actualizar egresado (restricciones en campos)
     # ---------------------------
     async def update_graduate(self, graduate_id: str, graduate_data: GraduateUpdate) -> GraduateResponse:
         graduate = await self.graduate_repo.get_by_id(graduate_id)
-
-        # si no lo encontró por id_egresado, intentar por id_usuario
         if not graduate:
             graduate = await self.graduate_repo.get_by_field("id_usuario", graduate_id)
 
         if not graduate:
             raise GraduateNotFoundException(graduate_id)
 
-        # usar el id_egresado real para actualizar (si buscamos por id_usuario, convertimos)
         real_id = graduate.get("id_egresado") or graduate.get("id")
 
         updated_data = graduate_data.model_dump(exclude_unset=True)
+
+        # 🚫 No permitir modificar ciertos campos
+        campos_restringidos = ["correo", "programa_academico", "identificacion"]
+        for campo in campos_restringidos:
+            if campo in updated_data:
+                updated_data.pop(campo, None)
+
         updated_data["updated_at"] = datetime.utcnow()
         updated_data["activo"] = updated_data.get("activo", graduate.get("activo", True))
 
-        # Actualizar usando el id_egresado (fall back a graduate_id si no hay otro)
         id_to_update = real_id or graduate_id
         updated = await self.graduate_repo.update(id_to_update, updated_data)
 
@@ -158,17 +158,13 @@ class GraduateService:
     # Desactivar egresado (eliminación lógica)
     # ---------------------------
     async def deactivate_graduate(self, graduate_id: str, reason: str):
-        # Primero buscar por id_egresado
         graduate = await self.graduate_repo.get_by_id(graduate_id)
-
-        # Si no existe, intentar por id_usuario (usuario id pasado por error)
         if not graduate:
             graduate = await self.graduate_repo.get_by_field("id_usuario", graduate_id)
 
         if not graduate:
             raise GraduateNotFoundException(graduate_id)
 
-        # usar id_egresado real para actualizar
         id_to_update = graduate.get("id_egresado") or graduate.get("id") or graduate_id
 
         await self.graduate_repo.update(

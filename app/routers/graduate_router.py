@@ -28,13 +28,14 @@ async def create_graduate_with_user(graduate_data: GraduateCreate):
 @router.get(
     "",
     response_model=list[GraduateResponse],
-    summary="Listar todos los egresados"
+    summary="Listar todos los egresados activos"
 )
-async def get_all_graduates(
-    activos: bool = Query(False, description="Si es True, solo muestra los egresados activos")
-):
+async def get_all_graduates():
+    """
+    ✅ Ahora solo devuelve egresados activos (activo = True)
+    """
     try:
-        graduates, _ = await graduate_service.get_all_graduates(active_only=activos)
+        graduates, _ = await graduate_service.get_all_graduates()
         return graduates
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al listar egresados: {str(e)}")
@@ -58,6 +59,9 @@ async def get_graduate(graduate_id: str):
     summary="Actualizar egresado"
 )
 async def update_graduate(graduate_id: str, graduate_data: GraduateUpdate):
+    """
+    🚫 No se permite actualizar: correo, programa_academico, identificacion.
+    """
     try:
         return await graduate_service.update_graduate(graduate_id, graduate_data)
     except Exception as e:
