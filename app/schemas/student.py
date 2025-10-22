@@ -46,9 +46,8 @@ class StudentCreateWithExistingUser(StudentBase):
     )
 
 
-# ---------------------------
+
 # Crear estudiante con usuario nuevo (en cascada)
-# ---------------------------
 class StudentCreateWithUser(StudentBase):
     usuario: UserCreate = Field(..., description="Datos completos del usuario asociado")
 
@@ -86,9 +85,8 @@ class StudentCreateWithUser(StudentBase):
 StudentCreate = StudentCreateWithUser
 
 
-# ---------------------------
+
 # Actualización
-# ---------------------------
 class StudentUpdate(BaseModel):
     codigo_programa: Optional[str] = None
     semestre: Optional[int] = None
