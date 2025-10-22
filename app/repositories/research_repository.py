@@ -127,7 +127,7 @@ class SubResearchLineRepository(BaseRepository):
         except Exception as e:
             logger.error(f"Error creando sublínea: {str(e)}")
             raise
-    
+
     async def get_by_id(self, line_code: int, subline_code: int) -> Optional[Dict[str, Any]]:
         """Obtiene una sublínea específica"""
         try:

@@ -3,12 +3,13 @@ from pydantic import BaseModel, Field, field_serializer
 from typing import Optional
 from datetime import datetime
 from app.enum.Enum import TipoActividadEnum
+from app.schemas.types import TeacherId, StudentId,TeacherSubjectId, SubResearchLineCode
 
 
 class ProyectoBase(BaseModel):
-    id_docente: str = Field(..., max_length=30, description="FK al docente responsable del proyecto")
-    id_estudiante: str = Field(..., max_length=30, description="FK al estudiante asociado al proyecto")
-    id_docente_materia: str = Field(..., max_length=30, description="FK que relaciona docente con materia")
+    id_docente: TeacherId
+    id_estudiante: StudentId
+    id_docente_materia: TeacherSubjectId
     codigo_linea: int = Field(..., description="Código de la línea de investigación (FK)")
     codigo_sublinea: int = Field(..., description="Código de la sublínea de investigación (FK)")
     titulo_proyecto: str = Field(..., min_length=3, max_length=60, description="Título del proyecto")

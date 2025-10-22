@@ -2,7 +2,7 @@ class Limits:
     """Límites de longitud y validaciones numéricas generales."""
     
     # Email
-    MAX_EMAIL_LENGTH = 50
+    MAX_EMAIL_LENGTH = 40
     
     # Teléfono
     MIN_PHONE_LENGTH = 7
@@ -18,7 +18,7 @@ class Limits:
     
     # Identificación
     IDENTIFICATION_MIN = 6
-    IDENTIFICATION_MAX = 20
+    IDENTIFICATION_MAX = 16
     
     # Dirección
     ADDRESS_MIN = 5
@@ -86,7 +86,6 @@ class Defaults:
     DEFAULT_EVENT_STATE = "ACTIVO"
     EVENT_ALLOWS_GUESTS = True
     ACTIVE_STATUS = True
-
 
 
 class ValidationMessages:
