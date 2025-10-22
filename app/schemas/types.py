@@ -1,3 +1,4 @@
+
 from typing import Annotated
 from pydantic import Field, EmailStr
 from datetime import date
@@ -78,9 +79,29 @@ UserCountry = Annotated[
 UserDepartment = Annotated[
     str,
     Field(
-        min_length=2,
-        max_length=50,
+        min_length=Limits.DEPARTMENT_MIN,
+        max_length=Limits.DEPARTMENT_MAX,
         description="Departamento del usuario"
+    )
+]
+
+UserMunicipality = Annotated[
+    str,
+    Field(
+        min_length=Limits.MUNICIPALITY_MIN,
+        max_length=Limits.MUNICIPALITY_MAX,
+        pattern=Patterns.NAME,
+        description="Municipio de residencia"
+    )
+]
+
+UserNationality = Annotated[
+    str,
+    Field(
+        min_length=Limits.NATIONALITY_MIN,
+        max_length=Limits.NATIONALITY_MAX,
+        pattern=Patterns.NAME,
+        description="Nacionalidad del usuario"
     )
 ]
 
@@ -89,7 +110,8 @@ UserCity = Annotated[
     Field(
         min_length=2,
         max_length=50,
-        description="Municipio o ciudad del usuario"
+        pattern=Patterns.NAME,
+        description="Ciudad de residencia"
     )
 ]
 
@@ -124,6 +146,7 @@ UserRole = Annotated[
     Role,
     Field(description="Rol del usuario en el sistema")
 ]
+
 
 # ==================== TIPOS DE DOCENTE ====================
 
@@ -292,5 +315,61 @@ StudentCode = Annotated[
         min_length=3,
         max_length=20,
         description="Código del estudiante dentro del programa académico"
+    )
+]
+# ==================== TIPOS DE LÍNEA DE INVESTIGACIÓN ====================
+
+ResearchLineCode = Annotated[
+    int,
+    Field(
+        ge=1,
+        le=2,
+        description="Código de la línea de investigación (1 o 2)"
+    )
+]
+
+ResearchLineName = Annotated[
+    str,
+    Field(
+        min_length=Limits.NAME_MIN,
+        max_length=Limits.NAME_MAX,
+        description="Nombre de la línea de investigación"
+    )
+]
+
+# ==================== TIPOS DE SUBLÍNEA DE INVESTIGACIÓN ====================
+
+SubResearchLineCode = Annotated[
+    int,
+    Field(
+        gt=0,
+        description="Código único de la sublínea de investigación"
+    )
+]
+
+SubResearchLineName = Annotated[
+    str,
+    Field(
+        min_length=Limits.NAME_MIN,
+        max_length=Limits.NAME_MAX,
+        description="Nombre de la sublínea de investigación"
+    )
+]
+# ==================== TIPOS DE ÁREA TEMÁTICA ====================
+
+ThematicAreaCode = Annotated[
+    int,
+    Field(
+        gt=0,
+        description="Código único del área temática"
+    )
+]
+
+ThematicAreaName = Annotated[
+    str,
+    Field(
+        min_length=Limits.NAME_MIN,
+        max_length=Limits.NAME_MAX,
+        description="Nombre del área temática"
     )
 ]

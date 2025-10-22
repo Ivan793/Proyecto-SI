@@ -1,44 +1,42 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
+from datetime import datetime
+
+from app.schemas.ThematicArea import ThematicAreaResponse
+from app.schemas.types import (
+    ResearchLineCode,
+    SubResearchLineCode, SubResearchLineName,
+)
 
 class SubResearchLineBase(BaseModel):
-    nombre_sublinea: str = Field(
-        ...,
-        max_length=40,
-        description=(
-            "Nombre de la sub-línea de investigación. "
-            "Depende de la línea principal seleccionada."
-        )
-    )
-    codigo_linea: int = Field(
-        ...,
-        description=(
-            "Código de la línea de investigación asociada. "
-            "1: Tecnologías de la Información y la Comunicación | "
-            "2: Transformación Digital"
-        )
-    )
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "nombre_sublinea": "Ingeniería de software",
-                "codigo_linea": 1
-            }
-        }
-
+    nombre_sublinea: SubResearchLineName
+    codigo_linea: ResearchLineCode
 
 class SubResearchLineCreate(SubResearchLineBase):
     pass
 
+class SubResearchLineUpdate(BaseModel):
+    nombre_sublinea: Optional[SubResearchLineName] = None
+    codigo_linea: Optional[ResearchLineCode] = None
 
 class SubResearchLineResponse(SubResearchLineBase):
-    codigo_sublinea: int = Field(
-        ...,
-        description=(
-            "Identificador único de la sublínea de investigación. "
-            "Ejemplo: 1 - Sistemas de información, 2 - Ingeniería de software, etc."
-        )
+    codigo_sublinea: SubResearchLineCode
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "codigo_sublinea": 1,
+                "nombre_sublinea": "Sistemas de información",
+                "codigo_linea": 1,
+                "created_at": "2025-01-20T10:00:00Z",
+                "updated_at": "2025-01-20T10:00:00Z"
+            }
+        }
     )
 
-    class Config:
-        orm_mode = True
+class SubResearchLineWithAreas(SubResearchLineResponse):
+    areas_tematicas: list[ThematicAreaResponse] = []
+

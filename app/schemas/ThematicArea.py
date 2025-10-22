@@ -1,40 +1,37 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
+from datetime import datetime
+
+from app.schemas.types import (
+    SubResearchLineCode,
+    ThematicAreaCode, ThematicAreaName
+)
 
 class ThematicAreaBase(BaseModel):
-    nombre_Area: str = Field(
-        ...,
-        max_length=50,
-        description=(
-            "Nombre del área temática asociada a una sublínea de investigación. "
-            "Ejemplo: 'Gestión de bases de datos', 'Sistemas colaborativos'."
-        )
-    )
-    codigo_sublinea: int = Field(
-        ...,
-        description=(
-            "Código de la sublínea de investigación a la que pertenece el área temática. "
-            "Sirve como clave foránea (FK) hacia SubResearchLine."
-        )
-    )
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "nombre_Area": "Gestión de bases de datos",
-                "codigo_sublinea": 1
-            }
-        }
-
+    nombre_area: ThematicAreaName
+    codigo_sublinea: SubResearchLineCode
 
 class ThematicAreaCreate(ThematicAreaBase):
     pass
 
+class ThematicAreaUpdate(BaseModel):
+    nombre_area: Optional[ThematicAreaName] = None
+    codigo_sublinea: Optional[SubResearchLineCode] = None
 
 class ThematicAreaResponse(ThematicAreaBase):
-    codigo_area: int = Field(
-        ...,
-        description="Código único que identifica cada área temática. Ejemplo: 1, 2, 3, etc."
+    codigo_area: ThematicAreaCode
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "codigo_area": 1,
+                "nombre_area": "Desarrollo de sistemas de información",
+                "codigo_sublinea": 1,
+                "created_at": "2025-01-20T10:00:00Z",
+                "updated_at": "2025-01-20T10:00:00Z"
+            }
+        }
     )
-
-    class Config:
-        orm_mode = True

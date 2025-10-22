@@ -19,14 +19,12 @@ class UserBase(BaseModel):
     genero: UserGender
     identidad_sexual: UserSexualIdentity
     fecha_nacimiento: datetime
-
-    # Campos nuevos
-    nacionalidad: UserCountry
+    nacionalidad: UserNationality
     pais_residencia: UserCountry
     departamento: UserDepartment
-    municipio: UserCity
+    municipio: UserMunicipality
+    ciudad_residencia: UserCity
     direccion_residencia: UserAddress
-
     telefono: UserPhone
     correo: UserEmail
     rol: UserRole
@@ -59,10 +57,11 @@ class UserBase(BaseModel):
                 "genero": Gender.HOMBRE,
                 "identidad_sexual": "Heterosexual",
                 "fecha_nacimiento": "2000-06-03",
-                "nacionalidad": "Colombia",
+                "nacionalidad": "Colombiana",
                 "pais_residencia": "Colombia",
                 "departamento": "Cesar",
                 "municipio": "Valledupar",
+                "ciudad_residencia": "Valledupar",
                 "direccion_residencia": "Calle 45 #22-10, Barrio San José",
                 "telefono": "+57301343343",
                 "correo": "david.rodriguez@unicesar.edu.co",
@@ -96,10 +95,11 @@ class UserUpdate(BaseModel):
     genero: Optional[UserGender] = None
     identidad_sexual: Optional[UserSexualIdentity] = None
     fecha_nacimiento: Optional[datetime] = None
-    nacionalidad: Optional[UserCountry] = None
+    nacionalidad: Optional[UserNationality] = None
     pais_residencia: Optional[UserCountry] = None
     departamento: Optional[UserDepartment] = None
-    municipio: Optional[UserCity] = None
+    municipio: Optional[UserMunicipality] = None
+    ciudad_residencia: Optional[UserCity] = None
     direccion_residencia: Optional[UserAddress] = None
     telefono: Optional[UserPhone] = None
     correo: Optional[UserEmail] = None

@@ -35,19 +35,19 @@ class GuestCreateWithUser(UserCreate, GuestBase):
             "example": {
                 # Datos del usuario
                 "tipo_documento": "CC",
-                "identificacion": "1001234567",
+                "identificacion": "1005327309",
                 "nombres": "Laura",
                 "apellidos": "Castillo Ríos",
                 "genero": "Mujer",
                 "identidad_sexual": "Heterosexual",
-                "fecha_nacimiento": "1992-11-20",
-                "nacionalidad": "Colombia",
+                "fecha_nacimiento": "1998-05-17",
+                "nacionalidad": "Colombiana",
                 "pais_residencia": "Colombia",
                 "departamento": "Atlántico",
                 "municipio": "Barranquilla",
                 "direccion_residencia": "Carrera 45 #32-15",
                 "telefono": "+573002223334",
-                "correo": "Anderson@uninorte.edu.co",
+                "correo": "laura.castillo@gmail.com",
                 "contraseña": "Invitado123#",
                 "rol": "Invitado",
                 # Datos del invitado

@@ -65,10 +65,41 @@ class TeacherCreateWithExistingUser(TeacherBase):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "id_usuario": "123456",
+                "id_usuario": "L7Tz5A23fWx19oK9jK1a",
+                "categoria_docente": TeacherCategory.INTERNO,
+                "codigo_programa": "ING01"
+            }
+        }
+    )
+
+# Crear profesor CON usuario en cascada
+class TeacherCreateWithUser(TeacherBase):
+    usuario: UserCreate  # Datos completos del usuario a crear
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "usuario": {
+                    "tipo_documento": "CC",
+                    "identificacion": "1231271982",
+                    "nombres": "Camila Andrea",
+                    "apellidos": "Torres Palomino",
+                    "genero": "Mujer",
+                    "identidad_sexual": "Heterosexual",
+                    "fecha_nacimiento": "1980-05-15",
+                    "nacionalidad": "Colombiana",
+                    "pais_residencia": "Colombia",
+                    "departamento": "Cesar",
+                    "municipio": "Valledupar",
+                    "ciudad_residencia": "Valledupar",
+                    "direccion_residencia": "Calle 45 #22-10, Barrio San Jose",
+                    "telefono": "+573112345678",
+                    "correo": "camila.torres@unicesar.edu.co",
+                    "contraseña": "Prof123#",
+                    "rol": "Docente"
+                },
                 "categoria_docente": "Interno",
-                "codigo_programa": "ING01",
-                "activo": True
+                "codigo_programa": "ING02"
             }
         }
     )
