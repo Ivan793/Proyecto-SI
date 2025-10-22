@@ -178,7 +178,7 @@ class BaseRepository(Generic[T]):
             docs = query.stream()
             return len(list(docs))
         except Exception as e:
-            logger.error(f"Error al contar documentos: {str(e)}")
+            logger.error(f"Error al obtener documento {document}: {e}")
             raise DatabaseException(f"Error al contar registros: {str(e)}")
 
     async def get_by_field(self, field: str, value: Any) -> Optional[Dict[str, Any]]:

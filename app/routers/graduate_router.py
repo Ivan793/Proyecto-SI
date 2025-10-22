@@ -25,15 +25,8 @@ async def create_graduate_with_user(graduate_data: GraduateCreate):
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 
-@router.get(
-    "",
-    response_model=list[GraduateResponse],
-    summary="Listar todos los egresados activos"
-)
+@router.get("", response_model=list[GraduateResponse], summary="Listar egresados activos")
 async def get_all_graduates():
-    """
-    ✅ Ahora solo devuelve egresados activos (activo = True)
-    """
     try:
         graduates, _ = await graduate_service.get_all_graduates()
         return graduates
@@ -41,11 +34,7 @@ async def get_all_graduates():
         raise HTTPException(status_code=500, detail=f"Error al listar egresados: {str(e)}")
 
 
-@router.get(
-    "/{graduate_id}",
-    response_model=GraduateResponse,
-    summary="Obtener egresado por ID"
-)
+@router.get("/{graduate_id}", response_model=GraduateResponse, summary="Obtener egresado por ID")
 async def get_graduate(graduate_id: str):
     try:
         return await graduate_service.get_graduate(graduate_id)
@@ -53,25 +42,15 @@ async def get_graduate(graduate_id: str):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.put(
-    "/{graduate_id}",
-    response_model=GraduateResponse,
-    summary="Actualizar egresado"
-)
+@router.put("/{graduate_id}", response_model=GraduateResponse, summary="Actualizar egresado")
 async def update_graduate(graduate_id: str, graduate_data: GraduateUpdate):
-    """
-    🚫 No se permite actualizar: correo, programa_academico, identificacion.
-    """
     try:
         return await graduate_service.update_graduate(graduate_id, graduate_data)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete(
-    "/{graduate_id}",
-    summary="Desactivar egresado"
-)
+@router.delete("/{graduate_id}", summary="Desactivar egresado")
 async def deactivate_graduate(
     graduate_id: str,
     reason: str = Query("Desactivado por administrador", description="Motivo de la desactivación")

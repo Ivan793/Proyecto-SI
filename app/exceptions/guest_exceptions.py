@@ -1,4 +1,3 @@
-from typing import Optional
 from .base_exceptions import NotFoundException, ConflictException, DependencyException
 
 

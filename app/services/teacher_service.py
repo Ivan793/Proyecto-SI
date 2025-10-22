@@ -14,12 +14,13 @@ from app.exceptions.teacher_exceptions import (
     TeacherAlreadyExistsException,
     TeacherHasAssignmentsException
 )
+
 from app.exceptions.user_exceptions import (
     UserNotFoundException,
     UserAlreadyExistsException
 )
 from app.schemas.types import Defaults
-from app.core.firebase import firebase_auth
+#from app.core.firebase import firebase_auth
 
 logger = logging.getLogger(__name__)
 

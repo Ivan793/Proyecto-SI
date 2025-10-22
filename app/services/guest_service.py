@@ -1,120 +1,131 @@
-from typing import List, Tuple
+from typing import List, Dict, Any
 import logging
-from datetime import datetime, date
+from datetime import datetime
 
 from app.repositories.guest_repository import GuestRepository
-from app.services.user_service import create_user, get_user
+from app.repositories.user_repository import UserRepository
 from app.schemas.guest import (
-    GuestCreateWithUser,
-    GuestCreateWithExistingUser,
+    GuestCreate,
+    GuestCreateExistingUser,
     GuestUpdate,
     GuestResponse
 )
-from app.schemas.user import UserCreate
 from app.exceptions.guest_exceptions import (
     GuestNotFoundException,
-    GuestAlreadyExistsException,
+    GuestAlreadyExistsException
 )
 from app.exceptions.user_exceptions import (
     UserNotFoundException,
-    UserAlreadyExistsException,
+    UserAlreadyExistsException
 )
+from app.core.firebase import firebase_auth
 
 logger = logging.getLogger(__name__)
+
 
 class GuestService:
     def __init__(self):
         self.guest_repo = GuestRepository()
+        self.user_repo = UserRepository()
 
     # ---------------------------
-    # Crear invitado + usuario en cascada (con validaciones de user_service)
+    # Crear invitado + usuario (CASCADA)
     # ---------------------------
-    async def create_guest_with_user(self, guest_data: GuestCreateWithUser) -> GuestResponse:
+    async def create_guest_with_user(self, guest_data: GuestCreate) -> GuestResponse:
         try:
-            # ✅ Asegurar que la fecha de nacimiento sea tipo date (no datetime)
-            fecha_nacimiento = guest_data.fecha_nacimiento
-            if isinstance(fecha_nacimiento, datetime):
-                fecha_nacimiento = fecha_nacimiento.date()
-            elif isinstance(fecha_nacimiento, str):
-                fecha_nacimiento = datetime.fromisoformat(fecha_nacimiento).date()
+            # 🔹 1. Validar que la identificación no exista
+            existing_by_id = await self.user_repo.get_by_field("identificacion", guest_data.identificacion)
+            if existing_by_id:
+                raise UserAlreadyExistsException("identificacion", guest_data.identificacion)
 
-            # Crear el usuario con validaciones de user_service
-            user_data = UserCreate(
-                tipo_documento=guest_data.tipo_documento,
-                identificacion=guest_data.identificacion,
-                nombres=guest_data.nombres,
-                apellidos=guest_data.apellidos,
-                genero=guest_data.genero,
-                identidad_sexual=guest_data.identidad_sexual,
-                fecha_nacimiento=fecha_nacimiento,
-                nacionalidad=guest_data.nacionalidad,
-                pais_residencia=guest_data.pais_residencia,
-                departamento=guest_data.departamento,
-                municipio=guest_data.municipio,
-                direccion_residencia=guest_data.direccion_residencia,
-                telefono=guest_data.telefono,
-                correo=guest_data.correo,
-                contraseña=guest_data.contraseña,
-                rol=guest_data.rol,
+            # 🔹 2. Validar que el correo no exista
+            existing_user = await self.user_repo.get_user_by_email(guest_data.correo)
+            if existing_user:
+                raise UserAlreadyExistsException("correo", guest_data.correo)
+
+            # 🔹 3. Crear usuario en Firebase Authentication
+            firebase_user = firebase_auth.create_user(
+                email=guest_data.correo,
+                password=guest_data.contraseña,
+                display_name=f"{guest_data.nombres} {guest_data.apellidos}",
+                disabled=False
             )
+            user_id = firebase_user.uid
+            logger.info(f"Usuario creado en Firebase Auth: {user_id}")
 
-            # 🔒 Validaciones de dominio, edad, etc. siguen aplicándose aquí
-            new_user = await create_user(user_data)
+            # 🔹 4. Crear usuario en Firestore (tabla usuarios)
+            user_dict = guest_data.model_dump(exclude={"contraseña", "institucion_origen", "motivo_visita", "activo"})
+            user_dict["estado"] = "ACTIVO"
+            await self.user_repo.create(user_dict, document_id=user_id)
+            logger.info(f"Usuario creado en Firestore: {user_id}")
 
-        except UserAlreadyExistsException as e:
-            raise e
+            # 🔹 5. Crear invitado asociado al usuario
+            guest_dict = {
+                "id_usuario": user_id,
+                "institucion_origen": guest_data.institucion_origen,
+                "motivo_visita": guest_data.motivo_visita,
+                "activo": guest_data.activo if guest_data.activo is not None else True,
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            }
+
+            guest_id = await self.guest_repo.create(guest_dict)
+            logger.info(f"Invitado creado y vinculado: {guest_id} -> {user_id}")
+
+            # 🔹 6. Obtener y retornar invitado completo
+            guest = await self.guest_repo.get_by_id(guest_id)
+            return GuestResponse(**guest)
+
         except Exception as e:
-            logger.error(f"Error creando usuario para invitado: {e}")
-            raise ValueError(f"Error al crear usuario: {e}")
+            # Rollback: si falla, eliminar el usuario de Firebase si se creó
+            if "firebase_user" in locals():
+                try:
+                    firebase_auth.delete_user(firebase_user.uid)
+                    logger.warning(f"Usuario eliminado de Firebase por rollback: {firebase_user.uid}")
+                except Exception as rollback_error:
+                    logger.error(f"Error en rollback de Firebase: {rollback_error}")
 
-        # Obtener el id del usuario recién creado
-        user_id = (
-            getattr(new_user, "id_usuario", None)
-            or (new_user.get("id_usuario") if isinstance(new_user, dict) else None)
-        )
-        if not user_id:
-            raise ValueError("No se pudo obtener el id_usuario del usuario creado.")
-
-        # Crear invitado asociado
-        guest_dict = {
-            "id_usuario": user_id,
-            "institucion_origen": guest_data.institucion_origen,
-            "motivo_visita": guest_data.motivo_visita,
-            "activo": guest_data.activo,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
-        }
-
-        new_guest = await self.guest_repo.create(guest_dict)
-        return GuestResponse(**new_guest)
+            logger.error(f"Error al crear invitado con usuario: {e}")
+            raise ValueError(f"Error al crear invitado: {str(e)}")
 
     # ---------------------------
     # Crear invitado con usuario existente
     # ---------------------------
-    async def create_guest_with_existing_user(self, guest_data: GuestCreateWithExistingUser) -> GuestResponse:
-        user = await get_user(guest_data.id_usuario)
-        if not user:
+    async def create_guest_with_existing_user(self, guest_data: GuestCreateExistingUser) -> GuestResponse:
+        # 🔹 Verificar que el usuario exista
+        user_exists = await self.user_repo.user_exists(guest_data.id_usuario)
+        if not user_exists:
             raise UserNotFoundException(f"Usuario con ID {guest_data.id_usuario} no encontrado.")
 
+        # 🔹 Verificar que no exista invitado asociado
         existing_guest = await self.guest_repo.get_by_field("id_usuario", guest_data.id_usuario)
         if existing_guest:
-            raise GuestAlreadyExistsException(f"El invitado para el usuario {guest_data.id_usuario} ya existe.")
+            raise GuestAlreadyExistsException(f"Ya existe un invitado para el usuario {guest_data.id_usuario}.")
 
+        # 🔹 Crear invitado
         guest_dict = guest_data.model_dump()
         guest_dict.update({
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow(),
+            "activo": guest_dict.get("activo", True)
         })
 
         new_guest = await self.guest_repo.create(guest_dict)
+        if "activo" not in new_guest:
+            new_guest["activo"] = guest_dict["activo"]
+
         return GuestResponse(**new_guest)
 
     # ---------------------------
-    # Obtener todos los invitados
+    # Obtener todos los invitados (solo activos)
     # ---------------------------
-    async def get_all_guests(self, active_only: bool = True, page: int = 1, limit: int = 20):
-        filters = {"activo": True} if active_only else {}
-        guests, total = await self.guest_repo.get_all_paginated(filters=filters, page=page, limit=limit)
+    async def get_all_guests(self, page: int = 1, limit: int = 20):
+        filters = {"activo": True}
+        guests, total = await self.guest_repo.get_all_paginated(filters, page, limit)
+
+        for g in guests:
+            g["activo"] = g.get("activo", True)
+
         return [GuestResponse(**g) for g in guests], total
 
     # ---------------------------
@@ -123,7 +134,12 @@ class GuestService:
     async def get_guest(self, guest_id: str) -> GuestResponse:
         guest = await self.guest_repo.get_by_id(guest_id)
         if not guest:
-            raise GuestNotFoundException(f"Invitado con ID {guest_id} no encontrado.")
+            guest = await self.guest_repo.get_by_field("id_usuario", guest_id)
+
+        if not guest:
+            raise GuestNotFoundException(guest_id)
+
+        guest["activo"] = guest.get("activo", True)
         return GuestResponse(**guest)
 
     # ---------------------------
@@ -132,10 +148,44 @@ class GuestService:
     async def update_guest(self, guest_id: str, guest_data: GuestUpdate) -> GuestResponse:
         guest = await self.guest_repo.get_by_id(guest_id)
         if not guest:
-            raise GuestNotFoundException(f"Invitado con ID {guest_id} no encontrado.")
+            guest = await self.guest_repo.get_by_field("id_usuario", guest_id)
 
-        datos = guest_data.model_dump(exclude_unset=True)
-        datos["updated_at"] = datetime.utcnow()
+        if not guest:
+            raise GuestNotFoundException(guest_id)
 
-        updated_guest = await self.guest_repo.update(guest_id, datos)
-        return GuestResponse(**updated_guest)
+        real_id = guest.get("id_invitado") or guest.get("id")
+
+        updated_data = guest_data.model_dump(exclude_unset=True)
+        updated_data["updated_at"] = datetime.utcnow()
+        updated_data["activo"] = updated_data.get("activo", guest.get("activo", True))
+
+        id_to_update = real_id or guest_id
+        updated = await self.guest_repo.update(id_to_update, updated_data)
+
+        if "activo" not in updated:
+            updated["activo"] = updated_data["activo"]
+
+        return GuestResponse(**updated)
+
+    # ---------------------------
+    # Desactivar invitado
+    # ---------------------------
+    async def deactivate_guest(self, guest_id: str, reason: str):
+        guest = await self.guest_repo.get_by_id(guest_id)
+        if not guest:
+            guest = await self.guest_repo.get_by_field("id_usuario", guest_id)
+
+        if not guest:
+            raise GuestNotFoundException(guest_id)
+
+        id_to_update = guest.get("id_invitado") or guest.get("id") or guest_id
+
+        await self.guest_repo.update(
+            id_to_update,
+            {
+                "activo": False,
+                "updated_at": datetime.utcnow(),
+                "desactivacion_motivo": reason
+            }
+        )
+        return True

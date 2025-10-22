@@ -11,7 +11,6 @@ class GuestRepository(BaseRepository):
         super().__init__(Collections.INVITADOS, "id_invitado")
 
     async def get_active_guests(self) -> List[Dict[str, Any]]:
-        """Obtiene todos los invitados activos."""
         try:
             guests = await self.get_all(filters={"activo": True})
             logger.info(f"{len(guests)} invitados activos obtenidos.")
@@ -21,7 +20,6 @@ class GuestRepository(BaseRepository):
             return []
 
     async def get_guest_by_user_id(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Obtiene un invitado a partir del ID de usuario."""
         try:
             guest = await self.get_by_field("id_usuario", user_id)
             if guest:
@@ -34,7 +32,6 @@ class GuestRepository(BaseRepository):
             return None
 
     async def get_all_paginated(self, filters: Optional[Dict[str, Any]] = None, page: int = 1, limit: int = 20):
-        """Obtiene invitados con paginación desde Firestore."""
         try:
             all_data = await self.get_all(filters)
             total = len(all_data)
