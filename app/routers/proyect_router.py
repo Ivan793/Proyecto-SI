@@ -1,46 +1,67 @@
-from fastapi import APIRouter, HTTPException
-from typing import List
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from app.schemas.proyect import ProyectoCreate, ProyectoResponse, ProyectoUpdate
-from app.services import proyect_service
+from app.repositories.proyect_repository import ProyectoRepository
+from app.exceptions.base_exceptions import AppException
+import json
 
-
-router = APIRouter(prefix="/proyectos", tags=["Proyectos"])
-
+router = APIRouter(prefix="/api/v1/proyectos", tags=["Proyectos"])
+repository = ProyectoRepository()
 
 @router.post("/", response_model=ProyectoResponse)
-def create_proyecto(proyecto: ProyectoCreate):
-    """Crea un nuevo proyecto en el sistema."""
-    return proyect_service.create_proyecto(proyecto)
+async def create_proyecto(
+    proyecto_data: str = Form(...),
+    archivo: UploadFile = File(...),
+):
+    """
+    Crea un nuevo proyecto con archivo PDF obligatorio.
+    El campo `proyecto_data` debe ser un JSON string con la estructura de ProyectoCreate.
+    """
+    try:
+        proyecto_dict = json.loads(proyecto_data)
+        new_id = await repository.create_with_pdf(proyecto_dict, archivo)
+        created = await repository.get_by_id(new_id)
+        return ProyectoResponse(**created)
+    except AppException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="El campo 'proyecto_data' debe ser JSON válido.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/", response_model=List[ProyectoResponse])
-def list_proyectos():
-    """Lista todos los proyectos registrados."""
-    return proyect_service.list_proyectos()
+@router.get("/", response_model=list[ProyectoResponse])
+async def list_proyectos():
+    proyectos = await repository.get_all()
+    return [ProyectoResponse(**p) for p in proyectos]
 
 
-@router.get("/{proyecto_id}", response_model=ProyectoResponse)
-def get_proyecto(proyecto_id: str):
-    """Obtiene un proyecto específico por su ID."""
-    proyecto = proyect_service.get_proyecto(proyecto_id)
-    if not proyecto:
-        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-    return proyecto
+@router.put("/{proyect_id}", response_model=ProyectoResponse)
+async def update_proyecto(
+    proyect_id: str,
+    proyecto_data: str = Form(...),
+    archivo: UploadFile = File(None)
+):
+    """
+    Actualiza un proyecto. El PDF es opcional.
+    """
+    try:
+        proyecto_dict = json.loads(proyecto_data)
+        await repository.update_with_pdf(proyect_id, proyecto_dict, archivo)
+        updated = await repository.get_by_id(proyect_id)
+        return ProyectoResponse(**updated)
+    except AppException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/{proyecto_id}", response_model=ProyectoResponse)
-def update_proyecto(proyecto_id: str, proyecto: ProyectoUpdate):
-    """Actualiza los datos de un proyecto existente."""
-    updated = proyect_service.update_proyecto(proyecto_id, proyecto)
-    if not updated:
-        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-    return updated
-
-
-@router.delete("/{proyecto_id}")
-def delete_proyecto(proyecto_id: str):
-    """Elimina un proyecto por su ID."""
-    success = proyect_service.delete_proyecto(proyecto_id)
+@router.delete("/{proyect_id}")
+async def delete_proyecto(proyect_id: str):
+    """
+    Elimina lógicamente un proyecto (marca como inactivo).
+    """
+    success = await repository.soft_delete(proyect_id)
     if not success:
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-    return {"message": "Proyecto eliminado correctamente"}
+    return {"message": "Proyecto desactivado correctamente"}
+    
