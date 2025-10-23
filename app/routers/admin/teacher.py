@@ -16,8 +16,10 @@ from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
     success_response, created_response, paginated_response, 
     updated_response, not_found_response, conflict_response,
-    bad_request_response, internal_server_error_response
+    bad_request_response, internal_server_error_response,
+    message_response
 )
+from app.utils.swagger_docs import ResponseDocumentation
 from app.exceptions.teacher_exceptions import (
     TeacherNotFoundException, 
     TeacherAlreadyExistsException, 
@@ -34,7 +36,8 @@ router = APIRouter(tags=["Profesores - Admin"])
     "",
     status_code=status.HTTP_201_CREATED,
     summary="Crear profesor con usuario (CASCADA)",
-    description=""" Crea un profesor Y su usuario asociado en una sola operación."""
+    description="""Crea un profesor Y su usuario asociado en una sola operación.""",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def create_teacher_with_user(
@@ -62,44 +65,11 @@ async def create_teacher_with_user(
         return internal_server_error_response()
 
 
-@router.post(
-    "/asignar-existente",
-    status_code=status.HTTP_201_CREATED,
-    summary="Crear profesor con usuario EXISTENTE",
-    description="""
-    Crea un profesor asignándolo a un usuario que YA existe en el sistema.
-    """
-)
-@admin_rate_limit()
-async def create_teacher_with_existing_user(
-    request: Request,
-    teacher_data: TeacherCreateWithExistingUser,
-    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
-):
-    try:
-        service = TeacherService()
-        teacher = await service.create_teacher_with_existing_user(teacher_data)
-        
-        logger.info(f"Profesor creado: {teacher.id_docente} por {current_admin['nombre_completo']}")
-        
-        return created_response(
-            data=teacher.model_dump(),
-            message="Profesor asignado a usuario existente"
-        )
-        
-    except TeacherAlreadyExistsException as e:
-        return conflict_response(message=str(e))
-    except UserNotFoundException as e:
-        return not_found_response("Usuario", teacher_data.id_usuario)
-    except Exception as e:
-        logger.error(f"Error creando profesor: {str(e)}")
-        return internal_server_error_response()
-
-
 @router.get(
     "",
     status_code=status.HTTP_200_OK,
-    summary="Listar todos los profesores"
+    summary="Listar todos los profesores",
+    responses=ResponseDocumentation.get_paginated_response()
 )
 @admin_rate_limit()
 async def get_teachers(
@@ -120,7 +90,8 @@ async def get_teachers(
             data=[teacher.model_dump() for teacher in teachers],
             page=params.page,
             limit=params.limit,
-            total_items=total
+            total_items=total,
+            message="Profesores obtenidos exitosamente"
         )
         
     except Exception as e:
@@ -131,7 +102,8 @@ async def get_teachers(
 @router.get(
     "/{teacher_id}",
     status_code=status.HTTP_200_OK,
-    summary="Obtener profesor por ID"
+    summary="Obtener profesor por ID",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_teacher_by_id(
@@ -158,7 +130,8 @@ async def get_teacher_by_id(
 @router.get(
     "/{teacher_id}/completo",
     status_code=status.HTTP_200_OK,
-    summary="Obtener profesor con información de usuario"
+    summary="Obtener profesor con información de usuario",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_teacher_with_user(
@@ -187,7 +160,8 @@ async def get_teacher_with_user(
 @router.put(
     "/{teacher_id}",
     status_code=status.HTTP_200_OK,
-    summary="Actualizar profesor"
+    summary="Actualizar profesor",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def update_teacher(
@@ -217,7 +191,8 @@ async def update_teacher(
 @router.patch(
     "/{teacher_id}/desactivar",
     status_code=status.HTTP_200_OK,
-    summary="Desactivar profesor"
+    summary="Desactivar profesor",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def deactivate_teacher(
@@ -232,10 +207,7 @@ async def deactivate_teacher(
         
         if success:
             logger.info(f"Profesor desactivado: {teacher_id}")
-            return success_response(
-                data={"desactivado": True},
-                message="Profesor desactivado exitosamente"
-            )
+            return message_response("Profesor desactivado exitosamente")
         return bad_request_response(message="No se pudo desactivar")
             
     except TeacherNotFoundException:
@@ -250,7 +222,8 @@ async def deactivate_teacher(
 @router.patch(
     "/{teacher_id}/activar",
     status_code=status.HTTP_200_OK,
-    summary="Activar profesor"
+    summary="Activar profesor",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def activate_teacher(
@@ -264,10 +237,7 @@ async def activate_teacher(
         
         if success:
             logger.info(f"Profesor activado: {teacher_id}")
-            return success_response(
-                data={"activado": True},
-                message="Profesor activado exitosamente"
-            )
+            return message_response("Profesor activado exitosamente")
         return bad_request_response(message="No se pudo activar")
             
     except TeacherNotFoundException:

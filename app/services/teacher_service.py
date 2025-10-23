@@ -35,12 +35,7 @@ class TeacherService:
     ) -> TeacherResponse:
         usuario_data = teacher_data.usuario
         
-        # 1. Validar que el correo no exista
-        existing_user = await self.user_repo.get_user_by_email(usuario_data.correo)
-        if existing_user:
-            raise UserAlreadyExistsException("correo", usuario_data.correo)
-        
-        # 2. Validar que la identificación no exista
+        # Validar que la identificación no exista
         existing_by_id = await self.user_repo.get_by_field(
             "identificacion", 
             usuario_data.identificacion
@@ -48,8 +43,13 @@ class TeacherService:
         if existing_by_id:
             raise UserAlreadyExistsException("identificacion", usuario_data.identificacion)
         
+        # Validar que el correo no exista
+        existing_user = await self.user_repo.get_user_by_email(usuario_data.correo)
+        if existing_user:
+            raise UserAlreadyExistsException("correo", usuario_data.correo)
+        
         try:
-            # 3. Crear usuario en Firebase Authentication
+            # Crear usuario en Firebase Authentication
             firebase_user = firebase_auth.create_user(
                 email=usuario_data.correo,
                 password=usuario_data.contraseña,
@@ -60,13 +60,13 @@ class TeacherService:
             user_id = firebase_user.uid
             logger.info(f"Usuario creado en Firebase Auth: {user_id}")
             
-            # 4. Crear usuario en Firestore
+            # Crear usuario en Firestore
             user_dict = usuario_data.model_dump(exclude={"contraseña"})
             user_dict["estado"] = "ACTIVO"
             await self.user_repo.create(user_dict, document_id=user_id)
             logger.info(f"Usuario creado en Firestore: {user_id}")
             
-            # 5. Crear profesor asociado al usuario
+            # Crear profesor asociado al usuario
             teacher_dict = {
                 "id_usuario": user_id,
                 "categoria_docente": teacher_data.categoria_docente,
@@ -77,7 +77,7 @@ class TeacherService:
             teacher_id = await self.teacher_repo.create(teacher_dict)
             logger.info(f"Profesor creado y vinculado: {teacher_id} -> {user_id}")
             
-            # 6. Obtener y retornar el profesor creado
+            # Obtener y retornar el profesor creado
             teacher = await self.teacher_repo.get_by_id(teacher_id)
             return TeacherResponse(**teacher)
             

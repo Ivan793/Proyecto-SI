@@ -107,112 +107,60 @@ async def get_current_user_from_token(
 async def get_current_admin_user(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
-    """
-    Verifica que el usuario actual sea un administrador.
+    """Verifica que el usuario actual sea un administrador"""
+    if current_user.get("rol") != "Administrativo":
+        raise InsufficientPermissionsException(
+            message="Se requieren permisos de administrador",
+            required_role="Administrativo"
+        )
     
-    Args:
-        current_user: Usuario actual
-        
-    Returns:
-        Diccionario con la información del administrador
-        
-    Raises:
-        HTTPException: Si el usuario no es administrador
-    """
-    if current_user.get('rol') not in ['Administrador', 'Admin', 'Administrativo']:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "status": "error",
-                "mensaje": "Acceso denegado. Se requieren permisos de administrador"
-            }
+    return current_user
+
+
+async def get_current_teacher_user(
+    current_user: Dict[str, Any] = Depends(get_current_user_from_token)
+) -> Dict[str, Any]:
+    """Verifica que el usuario actual sea un profesor"""
+    if current_user.get("rol") != "Docente":
+        raise InsufficientPermissionsException(
+            message="Se requieren permisos de profesor",
+            required_role="Docente"
         )
     
     return current_user
 
 
 async def get_current_student_user(
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user_from_token)
 ) -> Dict[str, Any]:
-    """
-    Verifica que el usuario actual sea un estudiante y obtiene su información completa.
-    
-    Args:
-        current_user: Usuario actual
-        
-    Returns:
-        Diccionario con información del usuario y estudiante
-        
-    Raises:
-        HTTPException: Si el usuario no es estudiante
-    """
-    if current_user.get('rol') not in ['Estudiante', 'Egresado']:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "status": "error",
-                "mensaje": "Acceso denegado. Solo estudiantes pueden acceder"
-            }
+    """Verifica que el usuario actual sea un estudiante"""
+    if current_user.get("rol") not in ("Estudiante", "Egresado"):
+        raise InsufficientPermissionsException(
+            message="Se requieren permisos de estudiante",
+            required_role="Estudiante"
         )
     
-    # Obtener información del estudiante
-    student_repo = StudentRepository()
-    estudiante = await student_repo.get_student_by_user_id(
-        current_user['id_usuario']
-    )
-    
-    if not estudiante:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "status": "error",
-                "mensaje": "Informacion de estudiante no encontrada"
-            }
-        )
-    
-    # Verificar que el estudiante esté activo
-    if not estudiante.get('activo', True):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "status": "error",
-                "mensaje": "Estudiante inactivo"
-            }
-        )
-    
-    # Combinar información del usuario y estudiante
-    return {
-        **current_user,
-        'id_estudiante': estudiante['id_estudiante'],
-        'codigo_programa': estudiante.get('codigo_programa'),
-        'semestre': estudiante.get('semestre')
-    }
+    return current_user
 
+# Función para requerir múltiples roles
+def require_roles(allowed_roles: list[str]):
+    """Factory function para crear dependencias que requieran múltiples roles"""
+    async def role_checker(
+        current_user: Dict[str, Any] = Depends(get_current_user_from_token)
+    ) -> Dict[str, Any]:
+        user_role = current_user.get("rol")
+        if user_role not in allowed_roles:
+            raise InsufficientPermissionsException(
+                message=f"Se requiere uno de los roles: {', '.join(allowed_roles)}",
+                required_role=", ".join(allowed_roles)
+            )
+        return current_user
+    return role_checker
 
-async def get_current_teacher_user(
-    current_user: Dict[str, Any] = Depends(get_current_user)
+async def get_authenticated_user(
+    current_user: Dict[str, Any] = Depends(get_current_user_from_token)
 ) -> Dict[str, Any]:
-    """
-    Verifica que el usuario actual sea un docente.
-    
-    Args:
-        current_user: Usuario actual
-        
-    Returns:
-        Diccionario con la información del docente
-        
-    Raises:
-        HTTPException: Si el usuario no es docente
-    """
-    if current_user.get('rol') != 'Docente':
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "status": "error",
-                "mensaje": "Acceso denegado. Solo docentes pueden acceder"
-            }
-        )
-    
+    """Verifica que el usuario esté autenticado (cualquier rol)"""
     return current_user
 
 
@@ -248,6 +196,9 @@ require_admin = PermissionChecker(["Administrador", "Admin", "Administrativo"])
 require_teacher = PermissionChecker(["Docente"])
 require_student = PermissionChecker(["Estudiante", "Egresado"])
 require_admin_or_teacher = PermissionChecker(["Administrador", "Admin", "Administrativo", "Docente"])
+require_any_authenticated = PermissionChecker(["Administrativo", "Docente", "Estudiante", "Egresado", "Invitado"])
+
+
 
 
 # ==================== FUNCIONES ALIAS ADICIONALES ====================

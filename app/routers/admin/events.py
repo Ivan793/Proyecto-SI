@@ -1,5 +1,4 @@
-
-from fastapi import APIRouter, Depends, Query, status, Request  # Agregar Request aquí
+from fastapi import APIRouter, Depends, Query, status, Request
 from typing import Optional, Dict, Any
 from datetime import date, datetime
 import logging
@@ -18,8 +17,11 @@ from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
     success_response, created_response, paginated_response, 
     updated_response, not_found_response, conflict_response,
-    bad_request_response, internal_server_error_response
+    bad_request_response, internal_server_error_response,
+    message_response
 )
+from app.utils.swagger_docs import ResponseDocumentation
+from app.core.response_codes import ResponseCode
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,8 @@ router = APIRouter(tags=["Eventos - Admin"])
     "",
     status_code=status.HTTP_201_CREATED,
     summary="Crear nuevo evento",
-    description="Crea una nueva feria/convocatoria de ExpoSoftware"
+    description="Crea una nueva feria/convocatoria de ExpoSoftware",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def create_event(
@@ -58,12 +61,12 @@ async def create_event(
         return internal_server_error_response()
 
 
-
 @router.get(
     "",
     status_code=status.HTTP_200_OK,
     summary="Listar eventos con filtros",
-    description="Obtiene lista de eventos con opciones de filtrado y paginación"
+    description="Obtiene lista de eventos con opciones de filtrado y paginación",
+    responses=ResponseDocumentation.get_paginated_response()
 )
 @admin_rate_limit()
 async def get_events(
@@ -74,7 +77,6 @@ async def get_events(
     ano: Optional[int] = Query(None, description="Filtrar por año específico"),
     params: PaginationParams = Depends(),
     _: Dict[str, Any] = Depends(get_current_admin_user)
-    
 ):
     try:
         service = EventService()
@@ -91,7 +93,8 @@ async def get_events(
             data=[event.model_dump() for event in events],
             page=params.page,
             limit=params.limit,
-            total_items=total
+            total_items=total,
+            message="Eventos obtenidos exitosamente"
         )
         
     except Exception as e:
@@ -103,7 +106,8 @@ async def get_events(
     "/{id}",
     status_code=status.HTTP_200_OK,
     summary="Obtener detalles de un evento",
-    description="Obtiene información completa de un evento específico"
+    description="Obtiene información completa de un evento específico",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_event_by_id(
@@ -131,7 +135,8 @@ async def get_event_by_id(
     "/{id}",
     status_code=status.HTTP_200_OK,
     summary="Actualizar evento",
-    description="Actualiza la información de un evento existente"
+    description="Actualiza la información de un evento existente",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def update_event(
@@ -164,7 +169,8 @@ async def update_event(
     "/{id}/estado",
     status_code=status.HTTP_200_OK,
     summary="Cambiar estado del evento",
-    description="Cambia el estado de un evento (ACTIVO/INACTIVO/FINALIZADO)"
+    description="Cambia el estado de un evento (ACTIVO/INACTIVO/FINALIZADO)",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def change_event_state(
@@ -210,7 +216,8 @@ async def change_event_state(
     "/{id}/capacidad",
     status_code=status.HTTP_200_OK,
     summary="Verificar capacidad del evento",
-    description="Obtiene información sobre la capacidad y disponibilidad de cupos"
+    description="Obtiene información sobre la capacidad y disponibilidad de cupos",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def check_event_capacity(
@@ -238,7 +245,8 @@ async def check_event_capacity(
     "/proximos/listado",
     status_code=status.HTTP_200_OK,
     summary="Obtener próximos eventos",
-    description="Obtiene los próximos eventos activos ordenados por fecha"
+    description="Obtiene los próximos eventos activos ordenados por fecha",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_upcoming_events(
@@ -264,7 +272,8 @@ async def get_upcoming_events(
     "/estadisticas/generales",
     status_code=status.HTTP_200_OK,
     summary="Estadísticas generales de eventos",
-    description="Obtiene estadísticas generales de todos los eventos"
+    description="Obtiene estadísticas generales de todos los eventos",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_events_statistics(
@@ -274,20 +283,16 @@ async def get_events_statistics(
     try:
         service = EventService()
         
-        # Obtener todos los eventos para calcular estadísticas
-        events, total = await service.get_all_events(page=1, limit=1000)  # Límite alto para obtener todos
+        events, total = await service.get_all_events(page=1, limit=1000)
         
-        # Calcular estadísticas
         total_eventos = total
         eventos_activos = len([e for e in events if e.estado == EventState.ACTIVO])
         eventos_inactivos = len([e for e in events if e.estado == EventState.INACTIVO])
         eventos_finalizados = len([e for e in events if e.estado == EventState.FINALIZADO])
         
-        # Total de inscritos y proyectos
         total_inscritos = sum(event.total_inscritos for event in events)
         total_proyectos = sum(event.total_proyectos for event in events)
         
-        # Próximos eventos (activos con fecha futura)
         hoy = datetime.now().date()
         proximos_eventos = len([
             e for e in events 

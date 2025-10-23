@@ -5,7 +5,6 @@ from app.core.firebase import Collections
 
 logger = logging.getLogger(__name__)
 
-
 class UserRepository(BaseRepository):
     
     def __init__(self):
@@ -22,6 +21,11 @@ class UserRepository(BaseRepository):
 
     async def user_exists(self, user_id: str) -> bool:
         user = await self.get_by_id(user_id)
+        return user is not None
+
+    # Validar existencia de correo
+    async def exists_email(self, email: str) -> bool:
+        user = await self.get_user_by_email(email)
         return user is not None
     
     async def get_by_identificacion(self, identificacion: str) -> Optional[dict]:

@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, IntEnum
 from enum import IntEnum
 
 class TipoActividadEnum(IntEnum):
@@ -46,3 +46,10 @@ class SubjectCycle(str, Enum):
     BASICO = "Ciclo Básico"
     PROFESIONAL = "Ciclo Profesional"
     PROFUNDIZACION = "Ciclo de Profundización"
+
+class TipoActividadEnum(IntEnum):
+    exposoftware = 1
+    taller = 2
+    ponencia = 3
+    conferencia = 4
+    articulo_cientifico = 5

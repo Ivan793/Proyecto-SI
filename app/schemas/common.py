@@ -1,16 +1,30 @@
 """Esquemas comunes para respuestas estandarizadas y utilidades"""
-
 from pydantic import BaseModel, Field
 from typing import Generic, TypeVar, Optional, List, Any, Dict
 from datetime import datetime, timezone
 
 from app.core.constants import Limits, Defaults
+from app.core.response_codes import ResponseCode, ResponseMessage
 
 # ==================== PAGINACIÓN ====================
 
 class PaginationParams(BaseModel):
-    page: int = Field(default=1, ge=1)
-    limit: int = Field(default=Defaults.PAGINATION_LIMIT, ge=1, le=Defaults.PAGINATION_MAX)
+    page: int = Field(default=1, ge=1, description="Número de página")
+    limit: int = Field(
+        default=Defaults.PAGINATION_LIMIT, 
+        ge=1, 
+        le=Defaults.PAGINATION_MAX,
+        description="Elementos por página"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "page": 1,
+                "limit": 20
+            }
+        }
+    }
 
 
 class PaginationMeta(BaseModel):
@@ -41,34 +55,84 @@ class PaginationMeta(BaseModel):
 
 T = TypeVar('T')
 
-
 class SuccessResponse(BaseModel, Generic[T]):
-    status: str = Field(default="success")
-    message: Optional[str] = None
-    data: T
+    status: str = Field(default="success", description="Estado de la respuesta")
+    message: Optional[str] = Field(None, description="Mensaje descriptivo")
+    data: T = Field(..., description="Datos de la respuesta")
+    code: str = Field(default=ResponseCode.SUCCESS, description="Código de respuesta")
 
-    model_config = {"from_attributes": True}
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "example": {
+                "status": "success",
+                "message": "Operación realizada exitosamente",
+                "data": {
+                    "id": "abc123",
+                    "nombre": "Ejemplo"
+                },
+                "code": "SUCCESS"
+            }
+        }
+    }
 
 
 class PaginatedResponse(BaseModel, Generic[T]):
-    status: str = Field(default="success")
+    status: str = Field(default="success", description="Estado de la respuesta")
+    message: Optional[str] = Field(None, description="Mensaje descriptivo")
     data: List[T] = Field(..., description="Lista de elementos")
-    pagination: PaginationMeta
-    model_config = {"from_attributes": True}
+    pagination: PaginationMeta = Field(..., description="Información de paginación")
+    code: str = Field(default=ResponseCode.SUCCESS, description="Código de respuesta")
+
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "example": {
+                "status": "success",
+                "message": "Datos obtenidos correctamente",
+                "data": [
+                    {"id": "1", "nombre": "Elemento 1"},
+                    {"id": "2", "nombre": "Elemento 2"}
+                ],
+                "pagination": {
+                    "page": 1,
+                    "limit": 20,
+                    "total_items": 150,
+                    "total_pages": 8,
+                    "has_next": True,
+                    "has_prev": False
+                },
+                "code": "SUCCESS"
+            }
+        }
+    }
 
 
 class ErrorDetail(BaseModel):
     field: Optional[str] = Field(None, description="Campo que causó el error")
-    message: str    
+    message: str = Field(..., description="Mensaje de error")
     type: Optional[str] = Field(None, description="Tipo de error")
+    value: Optional[Any] = Field(None, description="Valor que causó el error")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "field": "correo",
+                "message": "El formato del correo es inválido",
+                "type": "value_error.email",
+                "value": "correo_invalido"
+            }
+        }
+    }
 
 
 class ErrorResponse(BaseModel):
-    status: str = Field(default="error")
-    message: str
+    status: str = Field(default="error", description="Estado de error")
+    message: str = Field(..., description="Mensaje de error general")
     errors: Optional[List[ErrorDetail]] = Field(None, description="Lista de errores detallados")
-    code: Optional[str] = Field(None, description="Código de error específico")
+    code: str = Field(..., description="Código de error específico")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    path: Optional[str] = Field(None, description="Endpoint donde ocurrió el error")
 
     model_config = {
         "json_schema_extra": {
@@ -79,124 +143,76 @@ class ErrorResponse(BaseModel):
                     {
                         "field": "correo",
                         "message": "El formato del correo es inválido",
-                        "type": "value_error.email"
+                        "type": "value_error.email",
+                        "value": "correo_invalido"
                     }
                 ],
                 "code": "VALIDATION_ERROR",
-                "timestamp": "2025-01-15T10:30:00Z"
+                "timestamp": "2025-01-15T10:30:00Z",
+                "path": "/api/v1/usuarios"
             }
         }
     }
 
 
-# ==================== AUDITORÍA ====================
-
-class AuditInfo(BaseModel):
-    realizado_por: str = Field(..., description="ID del usuario que realizó la acción")
-    realizado_por_nombre: str = Field(..., description="Nombre del usuario")
-    fecha: datetime = Field(default_factory=datetime.utcnow, description="Fecha y hora de la acción")
-    accion: str = Field(..., description="Tipo de acción realizada")
-    detalles: Optional[Dict[str, Any]] = Field(None, description="Detalles adicionales")
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "realizado_por": "admin_001",
-                "realizado_por_nombre": "Administrador Principal",
-                "fecha": "2025-01-15T10:30:00Z",
-                "accion": "APROBACION",
-                "detalles": {
-                    "estado_anterior": "PENDIENTE",
-                    "estado_nuevo": "APROBADO"
-                }
-            }
-        }
-    }
-
-
-class ChangeAudit(BaseModel):
-    cambio_realizado_por: str
-    cambio_realizado_por_nombre: str
-    fecha_cambio: datetime = Field(default_factory=datetime.now(timezone.utc))
-    cambio_anterior: Optional[Dict[str, Any]] = None
-    cambio_nuevo: Optional[Dict[str, Any]] = None
-    razon: Optional[str] = Field(None, min_length=Limits.REASON_MIN_LENGTH, max_length=Limits.REASON_MAX_LENGTH)
-
-
-class ApprovalAudit(BaseModel):
-    aprobado_por: str
-    aprobado_por_nombre: str
-    fecha_aprobacion: datetime = Field(default_factory=datetime.now(timezone.utc))
-    estado_anterior: str
-    estado_nuevo: str = "APROBADO"
-
-
-class RejectionAudit(BaseModel):
-    rechazado_por: str
-    rechazado_por_nombre: str
-    fecha_rechazo: datetime = Field(default_factory=datetime.now(timezone.utc))
-    estado_anterior: str
-    estado_nuevo: str = "RECHAZADO"
-    motivo_rechazo: str = Field(..., min_length=Limits.REASON_MIN_LENGTH, max_length=Limits.REASON_MAX_LENGTH)
-
-
-# ==================== FILTROS ====================
-
-class DateRangeFilter(BaseModel):
-    fecha_desde: Optional[datetime] = None
-    fecha_hasta: Optional[datetime] = None
-
-
-class SearchFilter(BaseModel):
-    search: Optional[str] = Field(None, min_length=Limits.SEARCH_MIN_LENGTH, max_length=Limits.SEARCH_MAX_LENGTH)
-
-
-# ==================== ESTADÍSTICAS ====================
-
-class CountStats(BaseModel):
-    total: int = Field(..., description="Total de elementos")
-    activos: int = Field(default=0, description="Elementos activos")
-    inactivos: int = Field(default=0, description="Elementos inactivos")
-    pendientes: int = Field(default=0, description="Elementos pendientes")
-
-
-class PercentageDistribution(BaseModel):
-    categoria: str = Field(..., description="Nombre de la categoría")
-    cantidad: int = Field(..., description="Cantidad de elementos")
-    porcentaje: float = Field(..., ge=0, le=100, description="Porcentaje del total")
-
-
-# ==================== MENSAJES ====================
+# ==================== RESPUESTAS ESPECÍFICAS ====================
 
 class MessageResponse(BaseModel):
-    status: str = Field(default="success")
-    message: str
+    status: str = Field(default="success", description="Estado de la respuesta")
+    message: str = Field(..., description="Mensaje informativo")
+    code: str = Field(default=ResponseCode.SUCCESS, description="Código de respuesta")
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "status": "success",
-                "message": "Operación realizada exitosamente"
+                "message": "Operación realizada exitosamente",
+                "code": "SUCCESS"
             }
         }
     }
 
 
-# ==================== TIPOS DE ESTADO ====================
+class IdResponse(BaseModel):
+    id: str = Field(..., description="ID del recurso creado")
+    
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "id": "L7Tz5A23fWx19oK9jK1a"
+            }
+        }
+    }
 
-class StatusInfo(BaseModel):
-    codigo: str = Field(..., description="Código del estado")
-    nombre: str = Field(..., description="Nombre descriptivo")
-    descripcion: Optional[str] = Field(None, description="Descripción del estado")
-    color: Optional[str] = Field(None, description="Color asociado (para UI)")
+
+class CountResponse(BaseModel):
+    count: int = Field(..., description="Cantidad de elementos")
+    
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "count": 42
+            }
+        }
+    }
+
+
+class BulkOperationResult(BaseModel):
+    processed: int = Field(..., description="Elementos procesados")
+    successful: int = Field(..., description="Operaciones exitosas")
+    failed: int = Field(..., description="Operaciones fallidas")
+    errors: Optional[List[Dict[str, Any]]] = Field(None, description="Errores detallados")
 
     model_config = {
         "json_schema_extra": {
             "example": {
-                "codigo": "ACTIVO",
-                "nombre": "Activo",
-                "descripcion": "El elemento está activo y operativo",
-                "color": "#28a745"
+                "processed": 10,
+                "successful": 8,
+                "failed": 2,
+                "errors": [
+                    {"item": "item1", "error": "Ya existe"},
+                    {"item": "item2", "error": "Formato inválido"}
+                ]
             }
         }
     }

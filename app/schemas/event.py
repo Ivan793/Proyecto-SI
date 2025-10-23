@@ -38,12 +38,12 @@ class EventBase(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "nombre_evento": "ExpoSoftware 2025-I",
+                "nombre_evento": "ExpoSoftware 2025-II",
                 "descripcion": "Exposición de proyectos del primer semestre 2025",
-                "fecha_inicio": "2025-05-15T08:00:00Z",
-                "fecha_fin": "2025-05-17T18:00:00Z",
+                "fecha_inicio": "2025-10-30",
+                "fecha_fin": "2025-11-01",
                 "lugar": "Auditorio Principal UPC",
-                "cupo_maximo": 150,
+                "cupo_maximo": 1,
                 "permite_invitados": True
             }
         }
