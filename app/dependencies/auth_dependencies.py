@@ -77,6 +77,27 @@ async def get_current_student_user(
     
     return current_user
 
+# Función para requerir múltiples roles
+def require_roles(allowed_roles: list[str]):
+    """Factory function para crear dependencias que requieran múltiples roles"""
+    async def role_checker(
+        current_user: Dict[str, Any] = Depends(get_current_user_from_token)
+    ) -> Dict[str, Any]:
+        user_role = current_user.get("rol")
+        if user_role not in allowed_roles:
+            raise InsufficientPermissionsException(
+                message=f"Se requiere uno de los roles: {', '.join(allowed_roles)}",
+                required_role=", ".join(allowed_roles)
+            )
+        return current_user
+    return role_checker
+
+async def get_authenticated_user(
+    current_user: Dict[str, Any] = Depends(get_current_user_from_token)
+) -> Dict[str, Any]:
+    """Verifica que el usuario esté autenticado (cualquier rol)"""
+    return current_user
+
 
 async def optional_authentication(
     authorization: Optional[str] = Header(None)
@@ -130,3 +151,5 @@ require_admin = PermissionChecker(["Administrativo"])
 require_teacher = PermissionChecker(["Docente"])
 require_student = PermissionChecker(["Estudiante", "Egresado"])
 require_admin_or_teacher = PermissionChecker(["Administrativo", "Docente"])
+require_any_authenticated = PermissionChecker(["Administrativo", "Docente", "Estudiante", "Egresado", "Invitado"])
+

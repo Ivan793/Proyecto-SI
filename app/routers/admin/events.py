@@ -23,7 +23,7 @@ from app.utils.responses import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Eventos"])
+router = APIRouter(tags=["Eventos - Admin"])
 
 
 @router.post(
