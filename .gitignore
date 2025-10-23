@@ -1,5 +1,9 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
+# Ignorar entorno virtual
+.venv/
+
+# Archivos de Python compilados
+__pycache__/
+*.pyc
 # Entorno virtual
 venv/
 env/
@@ -17,10 +21,9 @@ __pycache__/
 # Ignorar entorno virtual de Python
 .venv/
 
-=======
->>>>>>> origin/Miguel
+
 .venv/
-=======
+
 # Python
 __pycache__/
 *.py[cod]
@@ -89,4 +92,3 @@ htmlcov/
 tmp/
 temp/
 *.tmp
->>>>>>> origin/Mateo
