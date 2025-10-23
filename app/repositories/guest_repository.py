@@ -1,58 +1,43 @@
-# app/repositories/guest_repository.py
-from typing import Dict, List
+from typing import Optional, List, Dict, Any
+import logging
+from .base_repository import BaseRepository
+from app.core.firebase import Collections
 
-class GuestRepository:
+logger = logging.getLogger(__name__)
+
+
+class GuestRepository(BaseRepository):
     def __init__(self):
-        # Simulación de base de datos en memoria
-        self.fake_guests_db: List[Dict] = []
+        super().__init__(Collections.INVITADOS, "id_invitado")
 
-    # Crear invitado (creación en cascada simulada)
-    def create_guest(self, data: Dict):
-        new_guest = {
-            "id_invitado": f"inv_{len(self.fake_guests_db) + 1}",
-            "persona": data.get("persona"),
-            "id_sector": data.get("id_sector"),
-            "nombre_empresa": data.get("nombre_empresa")
-        }
-        self.fake_guests_db.append(new_guest)
-        return {
-            "mensaje": "✅ Invitado y persona creados exitosamente (simulado)",
-            "data": new_guest
-        }
+    async def get_active_guests(self) -> List[Dict[str, Any]]:
+        try:
+            guests = await self.get_all(filters={"activo": True})
+            logger.info(f"{len(guests)} invitados activos obtenidos.")
+            return guests
+        except Exception as e:
+            logger.error(f"Error al obtener invitados activos: {e}")
+            return []
 
-    # Obtener todos los invitados
-    def get_all_guests(self):
-        return {
-            "total": len(self.fake_guests_db),
-            "invitados": self.fake_guests_db
-        }
+    async def get_guest_by_user_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        try:
+            guest = await self.get_by_field("id_usuario", user_id)
+            if guest:
+                logger.info(f"Invitado encontrado para usuario {user_id}.")
+            else:
+                logger.warning(f"No se encontró invitado para usuario {user_id}.")
+            return guest
+        except Exception as e:
+            logger.error(f"Error al obtener invitado por usuario {user_id}: {e}")
+            return None
 
-    # Actualizar invitado (en cascada simulada)
-    def update_guest(self, id_invitado: str, data: Dict):
-        for guest in self.fake_guests_db:
-            if guest["id_invitado"] == id_invitado:
-                if "persona" in data:
-                    guest["persona"].update(data["persona"])
-                if "id_sector" in data:
-                    guest["id_sector"] = data["id_sector"]
-                if "nombre_empresa" in data:
-                    guest["nombre_empresa"] = data["nombre_empresa"]
-
-                return {
-                    "mensaje": "✅ Invitado y persona actualizados exitosamente (simulado)",
-                    "data": guest
-                }
-        return {"mensaje": f"⚠️ No se encontró invitado con id {id_invitado}"}
-
-    # Eliminar invitado
-    def delete_guest(self, id_invitado: str):
-        for guest in self.fake_guests_db:
-            if guest["id_invitado"] == id_invitado:
-                self.fake_guests_db = [
-                    g for g in self.fake_guests_db if g["id_invitado"] != id_invitado
-                ]
-                return {"mensaje": f"✅ Invitado con id {id_invitado} eliminado correctamente"}
-        return {"mensaje": f"⚠️ No se encontró invitado con id {id_invitado}"}
-
-# ✅ Instancia global que otros módulos pueden importar
-guest_repository = GuestRepository()
+    async def get_all_paginated(self, filters: Optional[Dict[str, Any]] = None, page: int = 1, limit: int = 20):
+        try:
+            all_data = await self.get_all(filters)
+            total = len(all_data)
+            start = (page - 1) * limit
+            end = start + limit
+            return all_data[start:end], total
+        except Exception as e:
+            logger.error(f"Error al obtener invitados paginados: {e}")
+            return [], 0

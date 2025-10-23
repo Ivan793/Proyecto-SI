@@ -109,3 +109,7 @@ class Collections:
     # Otros
     SECTORES = "sectores"
     ASISTENCIAS = "asistencias"
+    
+# ==================== AUTH (Firebase Authentication) ====================
+from firebase_admin import auth
+firebase_auth = auth

@@ -6,6 +6,7 @@ from app.schemas.types import (
     SubResearchLineCode,
     ThematicAreaCode, ThematicAreaName
 )
+
 class ThematicAreaBase(BaseModel):
     nombre_area: ThematicAreaName
     codigo_sublinea: SubResearchLineCode

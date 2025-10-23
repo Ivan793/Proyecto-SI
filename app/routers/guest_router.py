@@ -1,37 +1,80 @@
-# app/routers/guest_router.py
-from fastapi import APIRouter
-from app.services.guest_service import guest_service
+from fastapi import APIRouter, HTTPException, status, Query
+from app.services.guest_service import GuestService
+from app.schemas.guest import GuestCreate, GuestResponse, GuestUpdate
 
-router = APIRouter(prefix="/invitado", tags=["Invitado"])
+router = APIRouter(
+    prefix="/invitados",
+    tags=["Invitados"]
+)
+
+guest_service = GuestService()
 
 
-@router.post("/")
-def crear_invitado(data: dict):
+@router.post(
+    "",
+    response_model=GuestResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear invitado con usuario (CASCADA)"
+)
+async def create_guest_with_user(guest_data: GuestCreate):
+    try:
+        return await guest_service.create_guest_with_user(guest_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+
+@router.get(
+    "",
+    response_model=list[GuestResponse],
+    summary="Listar todos los invitados activos"
+)
+async def get_all_guests():
     """
-    Crea un nuevo invitado junto con su usuario asociado (en cascada).
+    ✅ Solo devuelve invitados activos (activo = True)
     """
-    return guest_service.crear_invitado(data)
+    try:
+        guests, _ = await guest_service.get_all_guests()
+        return guests
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al listar invitados: {str(e)}")
 
 
-@router.get("/")
-def obtener_todos_invitados():
-    """
-    Devuelve la lista completa de invitados.
-    """
-    return guest_service.obtener_invitados()
+@router.get(
+    "/{guest_id}",
+    response_model=GuestResponse,
+    summary="Obtener invitado por ID"
+)
+async def get_guest(guest_id: str):
+    try:
+        return await guest_service.get_guest(guest_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.put("/{id_invitado}")
-def actualizar_invitado(id_invitado: str, data: dict):
-    """
-    Actualiza los datos de un invitado existente.
-    """
-    return guest_service.actualizar_invitado(id_invitado, data)
+@router.put(
+    "/{guest_id}",
+    response_model=GuestResponse,
+    summary="Actualizar invitado"
+)
+async def update_guest(guest_id: str, guest_data: GuestUpdate):
+    try:
+        return await guest_service.update_guest(guest_id, guest_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete("/{id_invitado}")
-def eliminar_invitado(id_invitado: str):
-    """
-    Elimina un invitado por su ID.
-    """
-    return guest_service.eliminar_invitado(id_invitado)
+@router.delete(
+    "/{guest_id}",
+    summary="Desactivar invitado"
+)
+async def deactivate_guest(
+    guest_id: str,
+    reason: str = Query("Desactivado por administrador", description="Motivo de la desactivación")
+):
+    try:
+        await guest_service.deactivate_guest(guest_id, reason)
+        return {"status": "success", "message": f"Invitado {guest_id} desactivado correctamente."}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
