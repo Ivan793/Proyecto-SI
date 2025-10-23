@@ -88,4 +88,5 @@ htmlcov/
 tmp/
 temp/
 *.tmp
+credentials/serviceAccountKey.json
 

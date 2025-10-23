@@ -1,74 +1,58 @@
-from typing import List, Optional
-from app.schemas.proyect import ProyectoCreate, ProyectoResponse, ProyectoUpdate
+# app/repositories/proyect_repository.py
 
-# Simulación de base de datos en memoria
-proyectos_db: List[ProyectoResponse] = []
-proyecto_id_counter = 1
+from typing import List, Optional, Dict, Any
+import logging
+from app.repositories.base_repository import BaseRepository
+from app.core.firebase import Collections
 
+logger = logging.getLogger(__name__)
 
-def create_proyecto(proyecto: ProyectoCreate) -> ProyectoResponse:
-    """
-    Crea un nuevo proyecto y lo almacena en la base de datos simulada.
-    """
-    global proyecto_id_counter
-
-    # Generar un ID de proyecto único simulado
-    new_id = f"PRJ{proyecto_id_counter:04d}"
-
-    new_proyecto = ProyectoResponse(
-        id_proyecto=new_id,
-        id_docente=proyecto.id_docente,
-        id_estudiante=proyecto.id_estudiante,
-        id_docente_materia=proyecto.id_docente_materia,
-        codigo_linea=proyecto.codigo_linea,
-        codigo_sublinea=proyecto.codigo_sublinea,
-        titulo_proyecto=proyecto.titulo_proyecto,
-        tipo_actividad=proyecto.tipo_actividad,
-        formato_pdf=proyecto.formato_pdf,
-        fecha_subida=proyecto.fecha_subida,
-        calificacion=proyecto.calificacion
-    )
-
-    proyectos_db.append(new_proyecto)
-    proyecto_id_counter += 1
-    return new_proyecto
-
-
-def list_proyectos() -> List[ProyectoResponse]:
-    """
-    Retorna todos los proyectos registrados.
-    """
-    return proyectos_db
-
-
-def get_proyecto(proyecto_id: str) -> Optional[ProyectoResponse]:
-    """
-    Obtiene un proyecto por su ID.
-    """
-    for proyecto in proyectos_db:
-        if proyecto.id_proyecto == proyecto_id:
-            return proyecto
-    return None
-
-
-def update_proyecto(proyecto_id: str, proyecto: ProyectoUpdate) -> Optional[ProyectoResponse]:
-    """
-    Actualiza los datos de un proyecto existente.
-    """
-    for i, p in enumerate(proyectos_db):
-        if p.id_proyecto == proyecto_id:
-            updated_proyecto = p.copy(update=proyecto.dict(exclude_unset=True))
-            proyectos_db[i] = updated_proyecto
-            return updated_proyecto
-    return None
-
-
-def delete_proyecto(proyecto_id: str) -> bool:
-    """
-    Elimina un proyecto por su ID.
-    """
-    for i, p in enumerate(proyectos_db):
-        if p.id_proyecto == proyecto_id:
-            del proyectos_db[i]
-            return True
-    return False
+class ProyectRepository(BaseRepository):
+    """Repositorio para gestión de proyectos en Firestore"""
+    
+    def __init__(self):
+        super().__init__(Collections.PROYECTOS, "id_proyecto")
+    
+    async def get_students_by_project(self, project_id: str) -> List[str]:
+        """
+        Obtiene IDs de estudiantes de un proyecto.
+        Por ahora retorna datos mock para pruebas.
+        """
+        try:
+            # En producción, esto consultaría la relación proyectos-estudiantes
+            # Por ahora retornamos mock data para que funcione el certificado
+            return ["estudiante1", "estudiante2", "estudiante3"]
+        except Exception as e:
+            logger.error(f"Error obteniendo estudiantes del proyecto {project_id}: {str(e)}")
+            return []
+    
+    async def get_by_student(self, student_id: str) -> List[Dict[str, Any]]:
+        """
+        Obtiene proyectos de un estudiante.
+        Por ahora retorna datos mock para pruebas.
+        """
+        try:
+            # Mock data - en producción esto consultaría Firestore
+            return [
+                {
+                    "id_proyecto": "proyecto1",
+                    "titulo_proyecto": "Sistema de Gestión Académica",
+                    "tipo_actividad": "Exposición",
+                    "id_evento": "evento1",
+                    "calificacion": "4.5",
+                    "fecha_exposicion": "2024-01-15",
+                    "id_estudiante": student_id
+                },
+                {
+                    "id_proyecto": "proyecto2", 
+                    "titulo_proyecto": "Aplicación Móvil para Eventos",
+                    "tipo_actividad": "Poster",
+                    "id_evento": "evento1",
+                    "calificacion": "4.8",
+                    "fecha_exposicion": "2024-01-15",
+                    "id_estudiante": student_id
+                }
+            ]
+        except Exception as e:
+            logger.error(f"Error obteniendo proyectos del estudiante {student_id}: {str(e)}")
+            return []
