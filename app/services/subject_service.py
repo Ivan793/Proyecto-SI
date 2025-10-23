@@ -1,3 +1,5 @@
+import asyncio
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 import logging
 
@@ -16,7 +18,7 @@ from app.exceptions.subject_exceptions import (
 )
 from app.exceptions.group_exceptions import GroupAlreadyExistsException
 from app.exceptions.teacher_exceptions import TeacherNotFoundException
-from app.exceptions.base_exceptions import ValidationException
+from app.exceptions.base_exceptions import DatabaseException, ValidationException
 
 logger = logging.getLogger(__name__)
 
@@ -44,84 +46,221 @@ class SubjectService:
                     "teacher_status": "inactive"
                 }
             )
+        
+    
 
     async def create_subject_with_groups_and_teachers(
-        self, 
-        subject_data: SubjectCreate, 
-        groups_with_teachers: List[Dict[str, Any]],
+        self,
+        subject_data: SubjectCreate,
+        groups_with_teachers: List[Dict],
         created_by: str
     ) -> SubjectResponse:
         """
-        Crea una materia con grupos y asigna docentes a cada grupo usando TeacherSubject
+        Crea una materia con sus grupos y asignaciones de docentes.
         """
-        # Verificar si la materia ya existe
-        existing_subject = await self.subject_repo.get_by_id(subject_data.codigo_materia)
+        
+        # Fase 1: Validar todos los requisitos antes de escribir
+        await self._validate_all_prerequisites(
+            subject_data=subject_data,
+            groups_with_teachers=groups_with_teachers
+        )
+
+        # Fase 2: Crear entidades con tracking para rollback
+        completed_operations = []
+        
+        try:
+            # Crear la materia
+            subject_dict = subject_data.model_dump()
+            subject_dict.update({
+                "created_at": datetime.utcnow(),
+                "created_by": created_by,
+                "activo": True
+            })
+            
+            await self.subject_repo.create(
+                subject_dict,
+                subject_data.codigo_materia
+            )
+            completed_operations.append(
+                ("subject", subject_data.codigo_materia)
+            )
+
+            # Crear grupos y asignaciones
+            for group_data in groups_with_teachers:
+                # Crear grupo
+                group_dict = {
+                    "codigo_grupo": group_data["codigo_grupo"],
+                    "codigo_materia": subject_data.codigo_materia,
+                    "id_docente": group_data["id_docente"],
+                    "created_at": datetime.utcnow(),
+                    "created_by": created_by,
+                    "activo": True
+                }
+                
+                await self.group_repo.create(group_dict,
+                    str(group_data["codigo_grupo"]),
+                    
+                )
+                completed_operations.append(
+                    ("group", str(group_data["codigo_grupo"]))
+                )
+
+                # Crear asignación TeacherSubject
+                assignment_id = (
+                    f"{subject_data.codigo_materia}_"
+                    f"{group_data['codigo_grupo']}"
+                )
+                assignment_dict = {
+                    "id_docente_materia": assignment_id,
+                    "id_docente": group_data["id_docente"],
+                    "codigo_materia": subject_data.codigo_materia,
+                    "codigo_grupo": group_data["codigo_grupo"],
+                    "created_at": datetime.utcnow(),
+                    "created_by": created_by,
+                    "activo": True
+                }
+                
+                await self.teacher_subject_repo.create(
+                    assignment_dict,
+                    assignment_id  
+                )
+                completed_operations.append(
+                    ("assignment", assignment_id)
+                )
+
+            # Operación exitosa: retornar materia creada
+            created_subject = await self.subject_repo.get_by_id(
+                subject_data.codigo_materia
+            )
+            return SubjectResponse(**created_subject)
+
+        except Exception as e:
+            # Hacer rollback de todas las operaciones completadas
+            await self._rollback_creation(completed_operations)
+            
+            # Re-lanzar excepción original o convertir a DatabaseException
+            if isinstance(e, (
+                SubjectAlreadyExistsException,
+                GroupAlreadyExistsException,
+                TeacherNotFoundException,
+                ValidationException
+            )):
+                raise
+            
+            raise DatabaseException(
+                message=f"Error al crear materia: {str(e)}",
+                details={"subject_code": subject_data.codigo_materia}
+            )
+        
+    async def _validate_all_prerequisites(
+        self,
+        subject_data: SubjectCreate,
+        groups_with_teachers: List[Dict]
+    ):
+        """
+        Valida todos los requisitos antes de escribir en Firestore.
+        """
+        
+        # Validar que la materia NO exista
+        existing_subject = await self.subject_repo.get_by_id(
+            subject_data.codigo_materia
+        )
         if existing_subject:
             raise SubjectAlreadyExistsException(subject_data.codigo_materia)
 
-        # Validar que hay al menos un grupo
-        if not groups_with_teachers:
+        # Validar mínimo de grupos
+        if not groups_with_teachers or len(groups_with_teachers) == 0:
             raise MinimumGroupsRequiredException()
 
-        # Validar que todos los docentes existen y están activos
-        for group_data in groups_with_teachers:
-            await self._validate_teacher_exists_and_active(group_data["id_docente"])
+        # Extraer IDs únicos
+        group_codes = [g["codigo_grupo"] for g in groups_with_teachers]
+        teacher_ids = list(set(g["id_docente"] for g in groups_with_teachers))
 
-        # Crear la materia
-        subject_dict = subject_data.model_dump()
-        subject_dict.update({
-            "activo": True,
-            "created_by": created_by
-        })
+        # Validar grupos únicos en la solicitud
+        if len(group_codes) != len(set(group_codes)):
+            duplicates = [
+                code for code in group_codes 
+                if group_codes.count(code) > 1
+            ]
+            raise ValidationException(
+                message=f"Grupos duplicados en la solicitud: {duplicates[0]}",
+                field="grupos_con_docentes"
+            )
+
+        # Validar grupos y docentes en paralelo (optimización)
+        await asyncio.gather(
+            self._validate_groups_availability(group_codes),
+            self._validate_teachers_exist_and_active(teacher_ids)
+        )
         
-        subject_id = subject_data.codigo_materia
-        await self.subject_repo.create(subject_dict, subject_id)
-
-        try:
-            # Crear grupos y asignaciones
-            for group_data in groups_with_teachers:
-                # Crear grupo (sin docente)
-                group_create = GroupCreate(codigo_grupo=group_data["codigo_grupo"],codigo_materia=subject_id)
-                group_dict = group_create.model_dump()
-                group_dict.update({
-                    "activo": True,
-                    "created_by": created_by
-                })
-                
-                # Verificar si el grupo ya existe
-                existing_group = await self.group_repo.get_by_id(str(group_data["codigo_grupo"]))
-                if existing_group:
-                    # Rollback: marcar materia como inactiva
-                    await self.subject_repo.update(subject_id, {"activo": False})
-                    raise GroupAlreadyExistsException(group_data["codigo_grupo"])
-                    
-                await self.group_repo.create(group_dict, str(group_data["codigo_grupo"]))
-                
-                # Crear asignación docente-materia-grupo en TeacherSubject
-                teacher_subject_data = TeacherSubjectCreate(
-                    id_docente=group_data["id_docente"],
-                    codigo_materia=subject_id,
-                    codigo_grupo=group_data["codigo_grupo"]
-                )
-                
-                teacher_subject_dict = teacher_subject_data.model_dump()
-                teacher_subject_dict.update({
-                    "activo": True,
-                    "created_by": created_by
-                })
-                
-                await self.teacher_subject_repo.create(teacher_subject_dict)
+    async def _validate_groups_availability(
+        self,
+        group_codes: List[int]
+    ):
+        """
+        Valida que ningún grupo exista ya en Firestore.
+        """
         
-        except Exception as e:
-            # Si algo falla, desactivar la materia
-            await self.subject_repo.update(subject_id, {"activo": False})
-            logger.error(f"Error creando grupos y asignaciones para materia {subject_id}: {str(e)}")
-            raise
+        # Buscar todos los grupos en paralelo
+        check_tasks = [
+            self.group_repo.get_by_id(str(code)) 
+            for code in group_codes
+        ]
+        existing_groups = await asyncio.gather(*check_tasks)
 
-        # Obtener la materia creada con sus grupos
-        subject_with_groups = await self.subject_repo.get_subject_with_groups(subject_id)
-        return SubjectResponse(**subject_with_groups)
+        # Identificar grupos que ya existen
+        conflicts = [
+            group_codes[i] 
+            for i, group in enumerate(existing_groups) 
+            if group is not None
+        ]
 
+        if conflicts:
+            raise GroupAlreadyExistsException(conflicts[0])
+    
+    async def _validate_teachers_exist_and_active(
+        self,
+        teacher_ids: List[str]
+    ):
+        """
+        Valida que todos los docentes existan y estén activos.
+        """
+        
+        # Buscar todos los docentes en paralelo
+        check_tasks = [
+            self.teacher_repo.get_by_id(teacher_id)
+            for teacher_id in teacher_ids
+        ]
+        teachers = await asyncio.gather(*check_tasks)
+
+        # Validar existencia y estado
+        for i, teacher in enumerate(teachers):
+            teacher_id = teacher_ids[i]
+            
+            if teacher is None or not teacher.get("activo", False):
+                raise TeacherNotFoundException(teacher_id)
+
+    async def _rollback_creation(
+        self,
+        completed_operations: List[tuple]
+    ):
+        """
+        Elimina documentos creados durante operación fallida.
+        """
+        
+        for entity_type, entity_id in reversed(completed_operations):
+            try:
+                if entity_type == "subject":
+                    await self.subject_repo.delete(entity_id)
+                elif entity_type == "group":
+                    await self.group_repo.delete(entity_id)
+                elif entity_type == "assignment":
+                    await self.teacher_subject_repo.delete(entity_id)
+            except Exception:
+                # Ignorar errores durante rollback
+                # El documento puede no existir o ya haber sido eliminado
+                pass
+    
     async def get_subject(self, subject_code: str) -> SubjectResponse:
         subject = await self.subject_repo.get_by_id(subject_code)
         if not subject:
@@ -163,6 +302,34 @@ class SubjectService:
         subject = await self.subject_repo.get_by_id(subject_code)
         if not subject:
             raise SubjectNotFoundException(subject_code)
+
+        # Si se cambia el código de la materia, actualizar todas las referencias
+        if hasattr(subject_data, 'codigo_materia') and subject_data.codigo_materia:
+            new_subject_code = subject_data.codigo_materia
+            
+            # Actualizar grupos que referencian esta materia
+            groups = await self.group_repo.get_groups_by_subject(subject_code)
+            for group in groups:
+                await self.group_repo.update(
+                    str(group["codigo_grupo"]),
+                    {"codigo_materia": new_subject_code}
+                )
+            
+            # Actualizar asignaciones TeacherSubject
+            assignments = await self.teacher_subject_repo.get_assignments_by_subject(subject_code)
+            active_assignments = [a for a in assignments if a.get("activo", True)]
+            
+            if active_assignments:
+                logger.warning(
+                    f"Materia {subject_code} tiene {len(active_assignments)} asignaciones activas "
+                    f"que se actualizarán al nuevo código {new_subject_code}"
+                )
+                
+                for assignment in active_assignments:
+                    await self.teacher_subject_repo.update(
+                        assignment["id_docente_materia"],
+                        {"codigo_materia": new_subject_code}
+                    )
 
         update_dict = subject_data.model_dump(exclude_none=True)
         if update_dict:
