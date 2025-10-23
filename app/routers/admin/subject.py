@@ -14,8 +14,10 @@ from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
     success_response, created_response, paginated_response, 
     updated_response, not_found_response, conflict_response,
-    bad_request_response, internal_server_error_response
+    bad_request_response, internal_server_error_response,
+    message_response
 )
+from app.utils.swagger_docs import ResponseDocumentation
 from app.exceptions.subject_exceptions import (
     SubjectNotFoundException, 
     SubjectAlreadyExistsException,
@@ -90,7 +92,8 @@ class AddGroupToSubjectRequest(BaseModel):
     "",
     status_code=status.HTTP_201_CREATED,
     summary="Crear nueva materia con grupos y docentes",
-    description="Crea una nueva materia con grupos y asigna docentes a cada grupo"
+    description="Crea una nueva materia con grupos y asigna docentes a cada grupo",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def create_subject_with_groups_and_teachers(
@@ -139,7 +142,8 @@ async def create_subject_with_groups_and_teachers(
     "",
     status_code=status.HTTP_200_OK,
     summary="Listar todas las materias",
-    description="Obtiene la lista de materias con opciones de filtrado y paginación"
+    description="Obtiene la lista de materias con opciones de filtrado y paginación",
+    responses=ResponseDocumentation.get_paginated_response()
 )
 @admin_rate_limit()
 async def get_subjects(
@@ -160,7 +164,8 @@ async def get_subjects(
             data=[subject.model_dump() for subject in subjects],
             page=params.page,
             limit=params.limit,
-            total_items=total
+            total_items=total,
+            message="Materias obtenidas exitosamente"
         )
         
     except Exception as e:
@@ -172,7 +177,8 @@ async def get_subjects(
     "/{subject_code}",
     status_code=status.HTTP_200_OK,
     summary="Obtener materia por código",
-    description="Obtiene información detallada de una materia específica"
+    description="Obtiene información detallada de una materia específica",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_subject_by_code(
@@ -200,7 +206,8 @@ async def get_subject_by_code(
     "/{subject_code}/completo",
     status_code=status.HTTP_200_OK,
     summary="Obtener materia con grupos y asignaciones",
-    description="Obtiene información completa de una materia incluyendo sus grupos y docentes asignados"
+    description="Obtiene información completa de una materia incluyendo sus grupos y docentes asignados",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_subject_with_groups_and_assignments(
@@ -228,7 +235,8 @@ async def get_subject_with_groups_and_assignments(
     "/{subject_code}",
     status_code=status.HTTP_200_OK,
     summary="Actualizar materia",
-    description="Actualiza la información de una materia existente"
+    description="Actualiza la información de una materia existente",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def update_subject(
@@ -259,7 +267,8 @@ async def update_subject(
     "/{subject_code}/grupos",
     status_code=status.HTTP_201_CREATED,
     summary="Agregar grupo a materia con docente",
-    description="Agrega un nuevo grupo a una materia existente y asigna un docente"
+    description="Agrega un nuevo grupo a una materia existente y asigna un docente",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def add_group_to_subject_with_teacher(
@@ -286,10 +295,7 @@ async def add_group_to_subject_with_teacher(
                 f"Grupo {group_data.codigo_grupo} agregado a materia {subject_code} "
                 f"con docente {group_data.id_docente} por {current_admin['nombre_completo']}"
             )
-            return created_response(
-                data={"agregado": True},
-                message="Grupo agregado a la materia con docente asignado exitosamente"
-            )
+            return message_response("Grupo agregado a la materia con docente asignado exitosamente")
         else:
             return bad_request_response(
                 message="No se pudo agregar el grupo a la materia"
@@ -312,7 +318,8 @@ async def add_group_to_subject_with_teacher(
     "/{subject_code}/asignaciones",
     status_code=status.HTTP_200_OK,
     summary="Obtener asignaciones de docentes de la materia",
-    description="Obtiene todas las asignaciones de docentes para una materia específica"
+    description="Obtiene todas las asignaciones de docentes para una materia específica",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_subject_assignments(
@@ -340,7 +347,8 @@ async def get_subject_assignments(
     "/{subject_code}/desactivar",
     status_code=status.HTTP_200_OK,
     summary="Desactivar materia",
-    description="Desactiva una materia de forma lógica (no elimina el registro)"
+    description="Desactiva una materia de forma lógica (no elimina el registro)",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def deactivate_subject(
@@ -355,10 +363,7 @@ async def deactivate_subject(
         
         if success:
             logger.info(f"Materia desactivada: {subject_code} por {current_admin['nombre_completo']}")
-            return success_response(
-                data={"desactivado": True},
-                message="Materia desactivada exitosamente"
-            )
+            return message_response("Materia desactivada exitosamente")
         else:
             return bad_request_response(
                 message="No se pudo desactivar la materia"
@@ -376,7 +381,8 @@ async def deactivate_subject(
 @router.patch(
     "/{subject_code}/activar",
     status_code=status.HTTP_200_OK,
-    summary="Activar Materia"
+    summary="Activar Materia",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def activate_subject(
@@ -390,10 +396,7 @@ async def activate_subject(
         
         if success:
             logger.info(f"Materia activada: {subject_code}")
-            return success_response(
-                data={"activado": True},
-                message="Materia activada exitosamente"
-            )
+            return message_response("Materia activada exitosamente")
         return bad_request_response(message="No se pudo activar la materia")
             
     except SubjectNotFoundException:

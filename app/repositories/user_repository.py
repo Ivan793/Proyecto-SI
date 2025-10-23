@@ -24,7 +24,7 @@ class UserRepository(BaseRepository):
         user = await self.get_by_id(user_id)
         return user is not None
 
-    # ✅ Validar existencia de correo
+    # Validar existencia de correo
     async def exists_email(self, email: str) -> bool:
         user = await self.get_user_by_email(email)
         return user is not None

@@ -18,6 +18,7 @@ from app.core.rate_limiter import auth_rate_limit
 from app.utils.responses import (
     success_response, not_found_response, internal_server_error_response
 )
+from app.utils.swagger_docs import ResponseDocumentation
 from app.exceptions.research_exceptions import (
     ResearchLineNotFoundException,
     SubResearchLineNotFoundException,
@@ -33,7 +34,8 @@ router = APIRouter(prefix="/public-investigacion", tags=["Investigación"])
 @router.get(
     "/lineas",
     summary="Listar todas las líneas de investigación",
-    description="**Todos los roles autenticados**"
+    description="**Todos los roles autenticados**",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def get_all_research_lines(
@@ -56,7 +58,8 @@ async def get_all_research_lines(
 @router.get(
     "/lineas/{line_code}",
     summary="Obtener línea específica con sublíneas y áreas (jerarquía completa)",
-    description="**Todos los roles autenticados**. Retorna la línea con todas sus sublíneas y áreas en una sola consulta optimizada"
+    description="**Todos los roles autenticados**. Retorna la línea con todas sus sublíneas y áreas en una sola consulta optimizada",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def get_research_line_with_hierarchy(
@@ -84,7 +87,8 @@ async def get_research_line_with_hierarchy(
 @router.get(
     "/lineas/{line_code}/sublineas",
     summary="Obtener sublíneas de una línea específica",
-    description="**Todos los roles autenticados**"
+    description="**Todos los roles autenticados**",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def get_sublines_by_research_line(
@@ -108,7 +112,8 @@ async def get_sublines_by_research_line(
 @router.get(
     "/lineas/{line_code}/sublineas/{subline_code}",
     summary="Obtener sublínea específica con áreas temáticas", 
-    description="**Todos los roles autenticados**"
+    description="**Todos los roles autenticados**",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def get_subresearch_line_with_areas(
@@ -137,7 +142,8 @@ async def get_subresearch_line_with_areas(
 @router.get(
     "/lineas/{line_code}/sublineas/{subline_code}/areas-tematicas",
     summary="Obtener áreas temáticas de una sublínea",
-    description="**Todos los roles autenticados**"
+    description="**Todos los roles autenticados**",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def get_areas_by_subresearch_line(
@@ -162,7 +168,8 @@ async def get_areas_by_subresearch_line(
 @router.get(
     "/lineas/{line_code}/sublineas/{subline_code}/areas-tematicas/{area_code}",
     summary="Obtener área temática específica",
-    description="**Todos los roles autenticados**"
+    description="**Todos los roles autenticados**",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def get_thematic_area(
@@ -192,7 +199,8 @@ async def get_thematic_area(
 @router.get(
     "/arbol-completo",
     summary="Obtener árbol completo de investigación",
-    description="**Administradores y Profesores**. Retorna todas las líneas con su jerarquía completa de forma optimizada"
+    description="**Administradores y Profesores**. Retorna todas las líneas con su jerarquía completa de forma optimizada",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def get_complete_research_tree(
