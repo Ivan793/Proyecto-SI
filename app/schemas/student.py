@@ -7,9 +7,9 @@ from app.schemas.user import UserCreate
 from app.core.constants import Defaults
 
 
-# ---------------------------
+
 # Base del estudiante
-# ---------------------------
+
 class StudentBase(BaseModel):
     codigo_programa: str = Field(..., description="Código del programa académico")
     semestre: int = Field(..., ge=1, le=20, description="Semestre actual del estudiante")
@@ -28,9 +28,8 @@ class StudentBase(BaseModel):
     )
 
 
-# ---------------------------
+
 # Crear estudiante con usuario existente
-# ---------------------------
 class StudentCreateWithExistingUser(StudentBase):
     id_usuario: str = Field(..., description="ID del usuario existente")
 
@@ -86,7 +85,7 @@ StudentCreate = StudentCreateWithUser
 
 
 
-# Actualización
+# Actualización de estudiante
 class StudentUpdate(BaseModel):
     codigo_programa: Optional[str] = None
     semestre: Optional[int] = None
@@ -94,9 +93,9 @@ class StudentUpdate(BaseModel):
     activo: Optional[bool] = None
 
 
-# ---------------------------
+
 # Respuesta base
-# ---------------------------
+
 class StudentResponse(BaseModel):
     id_estudiante: str
     id_usuario: str
@@ -110,9 +109,9 @@ class StudentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ---------------------------
+
 # Respuesta con datos del usuario
-# ---------------------------
+
 class StudentWithUserResponse(BaseModel):
     estudiante: StudentResponse
     usuario: dict  # evita importación circular
