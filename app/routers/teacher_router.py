@@ -1,33 +1,35 @@
-# ...existing code...
 from fastapi import APIRouter, HTTPException
 from typing import List
 from app.services import teacher_service
-from app.schemas.subject import SubjectBase
-from app.schemas.group import Grupo
 from app.schemas.proyect import Proyecto
+from app.schemas.teacher import TeacherBase
 
-router = APIRouter(prefix="/docentes", tags=["Docentes"])
+router = APIRouter(prefix="/teachers", tags=["Teachers"])
 
-@router.get("/{id_docente}/asignaturas", response_model=List[SubjectBase])
-def get_asignaturas(id_docente: str):
-    subjects = teacher_service.listar_asignaturas_docente(id_docente)
-    return subjects
+@router.get("/{teacher_id}", response_model=TeacherBase)
+def get_teacher_info(teacher_id: str):
+    try:
+        teacher = teacher_service.get_teacher_info(teacher_id)
+        return teacher
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
-@router.get("/{id_docente}/asignaturas/{codigo_asignatura}/grupos", response_model=List[Grupo])
-def get_grupos(id_docente: str, codigo_asignatura: str):
-    asignaturas = teacher_service.listar_asignaturas_docente(id_docente)
-    codigos = [a.codigo for a in asignaturas]
-    if codigo_asignatura not in codigos:
-        raise HTTPException(status_code=403, detail="Asignatura no asignada al docente")
-    groups = teacher_service.listar_grupos_asignatura(codigo_asignatura)
-    return groups
+@router.get("/{teacher_id}/subjects")
+def get_teacher_subjects(teacher_id: str):
+    return teacher_service.list_teacher_subjects(teacher_id)
 
-@router.get("/{id_docente}/proyectos", response_model=List[Proyecto])
-def get_proyectos(id_docente: str):
-    proyectos = teacher_service.listar_proyectos_docente(id_docente)
-    return proyectos
+@router.get("/{teacher_id}/subjects/{subject_code}/groups")
+def get_subject_groups(teacher_id: str, subject_code: str):
+    return teacher_service.list_subject_groups(subject_code)
 
-@router.get("/materias")
-def get_materias():
-    materias = teacher_service.get_materias()
-    return materias
+@router.get("/{teacher_id}/projects", response_model=List[Proyecto])
+def get_teacher_projects(teacher_id: str):
+    return teacher_service.list_teacher_projects(teacher_id)
+
+@router.get("/{teacher_id}/projects/{project_id}", response_model=Proyecto)
+def get_project_detail(teacher_id: str, project_id: str):
+    try:
+        project = teacher_service.get_project_info(project_id)
+        return project
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
