@@ -185,13 +185,16 @@ class GraduateService:
         updated_data["updated_at"] = datetime.utcnow()
         updated_data["activo"] = updated_data.get("activo", graduate.get("activo", True))
 
-        id_to_update = real_id or graduate_id
-        updated = await self.graduate_repo.update(id_to_update, updated_data)
+        
+        success = await self.graduate_repo.update(real_id, updated_data)  # ← Devuelve True/False
 
-        if "activo" not in updated:
-            updated["activo"] = updated_data["activo"]
+        if not success:
+            raise ValueError("No se pudo actualizar")
 
-        return GraduateResponse(**updated)
+        # Obtener el documento ACTUALIZADO
+        updated_graduate = await self.graduate_repo.get_by_id(real_id)  # ← Esto devuelve el dict
+
+        return GraduateResponse(**updated_graduate) 
 
     # ---------------------------
     # Desactivar egresado

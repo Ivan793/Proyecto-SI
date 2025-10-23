@@ -22,6 +22,7 @@ class StudentCreateWithExistingUser(BaseModel):
     anio_ingreso: YearOfEntry
 
 class StudentUpdate(BaseModel):
+    codigo_programa: Optional[ProgramCode] = None
     activo: Optional[StatusActive] = None
 
 class StudentResponse(StudentBase):

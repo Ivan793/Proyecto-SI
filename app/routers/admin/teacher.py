@@ -61,41 +61,6 @@ async def create_teacher_with_user(
         logger.error(f"Error creando profesor con usuario: {str(e)}")
         return internal_server_error_response()
 
-
-@router.post(
-    "/asignar-existente",
-    status_code=status.HTTP_201_CREATED,
-    summary="Crear profesor con usuario EXISTENTE",
-    description="""
-    Crea un profesor asignándolo a un usuario que YA existe en el sistema.
-    """
-)
-@admin_rate_limit()
-async def create_teacher_with_existing_user(
-    request: Request,
-    teacher_data: TeacherCreateWithExistingUser,
-    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
-):
-    try:
-        service = TeacherService()
-        teacher = await service.create_teacher_with_existing_user(teacher_data)
-        
-        logger.info(f"Profesor creado: {teacher.id_docente} por {current_admin['nombre_completo']}")
-        
-        return created_response(
-            data=teacher.model_dump(),
-            message="Profesor asignado a usuario existente"
-        )
-        
-    except TeacherAlreadyExistsException as e:
-        return conflict_response(message=str(e))
-    except UserNotFoundException as e:
-        return not_found_response("Usuario", teacher_data.id_usuario)
-    except Exception as e:
-        logger.error(f"Error creando profesor: {str(e)}")
-        return internal_server_error_response()
-
-
 @router.get(
     "",
     status_code=status.HTTP_200_OK,

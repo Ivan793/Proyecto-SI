@@ -43,7 +43,7 @@ class Limits:
     
     # Código de programa
     PROGRAM_CODE_MIN = 3
-    PROGRAM_CODE_MAX = 10
+    PROGRAM_CODE_MAX = 15
     
     # User ID
     USER_ID_MIN = 10

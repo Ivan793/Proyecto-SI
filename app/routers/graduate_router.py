@@ -49,7 +49,7 @@ async def update_graduate(graduate_id: str, graduate_data: GraduateUpdate):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
+"""
 @router.delete("/{graduate_id}", summary="Desactivar egresado")
 async def deactivate_graduate(
     graduate_id: str,
@@ -60,3 +60,5 @@ async def deactivate_graduate(
         return {"status": "success", "message": f"Egresado {graduate_id} desactivado correctamente."}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+"""

@@ -1,6 +1,6 @@
 
 from typing import Optional, List, Dict, Any
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 import logging
 
 from .base_repository import BaseRepository
@@ -108,7 +108,7 @@ class EventRepository(BaseRepository):
     async def get_upcoming_events(self, limit: int = 5) -> List[Dict[str, Any]]:
 
         try:
-            today = date.today()
+            today = datetime.now(timezone.utc)
             
             docs = self.collection\
                 .where("estado", "==", EventState.ACTIVO.value)\

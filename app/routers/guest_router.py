@@ -64,7 +64,7 @@ async def update_guest(guest_id: str, guest_data: GuestUpdate):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
+"""
 @router.delete(
     "/{guest_id}",
     summary="Desactivar invitado"
@@ -78,3 +78,4 @@ async def deactivate_guest(
         return {"status": "success", "message": f"Invitado {guest_id} desactivado correctamente."}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+"""
