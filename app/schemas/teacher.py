@@ -44,22 +44,25 @@ class TeacherCreateWithUser(TeacherBase):
             "example": {
                 "usuario": {
                     "tipo_documento": "CC",
-                    "identificacion": "1023456789",
-                    "nombres": "María José",
-                    "apellidos": "Pérez García",
+                    "identificacion": "1231271982",
+                    "nombres": "Camila Andrea",
+                    "apellidos": "Torres Palomino",
                     "genero": "Mujer",
                     "identidad_sexual": "Heterosexual",
-                    "fecha_nacimiento": "1985-03-15",
-                    "direccion": "Calle 50 #30-20",
-                    "pais": "Colombia",
-                    "ciudad": "Valledupar",
-                    "telefono": "+573001234567",
-                    "correo": "maria.perez@unicesar.edu.co",
+                    "fecha_nacimiento": "1980-05-15",
+                    "nacionalidad": "Colombiana",
+                    "pais_residencia": "Colombia",
+                    "departamento": "Cesar",
+                    "municipio": "Valledupar",
+                    "ciudad_residencia": "Valledupar",
+                    "direccion_residencia": "Calle 45 #22-10, Barrio San Jose",
+                    "telefono": "+573112345678",
+                    "correo": "camila.torres@unicesar.edu.co",
                     "contraseña": "Prof123#",
                     "rol": "Docente"
                 },
                 "categoria_docente": "Interno",
-                "codigo_programa": "ING01"
+                "codigo_programa": "ING02"
             }
         }
     )

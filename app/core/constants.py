@@ -2,7 +2,7 @@ class Limits:
     """Límites de longitud y validaciones numéricas generales."""
     
     # Email
-    MAX_EMAIL_LENGTH = 50
+    MAX_EMAIL_LENGTH = 40
     
     # Teléfono
     MIN_PHONE_LENGTH = 7
@@ -18,7 +18,7 @@ class Limits:
     
     # Identificación
     IDENTIFICATION_MIN = 6
-    IDENTIFICATION_MAX = 20
+    IDENTIFICATION_MAX = 16
     
     # Dirección
     ADDRESS_MIN = 5
@@ -31,13 +31,19 @@ class Limits:
     # Ciudad
     CITY_MIN = 2
     CITY_MAX = 50
+    DEPARTMENT_MIN = 2
+    DEPARTMENT_MAX = 50
+    MUNICIPALITY_MIN = 2
+    MUNICIPALITY_MAX = 50
+    NATIONALITY_MIN = 2
+    NATIONALITY_MAX = 50
     
     # Categoría docente
     TEACHER_CATEGORY_MAX = 30
     
     # Código de programa
     PROGRAM_CODE_MIN = 3
-    PROGRAM_CODE_MAX = 10
+    PROGRAM_CODE_MAX = 15
     
     # User ID
     USER_ID_MIN = 10
@@ -80,7 +86,6 @@ class Defaults:
     DEFAULT_EVENT_STATE = "ACTIVO"
     EVENT_ALLOWS_GUESTS = True
     ACTIVE_STATUS = True
-
 
 
 class ValidationMessages:

@@ -6,7 +6,6 @@ from app.core.firebase import Collections
 
 logger = logging.getLogger(__name__)
 
-
 class TeacherRepository(BaseRepository):
     
     def __init__(self):

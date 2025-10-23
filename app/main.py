@@ -18,7 +18,7 @@ from app.exceptions.handlers import register_exception_handlers
 from slowapi.errors import RateLimitExceeded
 
 # Importar todos los routers de forma centralizada
-from app.routers import graduate_router, guest_router, router as api_router
+from app.routers import  router as api_router
 
 # Configuración de logs
 logging.basicConfig(
@@ -119,7 +119,6 @@ register_exception_handlers(app)
 
 # Routers
 app.include_router(api_router)
-
 
 # Health check
 @app.get("/", tags=["Health"])
