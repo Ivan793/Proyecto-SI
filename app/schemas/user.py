@@ -77,7 +77,6 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):    
     tipo_documento: Optional[UserDocumentType] = None
-    identificacion: Optional[UserIdentification] = None
     nombres: Optional[UserName] = None
     apellidos: Optional[UserName] = None
     genero: Optional[UserGender] = None
@@ -90,7 +89,6 @@ class UserUpdate(BaseModel):
     ciudad_residencia: Optional[UserCity] = None
     direccion_residencia: Optional[UserAddress] = None
     telefono: Optional[UserPhone] = None
-    correo: Optional[UserEmail] = None
     contraseña: Optional[UserPassword] = None
     rol: Optional[UserRole] = None
 
