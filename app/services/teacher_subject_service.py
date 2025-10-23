@@ -66,6 +66,13 @@ class TeacherSubjectService:
                 f"El grupo '{group_code}' no está activo",
                 field="codigo_grupo"
             )
+        group_subject_code = group.get("codigo_materia")
+        if group_subject_code != subject_code:
+            raise TeacherSubjectAssignmentException(
+                f"El grupo {group_code} pertenece a la materia '{group_subject_code}', "
+                f"no a '{subject_code}'. No se puede crear la asignación.",
+                field="codigo_materia"
+            )
 
     async def create_assignment(
         self, 

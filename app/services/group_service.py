@@ -119,7 +119,24 @@ class GroupService:
             subject = await self.subject_repo.get_by_id(group_data.codigo_materia)
             if not subject:
                 raise SubjectNotFoundException(group_data.codigo_materia)
-
+            
+            # Verificar y actualizar asignaciones existentes
+            assignments = await self.teacher_subject_repo.get_assignments_by_group(group_code)
+            active_assignments = [a for a in assignments if a.get("activo", True)]
+            
+            if active_assignments:
+                logger.warning(
+                    f"Grupo {group_code} tiene {len(active_assignments)} asignaciones activas "
+                    f"que se actualizarán a la nueva materia {group_data.codigo_materia}"
+                )
+                
+                # Actualizar todas las asignaciones activas
+                for assignment in active_assignments:
+                    await self.teacher_subject_repo.update(
+                        assignment["id_docente_materia"],
+                        {"codigo_materia": group_data.codigo_materia}
+                    )
+                    
         update_dict = group_data.model_dump(exclude_none=True)
         if update_dict:
             await self.group_repo.update(str(group_code), update_dict)

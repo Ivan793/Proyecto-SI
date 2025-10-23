@@ -23,9 +23,6 @@ class StudentCreateWithExistingUser(BaseModel):
     anio_ingreso: int
 
 class StudentUpdate(BaseModel):
-    codigo_programa: Optional[str] = None
-    semestre: Optional[int] = None
-    anio_ingreso: Optional[int] = None
     activo: Optional[bool] = None
 
 class StudentResponse(StudentBase):
