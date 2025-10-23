@@ -35,18 +35,18 @@ class TeacherService:
     ) -> TeacherResponse:
         usuario_data = teacher_data.usuario
         
-        # 1. Validar que el correo no exista
-        existing_user = await self.user_repo.get_user_by_email(usuario_data.correo)
-        if existing_user:
-            raise UserAlreadyExistsException("correo", usuario_data.correo)
-        
-        # 2. Validar que la identificación no exista
+        # 1. Validar que la identificación no exista
         existing_by_id = await self.user_repo.get_by_field(
             "identificacion", 
             usuario_data.identificacion
         )
         if existing_by_id:
             raise UserAlreadyExistsException("identificacion", usuario_data.identificacion)
+        
+        # 2. Validar que el correo no exista
+        existing_user = await self.user_repo.get_user_by_email(usuario_data.correo)
+        if existing_user:
+            raise UserAlreadyExistsException("correo", usuario_data.correo)
         
         try:
             # 3. Crear usuario en Firebase Authentication

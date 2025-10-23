@@ -4,7 +4,7 @@ import logging
 
 from app.schemas.types import ReasonText
 from app.services.student_service import StudentService
-from app.schemas.student import StudentUpdate, StudentResponse
+from app.schemas.student import StudentCreateWithUser, StudentUpdate, StudentResponse
 from app.dependencies.auth_dependencies import get_current_student_user
 from app.core.rate_limiter import auth_rate_limit
 from app.utils.responses import (
@@ -27,34 +27,29 @@ router = APIRouter(prefix="/estudiantes", tags=["Estudiantes"])
 @auth_rate_limit()
 async def register_student(
     request: Request,
-    student_data: dict  # Cambiado a dict para flexibilidad en el registro
+    student_data: StudentCreateWithUser = Body(...)
 ):
     """
-    Endpoint público para que los estudiantes se registren automáticamente.
+    Endpoint público para registrar un estudiante junto con su usuario asociado.
     No requiere autenticación previa.
     """
     try:
         service = StudentService()
-        
-        # Convertir el dict al schema apropiado
-        from app.schemas.student import StudentCreateWithUser
-        student_create_data = StudentCreateWithUser(**student_data)
-        
-        student = await service.create_student_with_user(student_create_data)
-        
-        logger.info(f"Estudiante registrado: {student.id_estudiante}")
-        
+        student = await service.create_student_with_user(student_data)
+
+        logger.info(f"Estudiante registrado correctamente: {student.id_estudiante}")
+
         return created_response(
             data=student.model_dump(),
             message="Estudiante registrado exitosamente"
         )
-        
+
     except UserAlreadyExistsException as e:
         return conflict_response(message=str(e))
     except Exception as e:
         logger.error(f"Error registrando estudiante: {str(e)}")
         return internal_server_error_response()
-
+    
 @router.get(
     "/mi-perfil",
     status_code=status.HTTP_200_OK,
