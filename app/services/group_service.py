@@ -60,15 +60,26 @@ class GroupService:
         return GroupResponse(**group)
 
     async def get_group_with_details(self, group_code: int) -> GroupWithSubjectResponse:
-        group_with_details = await self.group_repo.get_group_with_details(group_code)
-        if not group_with_details:
-            raise GroupNotFoundException(group_code)
+        try:
+            # Asegurar que group_code sea string para la búsqueda
+            group_id = str(group_code)
+            group_with_details = await self.group_repo.get_group_with_details(group_code)
             
-        # Obtener docentes asignados desde TeacherSubject
-        assignments = await self.teacher_subject_repo.get_assignments_by_group(group_code)
-        group_with_details["docentes_asignados"] = assignments
-        
-        return GroupWithSubjectResponse(**group_with_details)
+            if not group_with_details:
+                raise GroupNotFoundException(group_code)
+            
+            # Asegurar tipos de datos
+            if "codigo_grupo" in group_with_details and isinstance(group_with_details["codigo_grupo"], str):
+                try:
+                    group_with_details["codigo_grupo"] = int(group_with_details["codigo_grupo"])
+                except ValueError:
+                    pass
+            
+            return GroupWithSubjectResponse(**group_with_details)
+            
+        except Exception as e:
+            logger.error(f"Error en get_group_with_details para grupo {group_code}: {str(e)}")
+            raise
 
     async def get_all_groups(
         self, 
@@ -78,32 +89,75 @@ class GroupService:
         page: int = 1,
         limit: int = 20
     ) -> tuple[List[GroupWithSubjectResponse], int]:
-        
-        filters = {"activo": True} if active_only else {}
-        if subject_code:
-            filters["codigo_materia"] = subject_code
 
-        groups = await self.group_repo.get_all(filters=filters)
-        
-        # Si se filtra por docente, obtener grupos desde TeacherSubject
-        if teacher_id:
-            assignments = await self.teacher_subject_repo.get_assignments_by_teacher(teacher_id)
-            group_codes = [assignment["codigo_grupo"] for assignment in assignments]
-            groups = [group for group in groups if group["codigo_grupo"] in group_codes]
-        
-        # Obtener detalles completos para cada grupo
-        groups_with_details = []
-        for group in groups:
-            group_details = await self.get_group_with_details(group["codigo_grupo"])
-            if group_details:
-                groups_with_details.append(group_details)
-        
-        total = len(groups_with_details)
-        start = (page - 1) * limit
-        end = start + limit
-        paginated_groups = groups_with_details[start:end]
-        
-        return paginated_groups, total
+        try:
+            # Obtener todos los grupos primero
+            filters = {"activo": True} if active_only else {}
+            groups_data = await self.group_repo.get_all(filters=filters)
+            
+            # Si se filtra por docente, obtener grupos desde TeacherSubject
+            if teacher_id:
+                assignments = await self.teacher_subject_repo.get_assignments_by_teacher(teacher_id)
+                
+                # Filtrar solo asignaciones activas si active_only es True
+                if active_only:
+                    assignments = [a for a in assignments if a.get("activo", True)]
+                
+                # Extraer códigos de grupo únicos
+                group_codes = set()
+                for assignment in assignments:
+                    group_code = assignment.get("codigo_grupo")
+                    if group_code is not None:
+                        # Asegurar que group_code sea int
+                        if isinstance(group_code, str):
+                            try:
+                                group_code = int(group_code)
+                            except ValueError:
+                                continue
+                        group_codes.add(group_code)
+                
+                # Filtrar grupos por los códigos encontrados
+                filtered_groups = []
+                for group in groups_data:
+                    group_code = group.get("codigo_grupo")
+                    if group_code in group_codes:
+                        filtered_groups.append(group)
+                
+                groups_data = filtered_groups
+            
+            # Filtrar por materia si se especifica
+            if subject_code:
+                groups_data = [group for group in groups_data if group.get("codigo_materia") == subject_code]
+            
+            # Obtener detalles completos para cada grupo
+            groups_with_details = []
+            for group in groups_data:
+                try:
+                    group_code = group.get("codigo_grupo")
+                    if group_code is None:
+                        continue
+                        
+                    group_details = await self.get_group_with_details(group_code)
+                    if group_details:
+                        groups_with_details.append(group_details)
+                except GroupNotFoundException:
+                    # Si el grupo no existe, continuar con el siguiente
+                    continue
+                except Exception as e:
+                    logger.error(f"Error obteniendo detalles del grupo {group.get('codigo_grupo')}: {str(e)}")
+                    continue
+                        
+            # Aplicar paginación
+            total = len(groups_with_details)
+            start = (page - 1) * limit
+            end = start + limit
+            paginated_groups = groups_with_details[start:end]
+            
+            return paginated_groups, total
+            
+        except Exception as e:
+            logger.error(f"Error en get_all_groups: {str(e)}", exc_info=True)
+            return [], 0
 
     async def update_group(
         self, 
@@ -114,34 +168,65 @@ class GroupService:
         if not group:
             raise GroupNotFoundException(group_code)
 
-        # Validaciones para actualización
-        if hasattr(group_data, 'codigo_materia') and group_data.codigo_materia:
-            subject = await self.subject_repo.get_by_id(group_data.codigo_materia)
-            if not subject:
-                raise SubjectNotFoundException(group_data.codigo_materia)
-            
-            # Verificar y actualizar asignaciones existentes
-            assignments = await self.teacher_subject_repo.get_assignments_by_group(group_code)
-            active_assignments = [a for a in assignments if a.get("activo", True)]
-            
-            if active_assignments:
-                logger.warning(
-                    f"Grupo {group_code} tiene {len(active_assignments)} asignaciones activas "
-                    f"que se actualizarán a la nueva materia {group_data.codigo_materia}"
-                )
-                
-                # Actualizar todas las asignaciones activas
-                for assignment in active_assignments:
-                    await self.teacher_subject_repo.update(
-                        assignment["id_docente_materia"],
-                        {"codigo_materia": group_data.codigo_materia}
-                    )
-                    
         update_dict = group_data.model_dump(exclude_none=True)
-        if update_dict:
-            await self.group_repo.update(str(group_code), update_dict)
+        
+        if not update_dict:
+            # Si no hay cambios, devolver el grupo actual
+            return await self.get_group(group_code)
 
-        updated_group = await self.group_repo.get_by_id(str(group_code))
+        # Manejar cambio de código de grupo (requiere operación especial)
+        new_group_code = update_dict.get('codigo_grupo')
+        is_changing_group_code = new_group_code is not None and new_group_code != group_code
+
+        if is_changing_group_code:
+            # Verificar que el nuevo código no exista
+            existing_group = await self.group_repo.get_by_id(str(new_group_code))
+            if existing_group:
+                raise GroupAlreadyExistsException(new_group_code)
+            
+            # Crear nuevo documento con el nuevo código
+            new_group_data = group.copy()
+            new_group_data.update(update_dict)
+            await self.group_repo.create(new_group_data, str(new_group_code))
+            
+            # Actualizar todas las asignaciones en teacher_subject
+            assignments = await self.teacher_subject_repo.get_assignments_by_group(group_code)
+            for assignment in assignments:
+                await self.teacher_subject_repo.update(
+                    assignment["id_docente_materia"],
+                    {"codigo_grupo": new_group_code}
+                )
+            
+            # Eliminar el documento antiguo
+            await self.group_repo.delete(str(group_code))
+            
+            # Obtener el grupo recién creado
+            updated_group = await self.group_repo.get_by_id(str(new_group_code))
+            
+        else:
+            # Actualización normal sin cambiar el código de grupo
+            # Si se cambia la materia, validar que existe
+            if 'codigo_materia' in update_dict and update_dict['codigo_materia']:
+                subject = await self.subject_repo.get_by_id(update_dict['codigo_materia'])
+                if not subject:
+                    raise SubjectNotFoundException(update_dict['codigo_materia'])
+                
+                # Verificar y actualizar asignaciones existentes
+                assignments = await self.teacher_subject_repo.get_assignments_by_group(group_code)
+                active_assignments = [a for a in assignments if a.get("activo", True)]
+                
+                if active_assignments:
+                    # Actualizar todas las asignaciones activas a la nueva materia
+                    for assignment in active_assignments:
+                        await self.teacher_subject_repo.update(
+                            assignment["id_docente_materia"],
+                            {"codigo_materia": update_dict['codigo_materia']}
+                        )
+
+            # Actualizar el documento existente
+            await self.group_repo.update(str(group_code), update_dict)
+            updated_group = await self.group_repo.get_by_id(str(group_code))
+
         return GroupResponse(**updated_group)
 
     async def deactivate_group(self, group_code: int, reason: str) -> bool:

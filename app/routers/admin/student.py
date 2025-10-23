@@ -31,40 +31,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter( tags=["Estudiantes - Administración"])
 
-@router.post(
-    "/asignar-existente",
-    status_code=status.HTTP_201_CREATED,
-    summary="Crear estudiante con usuario EXISTENTE",
-    description="Crea un estudiante asignándolo a un usuario que YA existe en el sistema."
-)
-@admin_rate_limit()
-async def create_student_with_existing_user(
-    request: Request,
-    student_data: StudentCreateWithExistingUser,
-    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
-):
-    """
-    Solo administradores pueden asignar usuarios existentes como estudiantes
-    """
-    try:
-        service = StudentService()
-        student = await service.create_student_with_existing_user(student_data)
-        
-        logger.info(f"Estudiante creado: {student.id_estudiante} por {current_admin['nombre_completo']}")
-        
-        return created_response(
-            data=student.model_dump(),
-            message="Estudiante asignado a usuario existente"
-        )
-        
-    except StudentAlreadyExistsException as e:
-        return conflict_response(message=str(e))
-    except UserNotFoundException as e:
-        return not_found_response("Usuario", student_data.id_usuario)
-    except Exception as e:
-        logger.error(f"Error creando estudiante: {str(e)}")
-        return internal_server_error_response()
-
 @router.get(
     "",
     status_code=status.HTTP_200_OK,

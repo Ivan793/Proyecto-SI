@@ -159,13 +159,15 @@ class GuestService:
         updated_data["updated_at"] = datetime.utcnow()
         updated_data["activo"] = updated_data.get("activo", guest.get("activo", True))
 
-        id_to_update = real_id or guest_id
-        updated = await self.guest_repo.update(id_to_update, updated_data)
+        success = await self.guest_repo.update(real_id, updated_data)  # ← Devuelve True/False
 
-        if "activo" not in updated:
-            updated["activo"] = updated_data["activo"]
+        if not success:
+            raise ValueError("No se pudo actualizar")
 
-        return GuestResponse(**updated)
+        # Obtener el documento ACTUALIZADO
+        updated_guest = await self.guest_repo.get_by_id(real_id)  # ← Esto devuelve el dict
+
+        return GuestResponse(**updated_guest) 
 
     # ---------------------------
     # Desactivar invitado
