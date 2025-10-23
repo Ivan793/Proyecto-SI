@@ -1,41 +1,35 @@
-
-
-# Entorno virtual
+# =========================================
+# Entornos virtuales de Python
+# =========================================
 venv/
 env/
 .venv/
+ENV/
 
-# --- Cachés y compilados ---
+# =========================================
+# Archivos de caché y compilados de Python
+# =========================================
 __pycache__/
 *.pyc
-
-# Archivos del sistema
-.DS_Store
-
-# Archivos de configuración local
-*.env
-
-# Ignorar entorno virtual de Python
-.venv/
-
-
-.venv/
-
-# Python
-__pycache__/
 *.pyo
 *.pyd
 *.py[cod]
 *$py.class
+*.so
+.Python
 
-# --- Archivos temporales y del sistema ---
+# =========================================
+# Archivos del sistema
+# =========================================
 .DS_Store
 Thumbs.db
 *.swp
 *.swo
 *~
 
-# --- Archivos de construcción y distribución ---
+# =========================================
+# Archivos de construcción y distribución
+# =========================================
 build/
 dist/
 develop-eggs/
@@ -52,49 +46,54 @@ wheels/
 .installed.cfg
 *.egg
 
-# --- IDEs y editores ---
+# =========================================
+# IDEs y editores
+# =========================================
 .vscode/
 .idea/
 
-# --- Variables de entorno ---
+# =========================================
+# Variables de entorno y archivos sensibles
+# =========================================
 .env
 .env.local
 .env.*.local
-
-# --- Archivos de log ---
-*.log
-logs/
-
-# --- Bases de datos locales ---
-*.db
-*.sqlite
-*.sqlite3
-
-# --- Archivos de pruebas ---
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# --- Archivos temporales ---
-tmp/
-temp/
-*.tmp
 credentials/serviceAccountKey.json
-
-
-# =========================================
-# Credenciales y llaves privadas (Firebase)
-# =========================================
 firebase_credentials.json
 serviceAccountKey.json
 *-firebase-adminsdk-*.json
 *.firebase.json
 *.key.json
 *.credentials.json
-
-# --- Otros archivos sensibles ---
 *.pem
 *.crt
 *.csr
 *.key
+
+# =========================================
+# Archivos de log
+# =========================================
+*.log
+logs/
+
+# =========================================
+# Bases de datos locales
+# =========================================
+*.db
+*.sqlite
+*.sqlite3
+
+# =========================================
+# Archivos de pruebas
+# =========================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# =========================================
+# Archivos temporales
+# =========================================
+tmp/
+temp/
+*.tmp
