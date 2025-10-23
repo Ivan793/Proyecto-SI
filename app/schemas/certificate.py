@@ -1,9 +1,22 @@
 # app/schemas/certificate.py
+"""
+Schemas para el módulo de certificados.
+Corrige validación de tipos de Firestore.
+"""
 
-from pydantic import BaseModel, Field, EmailStr, validator
-from typing import Optional, List
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, List, Union
 from datetime import datetime
 from enum import Enum
+
+
+# ==================== ENUMS ====================
+
+class EstadoCertificadoEnum(str, Enum):
+    """Estados posibles de un certificado"""
+    DISPONIBLE = "disponible"
+    EXPIRADO = "expirado"
+    ENVIADO = "enviado"
 
 
 class FormatoSalidaEnum(str, Enum):
@@ -13,95 +26,117 @@ class FormatoSalidaEnum(str, Enum):
     PDF_COMBINADO = "pdf_combinado"
 
 
-class EstadoCertificadoEnum(str, Enum):
-    """Estados posibles de un certificado"""
-    DISPONIBLE = "disponible"
-    EXPIRADO = "expirado"
-    ENVIADO = "enviado"
+# ==================== SCHEMAS DE DATOS ====================
+
+class DatosEstudianteCertificado(BaseModel):
+    """Datos del estudiante para el certificado"""
+    id_estudiante: str
+    nombres: str
+    apellidos: str
+    identificacion: str
+    codigo_programa: str
+    nombre_programa: Optional[str] = None
+    correo: str
+
+
+class DatosProyectoCertificado(BaseModel):
+    """Datos del proyecto para el certificado"""
+    id_proyecto: str
+    titulo_proyecto: str
+    tipo_actividad: str
+    calificacion: Optional[Union[str, float, int]] = None  # ✅ Acepta string, float o int
+    fecha_subida: Optional[datetime] = None
+    
+    @field_validator('calificacion', mode='before')
+    @classmethod
+    def convertir_calificacion(cls, v):
+        """Convierte calificación a string si viene como número"""
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return str(v)
+        return v
+
+
+class DatosEventoCertificado(BaseModel):
+    """Datos del evento para el certificado"""
+    id_evento: str
+    nombre_evento: str
+    fecha_inicio: Union[datetime, str]  # ✅ Acepta datetime o string
+    fecha_fin: Optional[Union[datetime, str]] = None
+    lugar: Optional[str] = None
+    
+    @field_validator('fecha_inicio', 'fecha_fin', mode='before')
+    @classmethod
+    def convertir_fecha(cls, v):
+        """Convierte fechas de Firestore a datetime"""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            try:
+                return datetime.fromisoformat(v.replace('Z', '+00:00'))
+            except:
+                return v
+        return v
 
 
 # ==================== REQUESTS ====================
 
 class GenerarCertificadoPorProyectoRequest(BaseModel):
-    """Request para generar certificados de un proyecto"""
-    id_proyecto: str
-    id_evento: Optional[str] = None
-    incluir_calificacion: bool = Field(default=False)
-    director_evento: Optional[str] = Field(None, max_length=100)
-    coordinador_general: Optional[str] = Field(None, max_length=100)
-    formato_salida: FormatoSalidaEnum = Field(default=FormatoSalidaEnum.ZIP)
+    """Request para generar certificados por proyecto"""
+    id_proyecto: str = Field(..., description="ID del proyecto")
+    id_evento: Optional[str] = Field(None, description="ID del evento (opcional)")
+    incluir_calificacion: bool = Field(False, description="Incluir calificación en certificado")
+    director_evento: Optional[str] = Field(None, description="Nombre del director del evento")
+    coordinador_general: Optional[str] = Field(None, description="Nombre del coordinador general")
+    formato_salida: FormatoSalidaEnum = Field(
+        FormatoSalidaEnum.ZIP,
+        description="Formato de salida de los certificados"
+    )
 
-
-class GenerarCertificadoPorEventoRequest(BaseModel):
-    """Request para generar certificados de un evento completo"""
-    id_evento: str
-    incluir_calificacion: bool = Field(default=False)
-    director_evento: Optional[str] = Field(None, max_length=100)
-    coordinador_general: Optional[str] = Field(None, max_length=100)
-    agrupar_por_proyecto: bool = Field(default=True)
 
 
 class GenerarCertificadoIndividualRequest(BaseModel):
     """Request para generar certificado individual"""
-    id_estudiante: str
-    id_proyecto: str
-    incluir_calificacion: bool = Field(default=False)
-    director_evento: Optional[str] = Field(None, max_length=100)
-    coordinador_general: Optional[str] = Field(None, max_length=100)
+    id_estudiante: str = Field(..., description="ID del estudiante")
+    id_proyecto: str = Field(..., description="ID del proyecto")
+    incluir_calificacion: bool = Field(False, description="Incluir calificación")
+    director_evento: Optional[str] = None
+    coordinador_general: Optional[str] = None
 
 
 class GenerarMiCertificadoRequest(BaseModel):
-    """Request para que un estudiante genere su certificado"""
-    id_proyecto: str
-    enviar_por_correo: bool = Field(default=False)
-    incluir_calificacion: bool = Field(default=True)
+    """Request para que un estudiante genere su propio certificado"""
+    id_proyecto: str = Field(..., description="ID del proyecto")
+    incluir_calificacion: bool = Field(False, description="Incluir calificación")
+    enviar_por_correo: bool = Field(False, description="Enviar por correo automáticamente")
 
 
 class EnviarCertificadosRequest(BaseModel):
     """Request para enviar certificados por correo"""
-    id_lote: str
-    asunto: Optional[str] = Field(
-        None,
-        max_length=150,
-        description="Asunto del correo"
-    )
-    mensaje_personalizado: Optional[str] = Field(None, max_length=500)
-    enviar_copia_coordinador: bool = Field(default=False)
-    correo_coordinador: Optional[EmailStr] = None
-
-    @validator('correo_coordinador')
-    def validar_correo_coordinador(cls, correo, values):
-        """Valida que se proporcione correo si se solicita copia"""
-        if values.get('enviar_copia_coordinador') and not correo:
-            raise ValueError(
-                'Debe proporcionar correo_coordinador si enviar_copia_coordinador es True'
-            )
-        return correo
-
-
-class ReenviarCertificadoRequest(BaseModel):
-    """Request para reenviar certificado"""
-    correo_alternativo: Optional[EmailStr] = None
+    id_lote: str = Field(..., description="ID del lote de certificados")
+    asunto: Optional[str] = Field(None, description="Asunto del correo")
+    mensaje_personalizado: Optional[str] = Field(None, description="Mensaje adicional")
 
 
 # ==================== RESPONSES ====================
 
 class EstudianteCertificadoInfo(BaseModel):
-    """Información de estudiante en certificado"""
+    """Información de estudiante en respuesta"""
     nombre_completo: str
     identificacion: str
     nombre_archivo_certificado: str
 
 
 class ProyectoCertificadoInfo(BaseModel):
-    """Información de proyecto en certificado"""
+    """Información de proyecto en respuesta"""
     titulo: str
     evento: str
     calificacion: Optional[str] = None
 
 
 class CertificadoGeneradoResponse(BaseModel):
-    """Response al generar certificados"""
+    """Response de certificado generado"""
     id_lote: str
     nombre_archivo: str
     url_descarga: str
@@ -124,7 +159,7 @@ class CertificadoIndividualResponse(BaseModel):
 
 
 class MiCertificadoResponse(BaseModel):
-    """Response al generar mi certificado"""
+    """Response para certificado de estudiante"""
     id_certificado: str
     nombre_archivo: str
     url_descarga: str
@@ -136,105 +171,35 @@ class MiCertificadoResponse(BaseModel):
     correo_destino: Optional[str] = None
 
 
-class EstadoEnvioEstudiante(BaseModel):
-    """Estado de envío por estudiante"""
-    nombre: str
-    correo: str
-    estado: str  # "enviado" o "fallido"
-
-
 class CertificadosEnviadosResponse(BaseModel):
-    """Response al enviar certificados"""
-    total_enviados: int
-    total_fallidos: int
-    enviados_a: List[EstadoEnvioEstudiante]
+    """Response de envío de certificados"""
+    enviado_a: List[str]
     fecha_envio: str
-
-
-class ProyectoDisponibleInfo(BaseModel):
-    """Información de proyecto disponible para certificado"""
-    id_proyecto: str
-    titulo_proyecto: str
-    tipo_actividad: str
-    evento: dict
-    calificacion: Optional[str] = None
-    tiene_certificado: bool
-    fecha_expone: Optional[str] = None
-
-
-class MisCertificadosItem(BaseModel):
-    """Item de certificado en listado"""
-    id_certificado: str
-    nombre_archivo: str
-    proyecto: dict
-    fecha_generacion: str
-    estado: EstadoCertificadoEnum
-    url_descarga: Optional[str] = None
-    tamano_bytes: int
-
-
-class PaginacionCertificados(BaseModel):
-    """Paginación para certificados"""
-    total: int
-    pagina_actual: int
-    total_paginas: int
-    limite: int
+    cantidad_enviados: int
 
 
 class MisCertificadosResponse(BaseModel):
-    """Response del listado de certificados"""
-    certificados: List[MisCertificadosItem]
-    paginacion: PaginacionCertificados
+    """Response con listado de certificados del estudiante"""
+    certificados: List[dict]
+    paginacion: dict
 
 
 class ProyectosDisponiblesResponse(BaseModel):
-    """Response de proyectos disponibles"""
-    proyectos: List[ProyectoDisponibleInfo]
+    """Response con proyectos disponibles para certificado"""
+    proyectos: List[dict]
     total: int
 
 
-# ==================== MODELOS INTERNOS ====================
-
-class DatosEstudianteCertificado(BaseModel):
-    """Datos del estudiante para el certificado"""
-    id_estudiante: str
-    nombres: str
-    apellidos: str
-    identificacion: str
-    codigo_programa: str
-    nombre_programa: Optional[str] = None
-    correo: str
-
-
-class DatosProyectoCertificado(BaseModel):
-    """Datos del proyecto para el certificado"""
-    id_proyecto: str
-    titulo_proyecto: str
-    tipo_actividad: str
-    calificacion: Optional[str] = None
-    fecha_subida: Optional[datetime] = None
-
-
-class DatosEventoCertificado(BaseModel):
-    """Datos del evento para el certificado"""
-    id_evento: str
-    nombre_evento: str
-    fecha_inicio: datetime
-    fecha_fin: Optional[datetime] = None
-    lugar: Optional[str] = None
-
-
 class CertificadoMetadata(BaseModel):
-    """Metadata de un certificado generado"""
+    """Metadata de certificado almacenado"""
     id_certificado: str
     id_estudiante: str
     id_proyecto: str
     id_evento: str
     nombre_archivo: str
     ruta_archivo: str
+    tamano_bytes: int
     fecha_generacion: datetime
     fecha_expiracion: datetime
     estado: EstadoCertificadoEnum
-    tamano_bytes: int
     enviado_correo: bool = False
-    fecha_envio: Optional[datetime] = None

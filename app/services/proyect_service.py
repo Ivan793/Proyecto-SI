@@ -2,34 +2,6 @@ from typing import List, Optional
 from datetime import datetime
 import json
 from app.schemas.proyect import ProyectoCreate, ProyectoResponse, ProyectoUpdate
-<<<<<<< HEAD
-from app.repositories import proyect_memory_repository
-
-
-def create_proyecto(proyecto: ProyectoCreate) -> ProyectoResponse:
-    """Crea un nuevo proyecto."""
-    return proyect_memory_repository.create_proyecto(proyecto)
-
-
-def list_proyectos() -> List[ProyectoResponse]:
-    """Devuelve la lista de todos los proyectos."""
-    return proyect_memory_repository.list_proyectos()
-
-
-def get_proyecto(proyecto_id: str) -> Optional[ProyectoResponse]:
-    """Obtiene un proyecto por su ID."""
-    return proyect_memory_repository.get_proyecto(proyecto_id)
-
-
-def update_proyecto(proyecto_id: str, proyecto: ProyectoUpdate) -> Optional[ProyectoResponse]:
-    """Actualiza un proyecto existente."""
-    return proyect_memory_repository.update_proyecto(proyecto_id, proyecto)
-
-
-def delete_proyecto(proyecto_id: str) -> bool:
-    """Elimina un proyecto por su ID."""
-    return proyect_memory_repository.delete_proyecto(proyecto_id)
-=======
 from app.services.cloudinary_service import upload_pdf_to_cloudinary
 from app.core.firebase import firebase_client, Collections
 
@@ -263,4 +235,3 @@ def delete_proyecto(id_proyecto: str) -> bool:
         "updated_at": datetime.utcnow().isoformat()
     })
     return True
->>>>>>> origin/Miguel

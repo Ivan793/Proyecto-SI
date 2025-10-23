@@ -23,6 +23,9 @@ class FirebaseClient:
             cls._instance = super(FirebaseClient, cls).__new__(cls)
         return cls._instance
     
+   # app/core/firebase.py
+# SOLO REEMPLAZA EL MÉTODO initialize()
+
     def initialize(self):
         """Inicializa la conexión con Firebase"""
         if self._app is not None:
@@ -30,6 +33,13 @@ class FirebaseClient:
             return
         
         try:
+            # 🔥 VALIDACIÓN CRÍTICA: Verificar si ya existe una app
+            if firebase_admin._apps:
+                logger.info("Firebase ya fue inicializado externamente, reutilizando instancia")
+                self._app = firebase_admin.get_app()
+                self._db = firestore.client()
+                return
+            
             # Cargar credenciales desde el archivo JSON
             cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
             
@@ -46,7 +56,6 @@ class FirebaseClient:
         except Exception as e:
             logger.error(f"Error al inicializar Firebase: {str(e)}")
             raise
-    
     def get_db(self) -> firestore.Client:
         if self._db is None:
             self.initialize()

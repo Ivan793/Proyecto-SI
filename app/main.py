@@ -5,7 +5,7 @@ import sys
 import logging
 import datetime
 from contextlib import asynccontextmanager
-
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -43,26 +43,17 @@ if not os.path.exists(firebase_credentials_path):
     logger.info(f"Directorio actual: {os.getcwd()}")
     logger.info(f"Archivos en directorio: {os.listdir('.')}")
     sys.exit(1)
-
-logger.info(f"Credenciales de Firebase encontradas en: {firebase_credentials_path}")
-
-# Inicializar Firebase
-try:
-    import firebase_admin
-    from firebase_admin import credentials
     
-    cred = credentials.Certificate(firebase_credentials_path)
-    firebase_admin.initialize_app(cred)
-    logger.info("✅ Firebase inicializado correctamente")
-    
-except Exception as e:
-    logger.error(f"❌ Error inicializando Firebase: {str(e)}")
-    sys.exit(1)
+logger.info("Firebase se inicializará en el ciclo de vida de la app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manejo del ciclo de vida de la aplicación"""
     logger.info("🚀 Iniciando ExpoSoftware API")
+
+    from app.core.firebase import firebase_client
+    firebase_client.initialize()
+    logger.info("✅ Firebase inicializado en lifespan")
     
     # Importar y registrar routers después de que Firebase esté inicializado
     routers = []

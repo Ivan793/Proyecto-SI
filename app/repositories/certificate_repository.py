@@ -1,149 +1,158 @@
 # app/repositories/certificate_repository.py
 
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+from typing import Optional, List, Dict, Any, Tuple
+from datetime import datetime, timezone, timedelta
+import logging
+
 from app.repositories.base_repository import BaseRepository
+from app.core.firebase import get_firestore_client
+
+logger = logging.getLogger(__name__)
 
 
 class CertificateRepository(BaseRepository):
-    """Repositorio para gestión de certificados"""
+    """Repositorio para gestión de certificados en Firestore"""
     
     def __init__(self):
         super().__init__('certificados')
+        # ✅ CORRECCIÓN: Usar _db en lugar de db para la propiedad interna
+        self._db = get_firestore_client()
+        self.lotes_collection = 'certificados_lotes'
+
+    @property
+    def db(self):
+        """Acceso de solo lectura al cliente Firestore"""
+        return self._db
     
-    async def guardar_lote_certificados(
-        self,
-        datos_lote: Dict[str, Any]
-    ) -> str:
+    async def guardar_lote_certificados(self, datos_lote: Dict[str, Any]) -> str:
         """
-        Guarda información de un lote de certificados generados.
+        Guarda la metadata de un lote de certificados generados.
         
         Args:
-            datos_lote: Diccionario con la información del lote
+            datos_lote: Diccionario con información del lote
             
         Returns:
             ID del lote guardado
         """
-        id_lote = datos_lote.get('id_lote')
-        
-        documento = {
-            'id_lote': id_lote,
-            'id_proyecto': datos_lote.get('id_proyecto'),
-            'id_evento': datos_lote.get('id_evento'),
-            'nombre_archivo': datos_lote.get('nombre_archivo'),
-            'ruta_archivo': datos_lote.get('ruta_archivo'),
-            'cantidad_certificados': datos_lote.get('cantidad_certificados'),
-            'tamano_bytes': datos_lote.get('tamano_bytes'),
-            'fecha_generacion': datos_lote.get('fecha_generacion'),
-            'fecha_expiracion': datos_lote.get('fecha_expiracion'),
-            'estado': datos_lote.get('estado'),
-            'estudiantes': datos_lote.get('estudiantes', []),
-            'tipo': 'lote',
-            'created_at': datetime.now(),
-            'updated_at': datetime.now()
-        }
-        
-        await self.create(documento, document_id=id_lote)
-        return id_lote
+        try:
+            id_lote = datos_lote.get('id_lote')
+            
+            # Guardar en Firestore
+            doc_ref = self._db.collection(self.lotes_collection).document(id_lote)
+            doc_ref.set(datos_lote)
+            
+            logger.info(f"✅ Lote de certificados guardado: {id_lote}")
+            return id_lote
+            
+        except Exception as e:
+            logger.error(f"❌ Error guardando lote de certificados: {str(e)}")
+            raise
     
-    async def guardar_certificado_individual(
-        self,
-        datos_certificado: Dict[str, Any]
-    ) -> str:
+    async def guardar_certificado_individual(self, datos_certificado: Dict[str, Any]) -> str:
         """
-        Guarda información de un certificado individual.
+        Guarda la metadata de un certificado individual.
         
         Args:
-            datos_certificado: Diccionario con la información del certificado
+            datos_certificado: Diccionario con información del certificado
             
         Returns:
             ID del certificado guardado
         """
-        id_certificado = datos_certificado.get('id_certificado')
-        
-        documento = {
-            'id_certificado': id_certificado,
-            'id_estudiante': datos_certificado.get('id_estudiante'),
-            'id_proyecto': datos_certificado.get('id_proyecto'),
-            'id_evento': datos_certificado.get('id_evento'),
-            'nombre_archivo': datos_certificado.get('nombre_archivo'),
-            'ruta_archivo': datos_certificado.get('ruta_archivo'),
-            'tamano_bytes': datos_certificado.get('tamano_bytes'),
-            'fecha_generacion': datos_certificado.get('fecha_generacion'),
-            'fecha_expiracion': datos_certificado.get('fecha_expiracion'),
-            'estado': datos_certificado.get('estado'),
-            'enviado_correo': datos_certificado.get('enviado_correo', False),
-            'fecha_envio': datos_certificado.get('fecha_envio'),
-            'tipo': 'individual',
-            'created_at': datetime.now(),
-            'updated_at': datetime.now()
-        }
-        
-        await self.create(documento, document_id=id_certificado)
-        return id_certificado
+        try:
+            id_certificado = datos_certificado.get('id_certificado')
+            
+            # Guardar en Firestore
+            doc_ref = self._db.collection(self.collection_name).document(id_certificado)
+            doc_ref.set(datos_certificado)
+            
+            logger.info(f"✅ Certificado individual guardado: {id_certificado}")
+            return id_certificado
+            
+        except Exception as e:
+            logger.error(f"❌ Error guardando certificado individual: {str(e)}")
+            raise
     
-    async def obtener_por_id(
-        self,
-        id_certificado: str
-    ) -> Optional[Dict[str, Any]]:
+    async def obtener_por_id(self, id_certificado: str) -> Optional[Dict[str, Any]]:
         """
-        Obtiene un certificado por su ID.
+        Obtiene un certificado o lote por su ID.
+        Busca primero en lotes, luego en certificados individuales.
         
         Args:
-            id_certificado: ID del certificado
+            id_certificado: ID del certificado o lote
             
         Returns:
-            Diccionario con los datos del certificado o None
+            Diccionario con los datos o None si no existe
         """
-        return await self.get_by_id(id_certificado)
+        try:
+            # Buscar en lotes
+            doc_ref = self._db.collection(self.lotes_collection).document(id_certificado)
+            doc = doc_ref.get()
+            
+            if doc.exists:
+                return doc.to_dict()
+            
+            # Buscar en certificados individuales
+            doc_ref = self._db.collection(self.collection_name).document(id_certificado)
+            doc = doc_ref.get()
+            
+            if doc.exists:
+                return doc.to_dict()
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo certificado {id_certificado}: {str(e)}")
+            return None
     
     async def obtener_por_estudiante(
         self,
         id_estudiante: str,
         limite: int = 20,
         pagina: int = 1
-    ) -> tuple[List[Dict[str, Any]], int]:
+    ) -> Tuple[List[Dict[str, Any]], int]:
         """
-        Obtiene todos los certificados de un estudiante.
+        Obtiene los certificados de un estudiante con paginación.
         
         Args:
             id_estudiante: ID del estudiante
-            limite: Cantidad de registros por página
+            limite: Cantidad de resultados por página
             pagina: Número de página
             
         Returns:
-            Tupla con (lista de certificados, total de registros)
+            Tupla con (lista de certificados, total)
         """
-        # Obtener todos los certificados del estudiante
-        certificados = await self.get_all(
-            filters={'id_estudiante': id_estudiante}
-        )
-        
-        # Ordenar por fecha de generación (más recientes primero)
-        certificados.sort(
-            key=lambda x: x.get('fecha_generacion', datetime.min),
-            reverse=True
-        )
-        
-        total = len(certificados)
-        
-        # Paginar
-        inicio = (pagina - 1) * limite
-        fin = inicio + limite
-        certificados_paginados = certificados[inicio:fin]
-        
-        # Enriquecer con estado actualizado
-        for cert in certificados_paginados:
-            if cert.get('fecha_expiracion'):
-                if datetime.now() > cert['fecha_expiracion']:
-                    cert['estado'] = 'expirado'
-                    # Actualizar en la base de datos
-                    await self.update(
-                        cert['id_certificado'],
-                        {'estado': 'expirado'}
-                    )
-        
-        return certificados_paginados, total
+        try:
+            offset = (pagina - 1) * limite
+            
+            # Consultar certificados del estudiante
+            query = (
+                self._db.collection(self.collection_name)
+                .where('id_estudiante', '==', id_estudiante)
+                .order_by('fecha_generacion', direction='DESCENDING')
+                .limit(limite)
+                .offset(offset)
+            )
+            
+            docs = query.stream()
+            certificados = []
+            
+            for doc in docs:
+                cert = doc.to_dict()
+                cert['id'] = doc.id
+                certificados.append(cert)
+            
+            # Contar total
+            total_query = (
+                self._db.collection(self.collection_name)
+                .where('id_estudiante', '==', id_estudiante)
+            )
+            total = len(list(total_query.stream()))
+            
+            return certificados, total
+            
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo certificados del estudiante {id_estudiante}: {str(e)}")
+            return [], 0
     
     async def verificar_certificado_valido(
         self,
@@ -151,7 +160,7 @@ class CertificateRepository(BaseRepository):
         id_proyecto: str
     ) -> bool:
         """
-        Verifica si existe un certificado válido para un estudiante y proyecto.
+        Verifica si existe un certificado válido (no expirado) para un estudiante en un proyecto.
         
         Args:
             id_estudiante: ID del estudiante
@@ -160,170 +169,125 @@ class CertificateRepository(BaseRepository):
         Returns:
             True si existe un certificado válido
         """
-        certificados = await self.get_all(filters={
-            'id_estudiante': id_estudiante,
-            'id_proyecto': id_proyecto
-        })
-        
-        # Verificar si alguno está aún válido
-        for cert in certificados:
-            if cert.get('estado') == 'disponible':
-                if cert.get('fecha_expiracion'):
-                    if datetime.now() <= cert['fecha_expiracion']:
+        try:
+            query = (
+                self._db.collection(self.collection_name)
+                .where('id_estudiante', '==', id_estudiante)
+                .where('id_proyecto', '==', id_proyecto)
+                .where('estado', '==', 'disponible')
+            )
+            
+            docs = list(query.stream())
+            
+            if not docs:
+                return False
+            
+            # Verificar que no esté expirado
+            for doc in docs:
+                cert = doc.to_dict()
+                fecha_exp = cert.get('fecha_expiracion')
+                
+                if fecha_exp:
+                    if isinstance(fecha_exp, str):
+                        fecha_exp = datetime.fromisoformat(fecha_exp.replace('Z', '+00:00'))
+                    
+                    if datetime.now(timezone.utc) < fecha_exp:
                         return True
-        
-        return False
-    
-    async def actualizar_estado_envio(
-        self,
-        id_certificado: str,
-        enviado: bool
-    ) -> bool:
-        """
-        Actualiza el estado de envío de un certificado.
-        
-        Args:
-            id_certificado: ID del certificado
-            enviado: True si fue enviado
             
-        Returns:
-            True si se actualizó correctamente
-        """
-        return await self.update(id_certificado, {
-            'enviado_correo': enviado,
-            'fecha_envio': datetime.now() if enviado else None,
-            'updated_at': datetime.now()
-        })
-    
-    async def actualizar_estado(
-        self,
-        id_certificado: str,
-        nuevo_estado: str
-    ) -> bool:
-        """
-        Actualiza el estado de un certificado.
-        
-        Args:
-            id_certificado: ID del certificado
-            nuevo_estado: Nuevo estado
+            return False
             
-        Returns:
-            True si se actualizó correctamente
-        """
-        return await self.update(id_certificado, {
-            'estado': nuevo_estado,
-            'updated_at': datetime.now()
-        })
+        except Exception as e:
+            logger.error(f"❌ Error verificando certificado válido: {str(e)}")
+            return False
     
-    async def obtener_certificados_expirados(self) -> List[Dict[str, Any]]:
+    async def actualizar_estado(self, id_lote: str, nuevo_estado: str) -> bool:
         """
-        Obtiene todos los certificados que han expirado.
-        
-        Returns:
-            Lista de certificados expirados
-        """
-        todos_certificados = await self.get_all()
-        
-        expirados = []
-        fecha_actual = datetime.now()
-        
-        for cert in todos_certificados:
-            if cert.get('estado') == 'disponible':
-                if cert.get('fecha_expiracion'):
-                    if fecha_actual > cert['fecha_expiracion']:
-                        expirados.append(cert)
-        
-        return expirados
-    
-    async def eliminar_certificado(
-        self,
-        id_certificado: str
-    ) -> bool:
-        """
-        Elimina un certificado de la base de datos.
-        
-        Args:
-            id_certificado: ID del certificado a eliminar
-            
-        Returns:
-            True si se eliminó correctamente
-        """
-        return await self.delete(id_certificado)
-    
-    async def obtener_por_lote(
-        self,
-        id_lote: str
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Obtiene información de un lote de certificados.
+        Actualiza el estado de un lote de certificados.
         
         Args:
             id_lote: ID del lote
+            nuevo_estado: Nuevo estado (disponible, enviado, expirado)
             
         Returns:
-            Diccionario con la información del lote
+            True si se actualizó correctamente
         """
-        lote = await self.get_by_id(id_lote)
-        
-        if lote and lote.get('tipo') == 'lote':
-            return lote
-        
-        return None
+        try:
+            doc_ref = self._db.collection(self.lotes_collection).document(id_lote)
+            doc_ref.update({
+                'estado': nuevo_estado,
+                'fecha_actualizacion': datetime.now(timezone.utc)
+            })
+            logger.info(f"✅ Estado del lote {id_lote} actualizado a: {nuevo_estado}")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Error actualizando estado del lote {id_lote}: {str(e)}")
+            return False
     
-    async def obtener_estadisticas_certificados(
-        self,
-        id_evento: Optional[str] = None,
-        fecha_desde: Optional[datetime] = None,
-        fecha_hasta: Optional[datetime] = None
-    ) -> Dict[str, Any]:
+    async def actualizar_estado_envio(self, id_certificado: str, enviado: bool) -> bool:
         """
-        Obtiene estadísticas de certificados generados.
+        Actualiza el estado de envío por correo de un certificado individual.
         
         Args:
-            id_evento: Filtrar por evento específico
-            fecha_desde: Fecha inicial del rango
-            fecha_hasta: Fecha final del rango
+            id_certificado: ID del certificado
+            enviado: True si fue enviado por correo
             
         Returns:
-            Diccionario con estadísticas
+            True si se actualizó correctamente
         """
-        filters = {}
-        if id_evento:
-            filters['id_evento'] = id_evento
+        try:
+            doc_ref = self._db.collection(self.collection_name).document(id_certificado)
+            doc_ref.update({
+                'enviado_correo': enviado,
+                'fecha_envio': datetime.now(timezone.utc) if enviado else None
+            })
+            logger.info(f"✅ Estado de envío del certificado {id_certificado} actualizado")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Error actualizando estado de envío del certificado {id_certificado}: {str(e)}")
+            return False
+    
+    async def limpiar_certificados_expirados(self) -> int:
+        """
+        Marca como expirados los certificados cuya fecha de expiración haya pasado.
         
-        certificados = await self.get_all(filters=filters)
-        
-        # Filtrar por fechas si se proporcionan
-        if fecha_desde or fecha_hasta:
-            certificados_filtrados = []
-            for cert in certificados:
-                fecha_gen = cert.get('fecha_generacion')
-                if fecha_gen:
-                    if fecha_desde and fecha_gen < fecha_desde:
-                        continue
-                    if fecha_hasta and fecha_gen > fecha_hasta:
-                        continue
-                    certificados_filtrados.append(cert)
-            certificados = certificados_filtrados
-        
-        # Calcular estadísticas
-        total_certificados = len(certificados)
-        total_individuales = sum(1 for c in certificados if c.get('tipo') == 'individual')
-        total_lotes = sum(1 for c in certificados if c.get('tipo') == 'lote')
-        total_enviados = sum(1 for c in certificados if c.get('enviado_correo'))
-        total_disponibles = sum(1 for c in certificados if c.get('estado') == 'disponible')
-        total_expirados = sum(1 for c in certificados if c.get('estado') == 'expirado')
-        
-        # Tamaño total
-        tamano_total = sum(c.get('tamano_bytes', 0) for c in certificados)
-        
-        return {
-            'total_certificados': total_certificados,
-            'total_individuales': total_individuales,
-            'total_lotes': total_lotes,
-            'total_enviados': total_enviados,
-            'total_disponibles': total_disponibles,
-            'total_expirados': total_expirados,
-            'tamano_total_bytes': tamano_total,
-            'tamano_total_mb': round(tamano_total / (1024 * 1024), 2)
-        }
+        Returns:
+            Cantidad de certificados actualizados
+        """
+        try:
+            ahora = datetime.now(timezone.utc)
+            
+            # Buscar certificados expirados en lotes
+            query_lotes = (
+                self._db.collection(self.lotes_collection)
+                .where('estado', '==', 'disponible')
+                .where('fecha_expiracion', '<', ahora)
+            )
+            
+            docs_lotes = list(query_lotes.stream())
+            actualizados = 0
+            
+            for doc in docs_lotes:
+                doc.reference.update({'estado': 'expirado'})
+                actualizados += 1
+            
+            # Buscar certificados individuales expirados
+            query_individuales = (
+                self._db.collection(self.collection_name)
+                .where('estado', '==', 'disponible')
+                .where('fecha_expiracion', '<', ahora)
+            )
+            
+            docs_individuales = list(query_individuales.stream())
+            
+            for doc in docs_individuales:
+                doc.reference.update({'estado': 'expirado'})
+                actualizados += 1
+            
+            if actualizados > 0:
+                logger.info(f"🗑️ {actualizados} certificados marcados como expirados")
+            
+            return actualizados
+            
+        except Exception as e:
+            logger.error(f"❌ Error limpiando certificados expirados: {str(e)}")
+            return 0

@@ -1,14 +1,6 @@
-<<<<<<< HEAD
 
 
 # Entorno virtual
-=======
-# =========================================
-# PROYECTO FASTAPI + FIREBASE (.gitignore)
-# =========================================
-
-# --- Entornos virtuales ---
->>>>>>> origin/Miguel
 venv/
 env/
 .venv/
@@ -16,7 +8,6 @@ env/
 # --- Cachés y compilados ---
 __pycache__/
 *.pyc
-<<<<<<< HEAD
 
 # Archivos del sistema
 .DS_Store
@@ -32,10 +23,8 @@ __pycache__/
 
 # Python
 __pycache__/
-=======
 *.pyo
 *.pyd
->>>>>>> origin/Miguel
 *.py[cod]
 *$py.class
 
@@ -91,10 +80,8 @@ htmlcov/
 tmp/
 temp/
 *.tmp
-<<<<<<< HEAD
 credentials/serviceAccountKey.json
 
-=======
 
 # =========================================
 # Credenciales y llaves privadas (Firebase)
@@ -111,4 +98,3 @@ serviceAccountKey.json
 *.crt
 *.csr
 *.key
->>>>>>> origin/Miguel

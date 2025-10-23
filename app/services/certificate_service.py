@@ -1,7 +1,7 @@
 # app/services/certificate_service.py
 
 from typing import List, Dict, Any, Optional, Union
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 import os
 import uuid
@@ -11,7 +11,7 @@ import logging
 from app.services.certificate_generator import CertificateGenerator
 from app.services.email_service import EmailService
 from app.repositories.certificate_repository import CertificateRepository
-from app.repositories.proyect_repository import ProyectRepository
+from app.repositories.proyect_repository import ProyectoRepository
 from app.repositories.student_repository import StudentRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.event_repository import EventRepository
@@ -20,22 +20,14 @@ from app.schemas.certificate import (
     DatosEstudianteCertificado,
     DatosProyectoCertificado,
     DatosEventoCertificado,
-    CertificadoMetadata,
     EstadoCertificadoEnum,
     FormatoSalidaEnum,
     GenerarCertificadoPorProyectoRequest,
-    GenerarCertificadoPorEventoRequest,
     GenerarCertificadoIndividualRequest,
     GenerarMiCertificadoRequest,
     EnviarCertificadosRequest,
-    CertificadoGeneradoResponse,
-    CertificadoIndividualResponse,
-    MiCertificadoResponse,
-    CertificadosEnviadosResponse,
     EstudianteCertificadoInfo,
-    ProyectoCertificadoInfo,
-    MisCertificadosResponse,
-    ProyectosDisponiblesResponse
+    ProyectoCertificadoInfo
 )
 
 logger = logging.getLogger(__name__)
@@ -48,21 +40,33 @@ class CertificateService:
         self.generator = CertificateGenerator()
         self.email_service = EmailService()
         self.certificate_repo = CertificateRepository()
-        self.project_repo = ProyectRepository()
+        self.project_repo = ProyectoRepository()
         self.student_repo = StudentRepository()
         self.user_repo = UserRepository()
         self.event_repo = EventRepository()
         
-        self.directorio_certificados = os.getenv(
-            'CERTIFICADOS_DIR',
+        # ✅ CORRECCIÓN: Usar ruta relativa correcta
+        self.directorio_certificados = os.path.join(
+            os.getcwd(),  # Directorio actual del proyecto
+            'storage',
             'certificados_temp'
         )
         self._asegurar_directorio()
     
     def _asegurar_directorio(self):
         """Crea el directorio de certificados si no existe"""
+        # ✅ CORRECCIÓN: Asegurar que se cree la carpeta storage también
+        storage_dir = os.path.join(os.getcwd(), 'storage')
+        if not os.path.exists(storage_dir):
+            os.makedirs(storage_dir)
+            logger.info(f"📁 Carpeta 'storage' creada")
+        
+        # Crear carpeta certificados_temp
         if not os.path.exists(self.directorio_certificados):
             os.makedirs(self.directorio_certificados)
+            logger.info(f"📁 Carpeta 'certificados_temp' creada")
+        
+        logger.info(f"📂 Directorio de certificados: {self.directorio_certificados}")
     
     def _generar_id_lote(self) -> str:
         """Genera un ID único para el lote de certificados"""
@@ -77,28 +81,41 @@ class CertificateService:
     
     async def _obtener_datos_estudiante(
         self,
-        id_estudiante: str
+        uid_estudiante: str
     ) -> DatosEstudianteCertificado:
-        """Obtiene los datos del estudiante para el certificado"""
+        """
+        Obtiene los datos del estudiante para el certificado usando el UID.
         
-        # Obtener estudiante
-        estudiante = await self.student_repo.get_by_id(id_estudiante)
+        Args:
+            uid_estudiante: UID de Firebase Auth del estudiante
+        
+        Returns:
+            DatosEstudianteCertificado con toda la información necesaria
+        """
+        
+        logger.info(f"🔍 Obteniendo datos del estudiante con UID: {uid_estudiante}")
+        
+        # 1. Obtener el documento de estudiante usando id_usuario (que contiene el UID)
+        estudiante = await self.student_repo.get_student_by_user_id(uid_estudiante)
         if not estudiante:
-            raise ValueError(f"Estudiante con ID {id_estudiante} no encontrado")
+            logger.error(f"❌ Estudiante con UID {uid_estudiante} no encontrado en colección estudiantes")
+            raise ValueError(f"Estudiante con UID {uid_estudiante} no encontrado en colección estudiantes")
         
-        # Obtener usuario asociado
-        usuario = await self.user_repo.get_by_id(estudiante['id_usuario'])
+        logger.info(f"✅ Estudiante encontrado. Código programa: {estudiante.get('codigo_programa')}")
+        
+        # 2. Obtener el usuario directamente usando el UID como ID de documento
+        usuario = await self.user_repo.get_by_id(uid_estudiante)
         if not usuario:
-            raise ValueError(f"Usuario asociado al estudiante no encontrado")
+            logger.error(f"❌ Usuario con UID {uid_estudiante} no encontrado en colección usuarios")
+            raise ValueError(f"Usuario con UID {uid_estudiante} no encontrado en colección usuarios")
         
-        # Obtener programa académico (opcional)
-        nombre_programa = None
-        if estudiante.get('codigo_programa'):
-            # Aquí podrías obtener el nombre del programa desde otra colección
-            nombre_programa = estudiante.get('codigo_programa')
+        logger.info(f"✅ Usuario encontrado: {usuario.get('nombres')} {usuario.get('apellidos')}")
+        
+        # 3. Obtener nombre del programa académico (opcional)
+        nombre_programa = estudiante.get('codigo_programa')
         
         return DatosEstudianteCertificado(
-            id_estudiante=id_estudiante,
+            id_estudiante=uid_estudiante,
             nombres=usuario['nombres'],
             apellidos=usuario['apellidos'],
             identificacion=usuario['identificacion'],
@@ -111,18 +128,34 @@ class CertificateService:
         self,
         id_proyecto: str
     ) -> DatosProyectoCertificado:
-        """Obtiene los datos del proyecto para el certificado"""
+        """
+        Obtiene los datos del proyecto para el certificado.
+        Maneja correctamente los tipos de datos de Firestore.
+        """
         
         proyecto = await self.project_repo.get_by_id(id_proyecto)
         if not proyecto:
             raise ValueError(f"Proyecto con ID {id_proyecto} no encontrado")
         
+        # Convertir calificación a string si es necesario
+        calificacion = proyecto.get('calificacion')
+        if calificacion is not None and not isinstance(calificacion, str):
+            calificacion = str(calificacion)
+        
+        # Convertir fecha_subida si existe
+        fecha_subida = proyecto.get('fecha_subida')
+        if fecha_subida and isinstance(fecha_subida, str):
+            try:
+                fecha_subida = datetime.fromisoformat(fecha_subida.replace('Z', '+00:00'))
+            except:
+                fecha_subida = None
+        
         return DatosProyectoCertificado(
             id_proyecto=id_proyecto,
             titulo_proyecto=proyecto['titulo_proyecto'],
             tipo_actividad=proyecto['tipo_actividad'],
-            calificacion=proyecto.get('calificacion'),
-            fecha_subida=proyecto.get('fecha_subida')
+            calificacion=calificacion,
+            fecha_subida=fecha_subida
         )
     
     async def _obtener_datos_evento(
@@ -149,7 +182,6 @@ class CertificateService:
     ) -> str:
         """Obtiene el ID del evento asociado al proyecto"""
         
-        # Buscar en la colección de proyectos-eventos o en el proyecto mismo
         proyecto = await self.project_repo.get_by_id(id_proyecto)
         if not proyecto:
             raise ValueError("Proyecto no encontrado")
@@ -167,22 +199,29 @@ class CertificateService:
         """
         Genera certificados para todos los estudiantes de un proyecto.
         """
-        logger.info(f"Generando certificados para proyecto: {request.id_proyecto}")
+        logger.info(f"📋 Generando certificados para proyecto: {request.id_proyecto}")
         
         # Obtener ID del evento
         id_evento = request.id_evento
         if not id_evento:
             id_evento = await self._obtener_id_evento_desde_proyecto(request.id_proyecto)
         
+        logger.info(f"📅 ID Evento: {id_evento}")
+        
         # Obtener datos del proyecto y evento
         datos_proyecto = await self._obtener_datos_proyecto(request.id_proyecto)
         datos_evento = await self._obtener_datos_evento(id_evento)
         
-        # Obtener estudiantes del proyecto
-        estudiantes_ids = await self.project_repo.get_students_by_project(request.id_proyecto)
+        logger.info(f"📝 Proyecto: {datos_proyecto.titulo_proyecto}")
+        logger.info(f"🎪 Evento: {datos_evento.nombre_evento}")
         
-        if not estudiantes_ids:
+        # Obtener UIDs de estudiantes del proyecto
+        uids_estudiantes = await self.project_repo.get_students_by_project(request.id_proyecto)
+        
+        if not uids_estudiantes:
             raise ValueError("No se encontraron estudiantes asociados al proyecto")
+        
+        logger.info(f"🎓 Generando certificados para {len(uids_estudiantes)} estudiante(s)")
         
         # Generar ID del lote
         id_lote = self._generar_id_lote()
@@ -192,9 +231,11 @@ class CertificateService:
         estudiantes_info = []
         
         # Generar certificado para cada estudiante
-        for id_estudiante in estudiantes_ids:
+        for uid_estudiante in uids_estudiantes:
             try:
-                datos_estudiante = await self._obtener_datos_estudiante(id_estudiante)
+                logger.info(f"📄 Procesando estudiante UID: {uid_estudiante}")
+                
+                datos_estudiante = await self._obtener_datos_estudiante(uid_estudiante)
                 
                 # Generar PDF
                 pdf_buffer = self.generator.generar_certificado(
@@ -221,14 +262,17 @@ class CertificateService:
                     nombre_archivo_certificado=nombre_archivo
                 ))
                 
-                logger.info(f"Certificado generado para: {datos_estudiante.nombres}")
+                logger.info(f"✅ Certificado generado para: {datos_estudiante.nombres} {datos_estudiante.apellidos}")
                 
             except Exception as e:
-                logger.error(f"Error generando certificado para estudiante {id_estudiante}: {str(e)}")
+                logger.error(f"❌ Error generando certificado para estudiante {uid_estudiante}: {str(e)}")
+                logger.exception(e)
                 continue
         
         if not certificados_generados:
             raise ValueError("No se pudo generar ningún certificado")
+        
+        logger.info(f"📦 Empaquetando {len(certificados_generados)} certificado(s)")
         
         # Empaquetar según formato de salida
         nombre_archivo_final, buffer_final = await self._empaquetar_certificados(
@@ -246,12 +290,14 @@ class CertificateService:
         # Obtener tamaño
         tamano_bytes = os.path.getsize(ruta_archivo)
         
+        logger.info(f"💾 Archivo guardado: {ruta_archivo} ({tamano_bytes} bytes)")
+        
         # Generar URL de descarga
         base_url = os.getenv('API_BASE_URL', 'http://localhost:8000')
         url_descarga = f"{base_url}/admin/reportes/certificados/descargar/{id_lote}"
         
-        # Guardar metadata
-        fecha_generacion = datetime.now()
+        # ✅ CORRECCIÓN: Guardar metadata con timezone
+        fecha_generacion = datetime.now(timezone.utc)
         fecha_expiracion = fecha_generacion + timedelta(days=7)
         
         await self.certificate_repo.guardar_lote_certificados({
@@ -267,6 +313,8 @@ class CertificateService:
             'estado': EstadoCertificadoEnum.DISPONIBLE,
             'estudiantes': [e.dict() for e in estudiantes_info]
         })
+        
+        logger.info(f"🎉 Certificados generados exitosamente. Lote: {id_lote}")
         
         # Preparar respuesta
         return {
@@ -284,6 +332,18 @@ class CertificateService:
                 calificacion=datos_proyecto.calificacion if request.incluir_calificacion else None
             )
         }
+    
+    def _crear_zip_certificados(self, certificados: List[Dict]) -> BytesIO:
+        """Crea un archivo ZIP con todos los certificados"""
+        zip_buffer = BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for cert in certificados:
+                cert['buffer'].seek(0)
+                zipf.writestr(cert['nombre_archivo'], cert['buffer'].read())
+        
+        zip_buffer.seek(0)
+        return zip_buffer
     
     async def _empaquetar_certificados(
         self,
@@ -327,12 +387,12 @@ class CertificateService:
     ) -> Dict[str, Any]:
         """Genera un certificado individual para un estudiante"""
         
-        logger.info(f"Generando certificado individual para estudiante: {request.id_estudiante}")
+        logger.info(f"📄 Generando certificado individual para estudiante: {request.id_estudiante}")
         
         # Obtener ID del evento desde el proyecto
         id_evento = await self._obtener_id_evento_desde_proyecto(request.id_proyecto)
         
-        # Obtener datos
+        # Obtener datos (el id_estudiante es el UID)
         datos_estudiante = await self._obtener_datos_estudiante(request.id_estudiante)
         datos_proyecto = await self._obtener_datos_proyecto(request.id_proyecto)
         datos_evento = await self._obtener_datos_evento(id_evento)
@@ -363,8 +423,8 @@ class CertificateService:
         base_url = os.getenv('API_BASE_URL', 'http://localhost:8000')
         url_descarga = f"{base_url}/admin/reportes/certificados/descargar/{id_certificado}"
         
-        # Guardar metadata
-        fecha_generacion = datetime.now()
+        # ✅ CORRECCIÓN: Guardar metadata con timezone
+        fecha_generacion = datetime.now(timezone.utc)
         fecha_expiracion = fecha_generacion + timedelta(days=7)
         
         await self.certificate_repo.guardar_certificado_individual({
@@ -379,6 +439,8 @@ class CertificateService:
             'fecha_expiracion': fecha_expiracion,
             'estado': EstadoCertificadoEnum.DISPONIBLE
         })
+        
+        logger.info(f"✅ Certificado individual generado: {nombre_archivo}")
         
         return {
             'id_certificado': id_certificado,
@@ -400,14 +462,27 @@ class CertificateService:
     ) -> Dict[str, Any]:
         """Permite a un estudiante generar su propio certificado"""
         
-        logger.info(f"Estudiante {id_estudiante_autenticado} generando su certificado")
+        logger.info(f"🎓 Estudiante {id_estudiante_autenticado} generando su certificado")
         
         # Verificar que el proyecto pertenece al estudiante
         proyecto = await self.project_repo.get_by_id(request.id_proyecto)
         if not proyecto:
             raise ValueError("El proyecto especificado no existe")
         
-        if proyecto.get('id_estudiante') != id_estudiante_autenticado:
+        # Verificar que el estudiante está en el proyecto
+        estudiantes_proyecto = proyecto.get('id_estudiantes', [])
+        estudiante_encontrado = False
+        
+        for est_info in estudiantes_proyecto:
+            if isinstance(est_info, dict):
+                if est_info.get('id_estudiante') == id_estudiante_autenticado:
+                    estudiante_encontrado = True
+                    break
+            elif isinstance(est_info, str) and est_info == id_estudiante_autenticado:
+                estudiante_encontrado = True
+                break
+        
+        if not estudiante_encontrado:
             raise ValueError("No tienes permiso para generar este certificado")
         
         # Verificar que el proyecto está asociado a un evento
@@ -444,8 +519,8 @@ class CertificateService:
         base_url = os.getenv('API_BASE_URL', 'http://localhost:8000')
         url_descarga = f"{base_url}/estudiante/certificados/descargar/{id_certificado}"
         
-        # Guardar metadata
-        fecha_generacion = datetime.now()
+        # ✅ CORRECCIÓN: Guardar metadata con timezone
+        fecha_generacion = datetime.now(timezone.utc)
         fecha_expiracion = fecha_generacion + timedelta(days=7)
         
         metadata = {
@@ -503,46 +578,186 @@ class CertificateService:
             'correo_destino': correo_destino
         }
     
+    async def enviar_certificados_por_correo(
+        self,
+        request: EnviarCertificadosRequest
+    ) -> Dict[str, Any]:
+        """
+        Envía certificados por correo electrónico desde un lote generado previamente.
+        
+        Args:
+            request: Datos del lote y configuración de envío
+            
+        Returns:
+            Diccionario con resultados del envío
+        """
+        try:
+            logger.info(f"📧 Iniciando envío de certificados - Lote: {request.id_lote}")
+            
+            # 1. Obtener metadata del lote
+            lote = await self.certificate_repo.obtener_por_id(request.id_lote)
+            
+            if not lote:
+                raise ValueError(f"Lote de certificados {request.id_lote} no encontrado")
+            
+            logger.info(f"📦 Lote encontrado: {lote.get('cantidad_certificados', 0)} certificados")
+            
+            # 2. Verificar que no haya expirado
+            if lote.get('fecha_expiracion'):
+                fecha_exp = lote['fecha_expiracion']
+                if isinstance(fecha_exp, str):
+                    fecha_exp = datetime.fromisoformat(fecha_exp.replace('Z', '+00:00'))
+                
+                if datetime.now(timezone.utc) > fecha_exp:
+                    raise ValueError("El lote de certificados ha expirado")
+            
+            # 3. Verificar que exista el archivo ZIP
+            ruta_zip = lote.get('ruta_archivo')
+            if not ruta_zip or not os.path.exists(ruta_zip):
+                raise ValueError("Archivo de certificados no encontrado")
+            
+            logger.info(f"📁 Archivo encontrado: {ruta_zip}")
+            
+            # 4. Extraer certificados del ZIP
+            certificados_para_enviar = []
+            estudiantes_en_lote = lote.get('estudiantes', [])
+            
+            with zipfile.ZipFile(ruta_zip, 'r') as zip_file:
+                for estudiante_info in estudiantes_en_lote:
+                    try:
+                        nombre_archivo = estudiante_info.get('nombre_archivo_certificado')
+                        
+                        if not nombre_archivo:
+                            logger.warning(f"⚠️ Estudiante sin nombre de archivo: {estudiante_info}")
+                            continue
+                        
+                        # Leer el PDF del ZIP
+                        pdf_content = zip_file.read(nombre_archivo)
+                        
+                        # Obtener datos del estudiante para el correo
+                        # El estudiante_info debe tener: nombre_completo, identificacion
+                        nombre_completo = estudiante_info.get('nombre_completo', 'Estudiante')
+                        identificacion = estudiante_info.get('identificacion')
+                        
+                        # Buscar el correo del estudiante
+                        correo_estudiante = await self._obtener_correo_estudiante(identificacion)
+                        
+                        if not correo_estudiante:
+                            logger.warning(f"⚠️ No se encontró correo para {nombre_completo}")
+                            continue
+                        
+                        certificados_para_enviar.append({
+                            'correo': correo_estudiante,
+                            'nombre': nombre_completo,
+                            'nombre_archivo': nombre_archivo,
+                            'contenido': pdf_content
+                        })
+                        
+                        logger.info(f"✅ Preparado para {nombre_completo}: {correo_estudiante}")
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Error extrayendo certificado para {estudiante_info.get('nombre_completo', 'desconocido')}: {str(e)}")
+                        continue
+            
+            if not certificados_para_enviar:
+                raise ValueError("No se encontraron certificados válidos para enviar")
+            
+            logger.info(f"📬 {len(certificados_para_enviar)} certificados listos para envío")
+            
+            # 5. Enviar certificados usando el servicio de email
+            asunto = request.asunto or "Tu Certificado de Participación - ExpoSoftware"
+            
+            resultado_envio = await self.email_service.enviar_certificados_masivo(
+                certificados=certificados_para_enviar,
+                asunto_base=asunto,
+                mensaje_personalizado=request.mensaje_personalizado
+            )
+            
+            # 6. Actualizar estado del lote
+            if resultado_envio['exitosos'] > 0:
+                await self.certificate_repo.actualizar_estado(
+                    request.id_lote,
+                    EstadoCertificadoEnum.ENVIADO
+                )
+            
+            logger.info(f"✅ Envío completado: {resultado_envio['exitosos']}/{resultado_envio['total']} exitosos")
+            
+            # 7. Preparar respuesta
+            return {
+                'id_lote': request.id_lote,
+                'total_certificados': resultado_envio['total'],
+                'enviados_exitosamente': resultado_envio['exitosos'],
+                'envios_fallidos': resultado_envio['fallidos'],
+                'detalles_exitosos': resultado_envio['detalles_exitosos'],
+                'detalles_fallidos': resultado_envio['detalles_fallidos'],
+                'fecha_envio': resultado_envio['fecha_envio']
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error en envío de certificados: {str(e)}")
+            raise
+
     async def _enviar_certificado_por_correo(
         self,
         pdf_buffer: BytesIO,
         nombre_archivo: str,
         correo_destino: str,
-        nombre_estudiante: str,
-        asunto: Optional[str] = None,
-        mensaje_personalizado: Optional[str] = None
-    ):
-        """Envía un certificado por correo electrónico"""
-        
-        asunto_final = asunto or "Tu Certificado de Participación - ExpoSoftware"
-        
-        mensaje_html = f"""
-        <html>
-            <body>
-                <h2>Certificado de Participación</h2>
-                <p>Estimado(a) {nombre_estudiante},</p>
-                <p>Adjunto encontrarás tu certificado de participación en ExpoSoftware.</p>
-                {f'<p>{mensaje_personalizado}</p>' if mensaje_personalizado else ''}
-                <p>¡Felicitaciones por tu participación!</p>
-                <br>
-                <p>Atentamente,</p>
-                <p><strong>Facultad de Ingeniería de Sistemas</strong><br>
-                Universidad Popular del Cesar</p>
-            </body>
-        </html>
+        nombre_estudiante: str
+    ) -> bool:
         """
+        Envía un certificado individual por correo electrónico.
         
-        pdf_buffer.seek(0)
+        Args:
+            pdf_buffer: Buffer del PDF del certificado
+            nombre_archivo: Nombre del archivo
+            correo_destino: Correo del destinatario
+            nombre_estudiante: Nombre del estudiante
+            
+        Returns:
+            True si se envió correctamente
+        """
+        try:
+            pdf_buffer.seek(0)
+            pdf_content = pdf_buffer.read()
+            
+            await self.email_service.enviar_certificado_individual(
+                destinatario=correo_destino,
+                nombre_estudiante=nombre_estudiante,
+                nombre_archivo=nombre_archivo,
+                contenido_pdf=pdf_content
+            )
+            
+            logger.info(f"✅ Certificado enviado por correo a: {correo_destino}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error enviando certificado por correo a {correo_destino}: {str(e)}")
+            return False
+
+    async def _obtener_correo_estudiante(self, identificacion: str) -> Optional[str]:
+        """
+        Obtiene el correo electrónico de un estudiante por su identificación.
         
-        await self.email_service.enviar_con_adjunto(
-            destinatario=correo_destino,
-            asunto=asunto_final,
-            cuerpo_html=mensaje_html,
-            nombre_adjunto=nombre_archivo,
-            contenido_adjunto=pdf_buffer.read(),
-            tipo_adjunto='application/pdf'
-        )
-    
+        Args:
+            identificacion: Número de identificación del estudiante
+            
+        Returns:
+            Correo electrónico del estudiante o None si no se encuentra
+        """
+        try:
+            # Buscar usuario por identificación
+            usuario = await self.user_repo.get_by_identificacion(identificacion)
+            
+            if usuario and 'correo' in usuario:
+                return usuario['correo']
+            
+            logger.warning(f"⚠️ No se encontró correo para identificación: {identificacion}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo correo de estudiante {identificacion}: {str(e)}")
+            return None
+
     async def obtener_certificado_para_descarga(
         self,
         id_certificado: str,
@@ -562,15 +777,25 @@ class CertificateService:
         if id_estudiante and certificado.get('id_estudiante') != id_estudiante:
             raise ValueError("No tienes permiso para descargar este certificado")
         
-        # Verificar expiración
+        # ✅ CORRECCIÓN: Verificar expiración con timezone aware
         if certificado.get('fecha_expiracion'):
-            if datetime.now() > certificado['fecha_expiracion']:
+            fecha_exp = certificado['fecha_expiracion']
+            
+            # Convertir a datetime si es necesario
+            if isinstance(fecha_exp, str):
+                fecha_exp = datetime.fromisoformat(fecha_exp.replace('Z', '+00:00'))
+            
+            # Comparar con datetime timezone-aware
+            if datetime.now(timezone.utc) > fecha_exp:
                 raise ValueError("El enlace de descarga ha expirado")
         
         # Cargar archivo
         ruta_archivo = certificado.get('ruta_archivo')
         if not ruta_archivo or not os.path.exists(ruta_archivo):
+            logger.error(f"❌ Archivo no encontrado: {ruta_archivo}")
             raise ValueError("El archivo del certificado no está disponible")
+        
+        logger.info(f"📥 Descargando certificado desde: {ruta_archivo}")
         
         with open(ruta_archivo, 'rb') as f:
             pdf_buffer = BytesIO(f.read())

@@ -8,7 +8,6 @@ import logging
 from app.services.certificate_service import CertificateService
 from app.schemas.certificate import (
     GenerarCertificadoPorProyectoRequest,
-    GenerarCertificadoPorEventoRequest,
     GenerarCertificadoIndividualRequest,
     EnviarCertificadosRequest,
     CertificadoGeneradoResponse,
@@ -88,48 +87,6 @@ async def generar_certificados_por_proyecto(
 
 
 @router.post(
-    "/generar-por-evento",
-    response_model=Dict[str, Any],
-    status_code=status.HTTP_200_OK,
-    summary="Generar certificados para todos los estudiantes de un evento"
-)
-async def generar_certificados_por_evento(
-    request: GenerarCertificadoPorEventoRequest,
-    # current_user = Depends(get_current_admin_user)
-):
-    """
-    Genera certificados de participación para todos los estudiantes expositores 
-    que participaron en un evento específico.
-    
-    Este endpoint recorre todos los proyectos del evento y genera certificados 
-    para cada estudiante expositor.
-    """
-    try:
-        service = CertificateService()
-        # Implementar lógica para generar por evento
-        # Por ahora retornamos un placeholder
-        
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail={
-                "status": "error",
-                "mensaje": "Funcionalidad en desarrollo"
-            }
-        )
-    
-    except Exception as e:
-        logger.error(f"Error generando certificados por evento: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "status": "error",
-                "mensaje": "Error interno al generar certificados",
-                "detalles": str(e)
-            }
-        )
-
-
-@router.post(
     "/generar-individual",
     response_model=Dict[str, Any],
     status_code=status.HTTP_200_OK,
@@ -189,22 +146,55 @@ async def enviar_certificados_por_correo(
     Envía los certificados generados directamente a los correos electrónicos 
     de los estudiantes.
     
-    Cada estudiante recibe su certificado individual en su correo institucional.
+    **Proceso:**
+    1. Obtiene el lote de certificados generado previamente
+    2. Extrae los certificados individuales del archivo ZIP
+    3. Busca el correo de cada estudiante
+    4. Envía cada certificado personalizado por correo
+    5. Retorna estadísticas del envío (exitosos/fallidos)
+    
+    **Nota:** Se requiere configuración SMTP válida en variables de entorno.
     """
     try:
-        service = CertificateService()
-        # Implementar lógica de envío
+        logger.info(f"📧 Solicitud de envío de certificados - Lote: {request.id_lote}")
         
+        service = CertificateService()
+        
+        # Enviar certificados
+        resultado = await service.enviar_certificados_por_correo(request)
+        
+        # Construir mensaje de respuesta
+        if resultado['enviados_exitosamente'] == resultado['total_certificados']:
+            mensaje = f"Todos los certificados ({resultado['total_certificados']}) fueron enviados exitosamente"
+        elif resultado['enviados_exitosamente'] > 0:
+            mensaje = (
+                f"Se enviaron {resultado['enviados_exitosamente']} de {resultado['total_certificados']} certificados. "
+                f"{resultado['envios_fallidos']} envíos fallaron."
+            )
+        else:
+            mensaje = f"No se pudo enviar ningún certificado. Todos los envíos ({resultado['total_certificados']}) fallaron."
+        
+        logger.info(f"✅ Envío completado: {mensaje}")
+        
+        return {
+            "status": "success",
+            "mensaje": mensaje,
+            "data": resultado
+        }
+    
+    except ValueError as e:
+        logger.error(f"❌ Error de validación: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "status": "error",
-                "mensaje": "Funcionalidad en desarrollo"
+                "mensaje": str(e)
             }
         )
     
     except Exception as e:
-        logger.error(f"Error enviando certificados: {str(e)}")
+        logger.error(f"❌ Error enviando certificados: {str(e)}")
+        logger.exception(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -213,7 +203,6 @@ async def enviar_certificados_por_correo(
                 "detalles": str(e)
             }
         )
-
 
 @router.get(
     "/descargar/{id_lote}",
