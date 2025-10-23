@@ -10,11 +10,11 @@ from app.core.rate_limiter import auth_rate_limit
 from app.services.auth_service import AuthService
 from app.dependencies.auth_dependencies import get_current_user_from_token
 from app.utils.responses import (
-    login_success_response,
     success_response,
     unauthorized_response,
     internal_server_error_response
 )
+from app.utils.swagger_docs import ResponseDocumentation
 from app.exceptions.auth_exceptions import (
     InvalidCredentialsException,
     AccountDisabledException,
@@ -58,31 +58,31 @@ class LoginRequest(BaseModel):
         }
     }
 
-    class LoginResponse(BaseModel):
-        access_token: str = Field(..., description="Token JWT de acceso")
-        refresh_token: str = Field(..., description="Token para refrescar sesión")
-        token_type: str = Field(default="bearer", description="Tipo de token")
-        expires_in: int = Field(..., description="Tiempo de expiración en segundos")
-        user: Dict[str, Any] = Field(
-            ..., 
-            description="Datos mínimos del usuario (solo id, correo, rol)"
-        )
-        
-        model_config = {
-            "json_schema_extra": {
-                "example": {
-                    "access_token": "eyJhbGci...",
-                    "refresh_token": "AMf-vBw9...",
-                    "token_type": "bearer",
-                    "expires_in": 3600,
-                    "user": {
-                        "id_usuario": "yH0onViXLoO4cHkgxpUXqpZDmK32",
-                        "correo": "maria.perez@unicesar.edu.co",
-                        "rol": "Docente"
-                    }
+class LoginResponse(BaseModel):
+    access_token: str = Field(..., description="Token JWT de acceso")
+    refresh_token: str = Field(..., description="Token para refrescar sesión")
+    token_type: str = Field(default="bearer", description="Tipo de token")
+    expires_in: int = Field(..., description="Tiempo de expiración en segundos")
+    user: Dict[str, Any] = Field(
+        ..., 
+        description="Datos mínimos del usuario (solo id, correo, rol)"
+    )
+    
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "access_token": "eyJhbGci...",
+                "refresh_token": "AMf-vBw9...",
+                "token_type": "bearer",
+                "expires_in": 3600,
+                "user": {
+                    "id_usuario": "yH0onViXLoO4cHkgxpUXqpZDmK32",
+                    "correo": "maria.perez@unicesar.edu.co",
+                    "rol": "Docente"
                 }
             }
         }
+    }
 
 
 class RefreshTokenRequest(BaseModel):
@@ -98,7 +98,6 @@ def _create_login_response(result: Dict[str, Any]) -> Dict[str, Any]:
     """
     user_data = result.get("user", {})
     
-    # Preparar mensaje personalizado
     nombre = user_data.get("nombre")
     if nombre:
         message = f"Bienvenido, {nombre}"
@@ -132,7 +131,8 @@ def _create_login_response(result: Dict[str, Any]) -> Dict[str, Any]:
     - Invitado
     
     El sistema detecta automáticamente el rol del usuario y valida sus permisos.
-    """
+    """,
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def universal_login(
@@ -142,7 +142,6 @@ async def universal_login(
     try:
         auth_service = AuthService()
         
-        # Login sin especificar rol - el sistema lo detecta automáticamente
         result = await auth_service.login(
             correo=credentials.correo,
             password=credentials.password
@@ -172,14 +171,14 @@ async def universal_login(
     response_model=None,
     status_code=status.HTTP_200_OK,
     summary="Login específico para administradores",
-    description="Login que valida explícitamente que el usuario sea Administrativo"
+    description="Login que valida explícitamente que el usuario sea Administrativo",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def admin_login(
     request: Request,
     credentials: LoginRequest
 ) -> Dict[str, Any]:
-    """Login específico que requiere rol Administrativo"""
     try:
         auth_service = AuthService()
         
@@ -205,14 +204,14 @@ async def admin_login(
     response_model=None,
     status_code=status.HTTP_200_OK,
     summary="Login específico para docentes",
-    description="Login que valida explícitamente que el usuario sea Docente"
+    description="Login que valida explícitamente que el usuario sea Docente",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def teacher_login(
     request: Request,
     credentials: LoginRequest
 ) -> Dict[str, Any]:
-    """Login específico que requiere rol Docente"""
     try:
         auth_service = AuthService()
         
@@ -238,24 +237,22 @@ async def teacher_login(
     response_model=None,
     status_code=status.HTTP_200_OK,
     summary="Login específico para estudiantes",
-    description="Login que valida explícitamente que el usuario sea Estudiante o Egresado"
+    description="Login que valida explícitamente que el usuario sea Estudiante o Egresado",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def student_login(
     request: Request,
     credentials: LoginRequest
 ) -> Dict[str, Any]:
-    """Login específico que requiere rol Estudiante o Egresado"""
     try:
         auth_service = AuthService()
         
-        # Intentar login y luego validar que sea estudiante o egresado
         result = await auth_service.login(
             correo=credentials.correo,
             password=credentials.password
         )
         
-        # Validar rol después del login
         user_role = result["user"]["rol"]
         if user_role not in ["Estudiante", "Egresado"]:
             return unauthorized_response(
@@ -278,13 +275,13 @@ async def student_login(
     response_model=None,
     status_code=status.HTTP_200_OK,
     summary="Refrescar token de acceso",
-    description="Obtiene un nuevo access_token usando el refresh_token"
+    description="Obtiene un nuevo access_token usando el refresh_token",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 async def refresh_access_token(
     request: Request,
     refresh_data: RefreshTokenRequest
 ) -> Dict[str, Any]:
-    """Refresca el token de acceso"""
     try:
         auth_service = AuthService()
         result = await auth_service.refresh_token(refresh_data.refresh_token)
@@ -306,13 +303,13 @@ async def refresh_access_token(
     response_model=None,
     status_code=status.HTTP_200_OK,
     summary="Obtener información del usuario actual",
-    description="Obtiene los datos del usuario autenticado"
+    description="Obtiene los datos del usuario autenticado",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 async def get_current_user_info(
     request: Request,
     current_user: Dict[str, Any] = Depends(get_current_user_from_token)
 ) -> Dict[str, Any]:
-    """Obtiene información del usuario autenticado"""
     try:
         return success_response(
             data=current_user,
@@ -327,18 +324,13 @@ async def get_current_user_info(
     "/logout",
     status_code=status.HTTP_200_OK,
     summary="Cerrar sesión",
-    description="Cierra la sesión del usuario actual"
+    description="Cierra la sesión del usuario actual",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 async def logout(
     request: Request,
     current_user: Dict[str, Any] = Depends(get_current_user_from_token)
 ) -> Dict[str, Any]:
-    """
-    Cierra sesión del usuario.
-    
-    Nota: Con Firebase, el logout es principalmente del lado del cliente
-    (eliminar el token almacenado). Este endpoint sirve para registro de auditoría.
-    """
     try:
         logger.info(f"Logout de usuario: {current_user.get('email')}")
         

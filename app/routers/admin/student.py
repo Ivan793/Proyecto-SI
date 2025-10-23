@@ -19,8 +19,10 @@ from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
     success_response, created_response, paginated_response, 
     updated_response, not_found_response, conflict_response,
-    bad_request_response, internal_server_error_response
+    bad_request_response, internal_server_error_response,
+    message_response
 )
+from app.utils.swagger_docs import ResponseDocumentation
 from app.exceptions.student_exceptions import (
     StudentNotFoundException, 
     StudentAlreadyExistsException
@@ -34,7 +36,8 @@ router = APIRouter( tags=["Estudiantes - Administración"])
 @router.get(
     "",
     status_code=status.HTTP_200_OK,
-    summary="Listar todos los estudiantes"
+    summary="Listar todos los estudiantes",
+    responses=ResponseDocumentation.get_paginated_response()
 )
 async def get_students(
     request: Request,
@@ -42,9 +45,6 @@ async def get_students(
     params: PaginationParams = Depends(),
     current_user: Dict[str, Any] = Depends(require_admin_or_teacher)
 ):
-    """
-    Administradores y profesores pueden listar todos los estudiantes
-    """
     try:
         service = StudentService()
         students, total = await service.get_all_students(
@@ -57,7 +57,8 @@ async def get_students(
             data=[student.model_dump() for student in students],
             page=params.page,
             limit=params.limit,
-            total_items=total
+            total_items=total,
+            message="Estudiantes obtenidos exitosamente"
         )
         
     except Exception as e:
@@ -67,16 +68,14 @@ async def get_students(
 @router.get(
     "/{student_id}",
     status_code=status.HTTP_200_OK,
-    summary="Obtener estudiante por ID"
+    summary="Obtener estudiante por ID",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 async def get_student_by_id(
     request: Request,
     student_id: str,
     current_user: Dict[str, Any] = Depends(require_admin_or_teacher)
 ):
-    """
-    Administradores y profesores pueden obtener información de cualquier estudiante
-    """
     try:
         service = StudentService()
         student = await service.get_student(student_id)
@@ -95,7 +94,8 @@ async def get_student_by_id(
 @router.get(
     "/{student_id}/completo",
     status_code=status.HTTP_200_OK,
-    summary="Obtener estudiante con información de usuario"
+    summary="Obtener estudiante con información de usuario",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_student_with_user(
@@ -103,9 +103,6 @@ async def get_student_with_user(
     student_id: str,
     current_user: Dict[str, Any] = Depends(get_current_admin_user)
 ):
-    """
-    Solo administradores pueden ver la información completa (incluyendo datos de usuario)
-    """
     try:
         service = StudentService()
         student_with_user = await service.get_student_with_user(student_id)
@@ -126,7 +123,8 @@ async def get_student_with_user(
 @router.put(
     "/{student_id}",
     status_code=status.HTTP_200_OK,
-    summary="Actualizar estudiante"
+    summary="Actualizar estudiante",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def update_student(
@@ -135,9 +133,6 @@ async def update_student(
     student_data: StudentUpdate,
     current_user: Dict[str, Any] = Depends(get_current_admin_user)
 ):
-    """
-    Solo administradores pueden actualizar información de cualquier estudiante
-    """
     try:
         service = StudentService()
         student = await service.update_student(student_id, student_data)
@@ -158,7 +153,8 @@ async def update_student(
 @router.patch(
     "/{student_id}/desactivar",
     status_code=status.HTTP_200_OK,
-    summary="Desactivar estudiante"
+    summary="Desactivar estudiante",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def deactivate_student(
@@ -167,19 +163,13 @@ async def deactivate_student(
     razon: ReasonText = Body(..., embed=True),
     current_user: Dict[str, Any] = Depends(get_current_admin_user)
 ):
-    """
-    Solo administradores pueden desactivar estudiantes
-    """
     try:
         service = StudentService()
         success = await service.deactivate_student(student_id, razon)
         
         if success:
             logger.info(f"Estudiante desactivado: {student_id}")
-            return success_response(
-                data={"desactivado": True},
-                message="Estudiante desactivado exitosamente"
-            )
+            return message_response("Estudiante desactivado exitosamente")
         return bad_request_response(message="No se pudo desactivar")
             
     except StudentNotFoundException:
@@ -191,7 +181,8 @@ async def deactivate_student(
 @router.patch(
     "/{student_id}/activar",
     status_code=status.HTTP_200_OK,
-    summary="Activar estudiante"
+    summary="Activar estudiante",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def activate_student(
@@ -199,19 +190,13 @@ async def activate_student(
     student_id: str,
     current_user: Dict[str, Any] = Depends(get_current_admin_user)
 ):
-    """
-    Solo administradores pueden activar estudiantes
-    """
     try:
         service = StudentService()
         success = await service.activate_student(student_id)
         
         if success:
             logger.info(f"Estudiante activado: {student_id}")
-            return success_response(
-                data={"activado": True},
-                message="Estudiante activado exitosamente"
-            )
+            return message_response("Estudiante activado exitosamente")
         return bad_request_response(message="No se pudo activar")
             
     except StudentNotFoundException:
@@ -223,16 +208,14 @@ async def activate_student(
 @router.get(
     "/programa/{program_code}",
     status_code=status.HTTP_200_OK,
-    summary="Obtener estudiantes por programa"
+    summary="Obtener estudiantes por programa",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 async def get_students_by_program(
     request: Request,
     program_code: str,
     current_user: Dict[str, Any] = Depends(require_admin_or_teacher)
 ):
-    """
-    Administradores y profesores pueden filtrar estudiantes por programa
-    """
     try:
         service = StudentService()
         students = await service.get_students_by_program(program_code)

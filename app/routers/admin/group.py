@@ -12,8 +12,10 @@ from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
     success_response, created_response, paginated_response, 
     updated_response, not_found_response, conflict_response,
-    bad_request_response, internal_server_error_response
+    bad_request_response, internal_server_error_response,
+    message_response
 )
+from app.utils.swagger_docs import ResponseDocumentation
 from app.exceptions.group_exceptions import (
     GroupNotFoundException, 
     GroupAlreadyExistsException,
@@ -32,7 +34,8 @@ router = APIRouter(tags=["Grupos - Admin"])
     "",
     status_code=status.HTTP_201_CREATED,
     summary="Crear nuevo grupo",
-    description="Crea un nuevo grupo asignado a una materia y un profesor"
+    description="Crea un nuevo grupo asignado a una materia y un profesor",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def create_group(
@@ -43,7 +46,7 @@ async def create_group(
     try:
         service = GroupService()
         subject_code = group_data.codigo_materia
-        group = await service.create_group(group_data,subject_code, current_admin["user_id"])
+        group = await service.create_group(group_data, subject_code, current_admin["user_id"])
         
         logger.info(f"Grupo creado: {group.codigo_grupo} por {current_admin['nombre_completo']}")
         
@@ -69,7 +72,8 @@ async def create_group(
     "",
     status_code=status.HTTP_200_OK,
     summary="Listar todos los grupos",
-    description="Obtiene la lista de grupos con opciones de filtrado y paginación"
+    description="Obtiene la lista de grupos con opciones de filtrado y paginación",
+    responses=ResponseDocumentation.get_paginated_response()
 )
 @admin_rate_limit()
 async def get_groups(
@@ -94,7 +98,8 @@ async def get_groups(
             data=[group.model_dump() for group in groups],
             page=params.page,
             limit=params.limit,
-            total_items=total
+            total_items=total,
+            message="Grupos obtenidos exitosamente"
         )
         
     except Exception as e:
@@ -106,7 +111,8 @@ async def get_groups(
     "/{group_code}",
     status_code=status.HTTP_200_OK,
     summary="Obtener grupo por código",
-    description="Obtiene información detallada de un grupo específico"
+    description="Obtiene información detallada de un grupo específico",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_group_by_code(
@@ -134,7 +140,8 @@ async def get_group_by_code(
     "/{group_code}/completo",
     status_code=status.HTTP_200_OK,
     summary="Obtener grupo con detalles completos",
-    description="Obtiene información completa del grupo incluyendo materia y profesor"
+    description="Obtiene información completa del grupo incluyendo materia y profesor",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_group_with_details(
@@ -162,7 +169,8 @@ async def get_group_with_details(
     "/{group_code}",
     status_code=status.HTTP_200_OK,
     summary="Actualizar grupo",
-    description="Actualiza la información de un grupo existente"
+    description="Actualiza la información de un grupo existente",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def update_group(
@@ -199,7 +207,8 @@ async def update_group(
     "/materia/{subject_code}",
     status_code=status.HTTP_200_OK,
     summary="Obtener grupos por materia",
-    description="Obtiene todos los grupos asociados a una materia específica"
+    description="Obtiene todos los grupos asociados a una materia específica",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_groups_by_subject(
@@ -225,7 +234,8 @@ async def get_groups_by_subject(
     "/profesor/{teacher_id}",
     status_code=status.HTTP_200_OK,
     summary="Obtener grupos por profesor",
-    description="Obtiene todos los grupos asignados a un profesor específico"
+    description="Obtiene todos los grupos asignados a un profesor específico",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_groups_by_teacher(
@@ -251,7 +261,8 @@ async def get_groups_by_teacher(
     "/{group_code}/desactivar",
     status_code=status.HTTP_200_OK,
     summary="Desactivar grupo",
-    description="Desactiva un grupo de forma lógica (no elimina el registro)"
+    description="Desactiva un grupo de forma lógica (no elimina el registro)",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def deactivate_group(
@@ -266,14 +277,9 @@ async def deactivate_group(
         
         if success:
             logger.info(f"Grupo desactivado: {group_code} por {current_admin['nombre_completo']}")
-            return success_response(
-                data={"desactivado": True},
-                message="Grupo desactivado exitosamente"
-            )
+            return message_response("Grupo desactivado exitosamente")
         else:
-            return bad_request_response(
-                message="No se pudo desactivar el grupo"
-            )
+            return bad_request_response(message="No se pudo desactivar el grupo")
             
     except GroupNotFoundException as e:
         return not_found_response("Grupo", group_code)
