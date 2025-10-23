@@ -1,12 +1,22 @@
+<<<<<<< HEAD
 
 
 # Entorno virtual
+=======
+# =========================================
+# PROYECTO FASTAPI + FIREBASE (.gitignore)
+# =========================================
+
+# --- Entornos virtuales ---
+>>>>>>> origin/Miguel
 venv/
 env/
+.venv/
 
-# Archivos de caché
+# --- Cachés y compilados ---
 __pycache__/
 *.pyc
+<<<<<<< HEAD
 
 # Archivos del sistema
 .DS_Store
@@ -22,13 +32,24 @@ __pycache__/
 
 # Python
 __pycache__/
+=======
+*.pyo
+*.pyd
+>>>>>>> origin/Miguel
 *.py[cod]
 *$py.class
-*.so
-.Python
+
+# --- Archivos temporales y del sistema ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# --- Archivos de construcción y distribución ---
 build/
-develop-eggs/
 dist/
+develop-eggs/
 downloads/
 eggs/
 .eggs/
@@ -42,51 +63,52 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-ENV/
-env/
-.venv/
-
-# IDEs
+# --- IDEs y editores ---
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
 
-# Environment variables
+# --- Variables de entorno ---
 .env
 .env.local
 .env.*.local
 
-# Firebase credentials
-firebase_credentials.json
-serviceAccountKey.json
-*-firebase-adminsdk-*.json
-
-# Logs
+# --- Archivos de log ---
 *.log
 logs/
 
-# OS
-.DS_Store
-Thumbs.db
+# --- Bases de datos locales ---
+*.db
+*.sqlite
+*.sqlite3
 
-# Testing
+# --- Archivos de pruebas ---
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Temporary files
+# --- Archivos temporales ---
 tmp/
 temp/
 *.tmp
+<<<<<<< HEAD
 credentials/serviceAccountKey.json
 
+=======
+
+# =========================================
+# Credenciales y llaves privadas (Firebase)
+# =========================================
+firebase_credentials.json
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+*.firebase.json
+*.key.json
+*.credentials.json
+
+# --- Otros archivos sensibles ---
+*.pem
+*.crt
+*.csr
+*.key
+>>>>>>> origin/Miguel

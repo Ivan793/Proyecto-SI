@@ -8,10 +8,24 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
+from contextlib import asynccontextmanager
+import logging, sys
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
+from app.core.config import settings
+from app.core.firebase import firebase_client
+from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
+from app.exceptions.handlers import register_exception_handlers
+from slowapi.errors import RateLimitExceeded
+
+# Importar todos los routers de forma centralizada
+from app.routers import graduate_router, guest_router, router as api_router
+
+# Configuración de logs
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL),
+    format=settings.LOG_FORMAT,
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
 logger = logging.getLogger(__name__)
 
 # Cargar variables de entorno
@@ -108,8 +122,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Endpoints básicos
-@app.get("/")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+register_exception_handlers(app)
+
+# Routers
+app.include_router(api_router)
+
+
+# Health check
+@app.get("/", tags=["Health"])
 async def root():
     return {
         "mensaje": "API ExpoSoftware",
