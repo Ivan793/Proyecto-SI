@@ -6,7 +6,12 @@ from app.schemas.teacher import TeacherBase
 
 router = APIRouter(prefix="/teachers", tags=["Teachers"])
 
-@router.get("/{teacher_id}", response_model=TeacherBase)
+@router.get("/projects")
+def get_all_projects():
+    projects = teacher_service.list_all_projects()
+    return projects
+
+@router.get("/{teacher_id}/profile", response_model=TeacherBase)
 def get_teacher_info(teacher_id: str):
     try:
         teacher = teacher_service.get_teacher_info(teacher_id)
@@ -33,3 +38,4 @@ def get_project_detail(teacher_id: str, project_id: str):
         return project
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+

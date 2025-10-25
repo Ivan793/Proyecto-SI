@@ -4,6 +4,8 @@ from app.routers.teacher_router import router as teacher_router
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Proyecto-SI")
+
+# ✅ Registrar el router correctamente
 app.include_router(teacher_router)
 
 @app.on_event("startup")
