@@ -3,3 +3,6 @@ __pycache__/
 serviceAccountKey.json
 .venv/
 .venv/pyvenv.cfg
+__pycache__/
+*.pyc
+*.pyo
