@@ -23,3 +23,9 @@ def get_project_info(project_id: str):
     if not project:
         raise ValueError("Project not found")
     return project
+
+######################################################################
+
+def list_all_projects() -> List[Proyecto]:
+    projects = teacher_repository.get_all_projects()
+    return projects
