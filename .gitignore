@@ -1,12 +1,3 @@
-.serviceAccountKey.json
-__pycache__/
-serviceAccountKey.json
-.venv/
-.venv/pyvenv.cfg
-__pycache__/
-*.pyc
-*.pyo
-=======
 # Ignorar entorno virtual
 .venv/
 
