@@ -42,7 +42,6 @@ SCHEMA_EXAMPLES: Dict[str, Dict[str, Any]] = {
         "fecha_fin": "2025-11-01T23:59:59",
         "lugar": "Auditorio Principal UPC",
         "cupo_maximo": 100,
-        "permite_invitados": True
     },
     
     "SubjectCreate": {
