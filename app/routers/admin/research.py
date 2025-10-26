@@ -14,9 +14,10 @@ from app.schemas.ThematicArea import ThematicAreaCreate, ThematicAreaUpdate
 from app.dependencies.auth_dependencies import get_current_admin_user
 from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
-    created_response, updated_response,
+    created_response, updated_response, success_response,
     not_found_response, conflict_response, internal_server_error_response
 )
+from app.utils.swagger_docs import ResponseDocumentation
 from app.exceptions.research_exceptions import (
     ResearchLineNotFoundException, ResearchLineAlreadyExistsException,
     SubResearchLineNotFoundException, SubResearchLineAlreadyExistsException,
@@ -34,7 +35,8 @@ router = APIRouter(tags=["Investigación - Admin"])
     "/lineas",
     status_code=status.HTTP_201_CREATED,
     summary="Crear línea de investigación",
-    description="**Solo Administradores**"
+    description="**Solo Administradores**",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def create_research_line(
@@ -59,7 +61,8 @@ async def create_research_line(
 @router.put(
     "/lineas/{line_code}",
     summary="Actualizar línea de investigación", 
-    description="**Solo Administradores**"
+    description="**Solo Administradores**",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def update_research_line(
@@ -90,7 +93,8 @@ async def update_research_line(
     "/lineas/{line_code}/sublineas",
     status_code=status.HTTP_201_CREATED,
     summary="Crear sublínea de investigación",
-    description="**Solo Administradores**. Crea una sublínea dentro de una línea específica"
+    description="**Solo Administradores**. Crea una sublínea dentro de una línea específica",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def create_subresearch_line(
@@ -100,7 +104,6 @@ async def create_subresearch_line(
     current_user: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
-        # Asegurar que el line_code del path coincide con el del body
         if subline_data.codigo_linea != line_code:
             return conflict_response(
                 message="El código de línea en el path no coincide con el del cuerpo de la solicitud"
@@ -124,7 +127,8 @@ async def create_subresearch_line(
 @router.put(
     "/lineas/{line_code}/sublineas/{subline_code}",
     summary="Actualizar sublínea de investigación",
-    description="**Solo Administradores**"
+    description="**Solo Administradores**",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def update_subresearch_line(
@@ -156,7 +160,8 @@ async def update_subresearch_line(
     "/lineas/{line_code}/sublineas/{subline_code}/areas-tematicas",
     status_code=status.HTTP_201_CREATED,
     summary="Crear área temática",
-    description="**Solo Administradores**. Crea un área temática dentro de una sublínea"
+    description="**Solo Administradores**. Crea un área temática dentro de una sublínea",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def create_thematic_area(
@@ -167,7 +172,6 @@ async def create_thematic_area(
     current_user: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
-        # Asegurar que el subline_code del path coincide con el del body
         if area_data.codigo_sublinea != subline_code:
             return conflict_response(
                 message="El código de sublínea en el path no coincide con el del cuerpo de la solicitud"
@@ -191,7 +195,8 @@ async def create_thematic_area(
 @router.put(
     "/lineas/{line_code}/sublineas/{subline_code}/areas-tematicas/{area_code}",
     summary="Actualizar área temática",
-    description="**Solo Administradores**"
+    description="**Solo Administradores**",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def update_thematic_area(

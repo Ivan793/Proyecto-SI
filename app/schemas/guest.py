@@ -1,49 +1,103 @@
-from pydantic import BaseModel, Field
-from typing import Annotated
-from app.schemas.user import UserBase  # 👈 se usa para el registro en cascada
-
-
-IdSector = Annotated[str, Field(min_length=5, max_length=50, description="ID de sector en colección sectores")]
-NombreEmpresa = Annotated[str, Field(min_length=2, max_length=60, pattern="^[A-Za-z0-9\\s\\-\\.]+$", description="Nombre de la empresa")]
-
+from pydantic import BaseModel, ConfigDict, field_validator
+from typing import Optional, Dict
+from datetime import datetime
+from app.schemas.types import *
+from app.schemas.user import UserBase
+from app.core.constants import Defaults, ValidationMessages, Limits
+from app.core.patterns import Patterns
+import re
 
 class GuestBase(BaseModel):
-    id_sector: IdSector
-    nombre_empresa: NombreEmpresa
+    institucion_origen: Optional[Institution] = None
+    motivo_visita: Optional[VisitReason] = None
+    activo: StatusActive = Defaults.ACTIVE_STATUS
 
-
-class GuestCreate(GuestBase):
-    usuario: UserBase  # 👈 Aquí se recibe todo el objeto de usuario en cascada
-
-    model_config = {
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
-                "usuario": {
-                    "tipo_documento": "CC",
-                    "identificacion": "1009876543",
-                    "nombres": "Laura",
-                    "apellidos": "Torres",
-                    "genero": "Mujer",
-                    "identidad_sexual": "Heterosexual",
-                    "fecha_nacimiento": "2002-05-12",
-                    "direccion": "Calle 20 #10-33",
-                    "pais": "Colombia",
-                    "ciudad": "Valledupar",
-                    "telefono": "+573054445555",
-                    "correo": "laura.torres@unicesar.edu.co",
-                    "contraseña": "Contra55#",
-                    "rol": "Invitado"
-                },
-                "id_sector": "SEC001",
-                "nombre_empresa": "InnovaTech S.A.S."
+                "institucion_origen": "Universidad Nacional",
+                "motivo_visita": "Conferencia académica",
+                "activo": True
             }
         }
-    }
+    )
 
+class GuestCreate(UserBase, GuestBase):
+    contraseña: UserPassword
 
-class GuestResponse(GuestBase):
-    id_invitado: str
-    id_usuario: str
+    @field_validator("correo")
+    def validate_guest_email(cls, v):
+        if not re.match(r"^[\w\.-]+@[\w\.-]+\.\w+$", v):
+            raise ValueError(ValidationMessages.INVALID_EMAIL)
+        return v
 
-    class Config:
-        orm_mode = True
+    @field_validator("contraseña")
+    def validate_password_strength(cls, v):
+        base_pattern = Patterns.PASSWORD.rstrip('$')
+        full_pattern = f"{base_pattern}.{{{Limits.PASSWORD_MIN},{Limits.PASSWORD_MAX}}}$"
+        if not re.match(full_pattern, v):
+            raise ValueError(ValidationMessages.INVALID_PASSWORD)
+        return v
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "tipo_documento": "CC",
+                "identificacion": "1234567890",
+                "nombres": "Laura",
+                "apellidos": "Castillo Ríos",
+                "genero": "Mujer",
+                "identidad_sexual": "Heterosexual",
+                "fecha_nacimiento": "1998-05-17",
+                "nacionalidad": "Colombiana",
+                "pais_residencia": "Colombia",
+                "departamento": "Atlántico",
+                "municipio": "Barranquilla",
+                "ciudad_residencia": "Barranquilla",
+                "direccion_residencia": "Carrera 45 #32-15",
+                "telefono": "+573002223334",
+                "correo": "laura.castillo@gmail.com",
+                "contraseña": "Invitado123#",
+                "rol": "Invitado",
+                "institucion_origen": "Universidad del Norte",
+                "motivo_visita": "Foro de Tecnología",
+                "activo": True
+            }
+        }
+    )
+
+class GuestCreateExistingUser(GuestBase):
+    id_usuario: UserId
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id_usuario": "abc12345",
+                "institucion_origen": "SENA",
+                "motivo_visita": "Capacitación docente",
+                "activo": True
+            }
+        }
+    )
+
+class GuestUpdate(BaseModel):
+    institucion_origen: Optional[Institution] = None
+    motivo_visita: Optional[VisitReason] = None
+    activo: Optional[StatusActive] = None
+
+class GuestResponse(BaseModel):
+    id_invitado: GuestId
+    id_usuario: UserId
+    institucion_origen: Optional[Institution] = None
+    motivo_visita: Optional[VisitReason] = None
+    activo: StatusActive = Defaults.ACTIVE_STATUS
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class GuestWithUserResponse(BaseModel):
+    invitado: GuestResponse
+    usuario: Dict
+
+    model_config = ConfigDict(from_attributes=True)

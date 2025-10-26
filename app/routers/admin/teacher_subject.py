@@ -1,4 +1,3 @@
-# app/routers/admin/teacher_subject.py
 from fastapi import APIRouter, Body, Depends, Query, status, Request
 from typing import Optional, Dict, Any, List
 import logging
@@ -12,8 +11,10 @@ from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
     success_response, created_response, paginated_response, 
     updated_response, not_found_response, conflict_response,
-    bad_request_response, internal_server_error_response
+    bad_request_response, internal_server_error_response,
+    message_response
 )
+from app.utils.swagger_docs import ResponseDocumentation
 from app.exceptions.teacher_subject_exceptions import (
     TeacherSubjectNotFoundException,
     TeacherSubjectAlreadyExistsException,
@@ -32,7 +33,8 @@ router = APIRouter(tags=["Asignaciones Docente-Materia - Admin"])
     "",
     status_code=status.HTTP_201_CREATED,
     summary="Crear asignación docente-materia",
-    description="Asigna un docente a una materia y grupo específico"
+    description="Asigna un docente a una materia y grupo específico",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def create_teacher_subject_assignment(
@@ -76,7 +78,8 @@ async def create_teacher_subject_assignment(
 @router.get(
     "/{assignment_id}",
     status_code=status.HTTP_200_OK,
-    summary="Obtener asignación por ID"
+    summary="Obtener asignación por ID",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_assignment_by_id(
@@ -103,7 +106,8 @@ async def get_assignment_by_id(
 @router.get(
     "/docente/{teacher_id}",
     status_code=status.HTTP_200_OK,
-    summary="Obtener asignaciones por docente"
+    summary="Obtener asignaciones por docente",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_assignments_by_teacher(
@@ -129,7 +133,8 @@ async def get_assignments_by_teacher(
 @router.get(
     "/materia/{subject_code}",
     status_code=status.HTTP_200_OK,
-    summary="Obtener asignaciones por materia"
+    summary="Obtener asignaciones por materia",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_assignments_by_subject(
@@ -155,7 +160,8 @@ async def get_assignments_by_subject(
 @router.get(
     "/grupo/{group_code}",
     status_code=status.HTTP_200_OK,
-    summary="Obtener asignaciones por grupo"
+    summary="Obtener asignaciones por grupo",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_assignments_by_group(
@@ -181,7 +187,8 @@ async def get_assignments_by_group(
 @router.put(
     "/{assignment_id}",
     status_code=status.HTTP_200_OK,
-    summary="Actualizar asignación"
+    summary="Actualizar asignación",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def update_assignment(
@@ -219,7 +226,8 @@ async def update_assignment(
 @router.patch(
     "/{assignment_id}/desactivar",
     status_code=status.HTTP_200_OK,
-    summary="Desactivar asignación"
+    summary="Desactivar asignación",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def deactivate_assignment(
@@ -234,10 +242,7 @@ async def deactivate_assignment(
         
         if success:
             logger.info(f"Asignación desactivada: {assignment_id} por {current_admin['nombre_completo']}")
-            return success_response(
-                data={"desactivado": True},
-                message="Asignación desactivada exitosamente"
-            )
+            return message_response("Asignación desactivada exitosamente")
         return bad_request_response(message="No se pudo desactivar la asignación")
             
     except TeacherSubjectNotFoundException:
@@ -250,7 +255,8 @@ async def deactivate_assignment(
 @router.patch(
     "/{assignment_id}/activar",
     status_code=status.HTTP_200_OK,
-    summary="Activar asignación"
+    summary="Activar asignación",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def activate_assignment(
@@ -264,10 +270,7 @@ async def activate_assignment(
         
         if success:
             logger.info(f"Asignación activada: {assignment_id} por {current_admin['nombre_completo']}")
-            return success_response(
-                data={"activado": True},
-                message="Asignación activada exitosamente"
-            )
+            return message_response("Asignación activada exitosamente")
         return bad_request_response(message="No se pudo activar la asignación")
             
     except TeacherSubjectNotFoundException:
@@ -280,7 +283,8 @@ async def activate_assignment(
 @router.get(
     "/docente/{teacher_id}/carga",
     status_code=status.HTTP_200_OK,
-    summary="Obtener carga de trabajo del docente"
+    summary="Obtener carga de trabajo del docente",
+    responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_teacher_workload(
