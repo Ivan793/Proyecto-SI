@@ -1,3 +1,14 @@
+# schemas/proyecto_schema.py
+from pydantic import BaseModel
+from typing import Optional
+
+class Proyecto(BaseModel):
+    id_proyecto: str
+    titulo: str
+    descripcion: Optional[str]
+    autor: Optional[str]
+    asignatura_codigo: Optional[str]
+    fecha_registro: Optional[str]  # ISO string
 from __future__ import annotations
 from pydantic import BaseModel, Field, field_serializer
 from typing import Optional
