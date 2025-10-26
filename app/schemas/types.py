@@ -3,7 +3,7 @@ from pydantic import Field, EmailStr
 from datetime import date, datetime
 
 from app.core.constants import Limits, Defaults
-from app.core.enums import Role, DocumentType, Gender, TeacherCategory, EventState, SubjectCycle
+from app.core.enums import Role, DocumentType, Sex, TeacherCategory, EventState, SubjectCycle
 from app.core.patterns import Patterns
 
 # ==================== TIPOS BASE ====================
@@ -42,9 +42,9 @@ UserName = Annotated[
     )
 ]
 
-UserGender = Annotated[
-    Gender, 
-    Field(description="Género del usuario")
+UserSex = Annotated[
+    Sex, 
+    Field(description="Sexo del usuario")
 ]
 
 UserSexualIdentity = Annotated[

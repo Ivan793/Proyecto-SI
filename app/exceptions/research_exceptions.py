@@ -1,4 +1,6 @@
 from .base_exceptions import NotFoundException, ConflictException, ValidationException
+from app.core.response_codes import ResponseCode
+
 
 # ==================== LÍNEA DE INVESTIGACIÓN ====================
 
@@ -8,7 +10,8 @@ class ResearchLineNotFoundException(NotFoundException):
     def __init__(self, line_code: int):
         super().__init__(
             resource="Línea de investigación",
-            identifier=str(line_code)
+            identifier=str(line_code),
+            code=ResponseCode.NOT_FOUND
         )
 
 class ResearchLineAlreadyExistsException(ConflictException):
@@ -17,7 +20,8 @@ class ResearchLineAlreadyExistsException(ConflictException):
     def __init__(self, line_code: int):
         super().__init__(
             message=f"Ya existe una línea de investigación con código {line_code}",
-            conflict_field="codigo_linea"
+            conflict_field="codigo_linea",
+            code=ResponseCode.ALREADY_EXISTS
         )
 
 # ==================== SUBLÍNEA DE INVESTIGACIÓN ====================
@@ -28,7 +32,8 @@ class SubResearchLineNotFoundException(NotFoundException):
     def __init__(self, subline_code: int):
         super().__init__(
             resource="Sublínea de investigación",
-            identifier=str(subline_code)
+            identifier=str(subline_code),
+            code=ResponseCode.NOT_FOUND
         )
 
 class SubResearchLineAlreadyExistsException(ConflictException):
@@ -37,7 +42,8 @@ class SubResearchLineAlreadyExistsException(ConflictException):
     def __init__(self, subline_name: str):
         super().__init__(
             message=f"Ya existe una sublínea con el nombre '{subline_name}'",
-            conflict_field="nombre_sublinea"
+            conflict_field="nombre_sublinea",
+            code=ResponseCode.ALREADY_EXISTS
         )
 
 class InvalidResearchLineException(ValidationException):
@@ -46,7 +52,8 @@ class InvalidResearchLineException(ValidationException):
     def __init__(self, line_code: int):
         super().__init__(
             message=f"La línea de investigación {line_code} no existe",
-            field="codigo_linea"
+            field="codigo_linea",
+            code=ResponseCode.VALIDATION_ERROR
         )
 
 # ==================== ÁREA TEMÁTICA ====================
@@ -57,7 +64,8 @@ class ThematicAreaNotFoundException(NotFoundException):
     def __init__(self, area_code: int):
         super().__init__(
             resource="Área temática",
-            identifier=str(area_code)
+            identifier=str(area_code),
+            code=ResponseCode.NOT_FOUND
         )
 
 class ThematicAreaAlreadyExistsException(ConflictException):
@@ -66,7 +74,8 @@ class ThematicAreaAlreadyExistsException(ConflictException):
     def __init__(self, area_name: str):
         super().__init__(
             message=f"Ya existe un área temática con el nombre '{area_name}'",
-            conflict_field="nombre_area"
+            conflict_field="nombre_area",
+            code=ResponseCode.ALREADY_EXISTS
         )
 
 class InvalidSubResearchLineException(ValidationException):
@@ -75,5 +84,6 @@ class InvalidSubResearchLineException(ValidationException):
     def __init__(self, subline_code: int):
         super().__init__(
             message=f"La sublínea de investigación {subline_code} no existe",
-            field="codigo_sublinea"
+            field="codigo_sublinea",
+            code=ResponseCode.VALIDATION_ERROR
         )

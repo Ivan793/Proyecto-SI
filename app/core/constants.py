@@ -1,3 +1,8 @@
+"""
+Constantes y configuraciones centralizadas del sistema
+"""
+from enum import Enum
+
 class Limits:
     """Límites de longitud y validaciones numéricas generales."""
     
@@ -119,3 +124,46 @@ class ValidationMessages:
     
     # Estados
     INVALID_STATE_CHANGE = "El cambio de estado no es válido"
+    
+    # Dominios institucionales
+    INSTITUTIONAL_EMAIL_REQUIRED = "Los usuarios con rol '{role}' deben tener correo institucional ({domains})"
+    INVALID_EMAIL_DOMAIN = "El dominio del correo no está permitido para el rol {role}"
+
+
+class EmailDomains:
+    """Configuración centralizada de dominios de correo permitidos por rol."""
+    
+    # Dominios permitidos por rol - FÁCILMENTE CONFIGURABLE
+    ALLOWED_DOMAINS = {
+        "DOCENTE": ["@unicesar.edu.co", "@prof.unicesar.edu.co"],
+        "ESTUDIANTE": ["@unicesar.edu.co", "@est.unicesar.edu.co"],
+        "ADMINISTRATIVO": ["@unicesar.edu.co"],
+        "INVITADO": ["*"],  # Cualquier dominio permitido
+        "EGRESADO": ["*"]   # Cualquier dominio permitido
+    }
+    
+    @classmethod
+    def get_allowed_domains(cls, role: str) -> list:
+        """Obtiene los dominios permitidos para un rol específico."""
+        return cls.ALLOWED_DOMAINS.get(role.upper(), ["*"])
+    
+    @classmethod
+    def is_domain_allowed(cls, email: str, role: str) -> bool:
+        """Verifica si un dominio está permitido para el rol."""
+        domains = cls.get_allowed_domains(role)
+        
+        # Si permite cualquier dominio
+        if "*" in domains:
+            return True
+            
+        # Verificar dominios específicos
+        return any(email.lower().endswith(domain.lower()) for domain in domains)
+    
+    @classmethod
+    def add_domain_for_role(cls, role: str, domain: str):
+        """Agrega un nuevo dominio para un rol (para extensibilidad)."""
+        if role.upper() not in cls.ALLOWED_DOMAINS:
+            cls.ALLOWED_DOMAINS[role.upper()] = []
+        
+        if domain not in cls.ALLOWED_DOMAINS[role.upper()]:
+            cls.ALLOWED_DOMAINS[role.upper()].append(domain)

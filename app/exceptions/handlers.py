@@ -4,8 +4,71 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from datetime import datetime
 import logging
+import traceback
 
 from .base_exceptions import AppException
+from app.exceptions.teacher_subject_exceptions import (
+    TeacherSubjectNotFoundException,
+    TeacherSubjectAlreadyExistsException,
+    TeacherSubjectAssignmentException,
+    TeacherSubjectHasDependenciesException,
+    TeacherNotAvailableException
+)
+
+from app.exceptions.event_exceptions import (
+    EventNotFoundException,
+    EventAlreadyExistsException,
+    EventFullException,
+    InvalidEventDatesException,
+    InvalidEventStateTransitionException,
+    EventNotActiveException
+)
+
+from app.exceptions.research_exceptions import (
+    ResearchLineNotFoundException,
+    ResearchLineAlreadyExistsException,
+    SubResearchLineNotFoundException,
+    SubResearchLineAlreadyExistsException,
+    InvalidResearchLineException,
+    ThematicAreaNotFoundException,
+    ThematicAreaAlreadyExistsException,
+    InvalidSubResearchLineException
+)
+
+from app.exceptions.subject_exceptions import (
+    SubjectNotFoundException,
+    SubjectAlreadyExistsException,
+    SubjectHasDependenciesException,
+    InvalidSubjectStateException,
+    MinimumGroupsRequiredException
+)
+
+from app.exceptions.group_exceptions import (
+    GroupNotFoundException,
+    GroupAlreadyExistsException,
+    GroupHasStudentsException,
+    GroupHasNoTeacherException,
+    GroupHasNoSubjectException,
+    GroupHasDependenciesException
+)
+from .teacher_exceptions import (
+    TeacherNotFoundException, 
+    TeacherAlreadyExistsException, 
+    TeacherHasAssignmentsException
+)
+from .user_exceptions import (
+    UserNotFoundException, 
+    UserAlreadyExistsException,
+    InvalidEmailDomainException
+)
+from .auth_exceptions import (
+    InvalidCredentialsException,
+    TokenExpiredException,
+    InvalidTokenException,
+    TokenNotFoundException,
+    InsufficientPermissionsException,
+    AccountDisabledException
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,17 +102,29 @@ def format_error_response(
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
     """Maneja excepciones personalizadas de la aplicación"""
     
-    # Registrar el error
-    logger.warning(
-        f"AppException: {exc.message} | Status: {exc.status_code} | Path: {request.url.path}",
-        extra={"details": exc.details}
-    )
+    # Registrar el error según el nivel
+    if exc.status_code >= 500:
+        logger.error(
+            f"AppException: {exc.message} | Status: {exc.status_code} | Path: {request.url.path}",
+            extra={"details": exc.details},
+            exc_info=True
+        )
+    else:
+        logger.warning(
+            f"AppException: {exc.message} | Status: {exc.status_code} | Path: {request.url.path}",
+            extra={"details": exc.details}
+        )
     
-    response_data = format_error_response(
-        status_code=exc.status_code,
-        message=exc.message,
-        **exc.details
-    )
+    response_data = {
+        "status": "error",
+        "message": exc.message,
+        "code": getattr(exc, 'code', 'UNKNOWN_ERROR'),
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    
+    # Agregar detalles si existen
+    if exc.details:
+        response_data["details"] = exc.details
     
     return JSONResponse(
         status_code=exc.status_code,
@@ -77,17 +152,19 @@ async def validation_exception_handler(
         extra={"errors": errors}
     )
     
-    response_data = format_error_response(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        message="Datos de entrada inválidos",
-        errors=errors,
-        code="VALIDATION_ERROR"
-    )
+    response_data = {
+        "status": "error",
+        "message": "Datos de entrada inválidos",
+        "errors": errors,
+        "code": "VALIDATION_ERROR",
+        "timestamp": datetime.utcnow().isoformat()
+    }
     
     return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=response_data
     )
+
 
 
 async def pydantic_validation_exception_handler(
@@ -122,16 +199,17 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     """Maneja excepciones genéricas no capturadas"""
     
     # Registrar el error completo
-    logger.error(
+    logger.critical(
         f"Unhandled exception: {str(exc)} | Path: {request.url.path}",
         exc_info=True
     )
     
-    response_data = format_error_response(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        message="Error interno del servidor",
-        code="INTERNAL_SERVER_ERROR"
-    )
+    response_data = {
+        "status": "error",
+        "message": "Error interno del servidor",
+        "code": "INTERNAL_SERVER_ERROR",
+        "timestamp": datetime.utcnow().isoformat()
+    }
     
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -145,6 +223,64 @@ def register_exception_handlers(app):
     # Excepciones personalizadas
     app.add_exception_handler(AppException, app_exception_handler)
     
+    # Excepciones de asignación docente-materia
+    app.add_exception_handler(TeacherSubjectNotFoundException, app_exception_handler)
+    app.add_exception_handler(TeacherSubjectAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(TeacherSubjectAssignmentException, app_exception_handler)
+    app.add_exception_handler(TeacherSubjectHasDependenciesException, app_exception_handler)
+    app.add_exception_handler(TeacherNotAvailableException, app_exception_handler)
+    
+    # Excepciones de eventos
+    app.add_exception_handler(EventNotFoundException, app_exception_handler)
+    app.add_exception_handler(EventAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(EventFullException, app_exception_handler)
+    app.add_exception_handler(InvalidEventDatesException, app_exception_handler)
+    app.add_exception_handler(InvalidEventStateTransitionException, app_exception_handler)
+    app.add_exception_handler(EventNotActiveException, app_exception_handler)
+    
+    # Excepciones de investigación
+    app.add_exception_handler(ResearchLineNotFoundException, app_exception_handler)
+    app.add_exception_handler(ResearchLineAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(SubResearchLineNotFoundException, app_exception_handler)
+    app.add_exception_handler(SubResearchLineAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(InvalidResearchLineException, app_exception_handler)
+    app.add_exception_handler(ThematicAreaNotFoundException, app_exception_handler)
+    app.add_exception_handler(ThematicAreaAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(InvalidSubResearchLineException, app_exception_handler)
+    
+    # Excepciones de materias
+    app.add_exception_handler(SubjectNotFoundException, app_exception_handler)
+    app.add_exception_handler(SubjectAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(SubjectHasDependenciesException, app_exception_handler)
+    app.add_exception_handler(InvalidSubjectStateException, app_exception_handler)
+    app.add_exception_handler(MinimumGroupsRequiredException, app_exception_handler)
+    
+    # Excepciones de grupos
+    app.add_exception_handler(GroupNotFoundException, app_exception_handler)
+    app.add_exception_handler(GroupAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(GroupHasStudentsException, app_exception_handler)
+    app.add_exception_handler(GroupHasNoTeacherException, app_exception_handler)
+    app.add_exception_handler(GroupHasNoSubjectException, app_exception_handler)
+    app.add_exception_handler(GroupHasDependenciesException, app_exception_handler)
+
+    # Excepciones específicas de teachers
+    app.add_exception_handler(TeacherNotFoundException, app_exception_handler)
+    app.add_exception_handler(TeacherAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(TeacherHasAssignmentsException, app_exception_handler)
+    
+    # Excepciones de usuarios
+    app.add_exception_handler(UserNotFoundException, app_exception_handler)
+    app.add_exception_handler(UserAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(InvalidEmailDomainException, app_exception_handler)
+    
+    # Excepciones de autenticación
+    app.add_exception_handler(InvalidCredentialsException, app_exception_handler)
+    app.add_exception_handler(TokenExpiredException, app_exception_handler)
+    app.add_exception_handler(InvalidTokenException, app_exception_handler)
+    app.add_exception_handler(TokenNotFoundException, app_exception_handler)
+    app.add_exception_handler(InsufficientPermissionsException, app_exception_handler)
+    app.add_exception_handler(AccountDisabledException, app_exception_handler)
+
     # Excepciones de validación
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(ValidationError, pydantic_validation_exception_handler)
