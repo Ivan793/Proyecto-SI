@@ -2,7 +2,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, field_serializer
 from typing import Optional
 from datetime import datetime
-from app.enum.Enum import TipoActividadEnum
+from app.core.enums import TipoActividadEnum
 from app.schemas.types import TeacherId, StudentId,TeacherSubjectId, SubResearchLineCode
 
 

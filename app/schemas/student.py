@@ -1,34 +1,34 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
-
-from app.schemas.user import UserCreate, UserResponse
 from app.schemas.types import *
+from app.schemas.user import UserCreate, UserResponse
 
 class StudentBase(BaseModel):
-    codigo_programa: str = Field(..., description="Código del programa académico")
-    semestre: int = Field(..., ge=1, le=20, description="Semestre actual del estudiante")
-    anio_ingreso: int = Field(..., ge=2000, le=2100, description="Año de ingreso del estudiante")
+    codigo_programa: ProgramCode
+    semestre: Semester
+    anio_ingreso: YearOfEntry
 
 class StudentCreateWithUser(BaseModel):
     usuario: UserCreate
-    codigo_programa: str
-    semestre: int
-    anio_ingreso: int
+    codigo_programa: ProgramCode
+    semestre: Semester
+    anio_ingreso: YearOfEntry
 
 class StudentCreateWithExistingUser(BaseModel):
-    id_usuario: str
-    codigo_programa: str
-    semestre: int
-    anio_ingreso: int
+    id_usuario: UserId
+    codigo_programa: ProgramCode
+    semestre: Semester
+    anio_ingreso: YearOfEntry
 
 class StudentUpdate(BaseModel):
-    activo: Optional[bool] = None
+    codigo_programa: Optional[ProgramCode] = None
+    activo: Optional[StatusActive] = None
 
 class StudentResponse(StudentBase):
-    id_estudiante: str
-    id_usuario: str
-    activo: bool
+    id_estudiante: StudentId
+    id_usuario: UserId
+    activo: StatusActive
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

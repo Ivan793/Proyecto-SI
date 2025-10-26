@@ -1,19 +1,14 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from app.schemas.types import SectorId, SectorName
 
 class SectorBase(BaseModel):
-    nombre_sector: str = Field(
-        ..., 
-        max_length=25, 
-        description="Nombre del sector (educativo, empresarial, social, gobierno)"
-    )
-
+    nombre_sector: SectorName
 
 class SectorCreate(SectorBase):
     pass
 
-
 class SectorResponse(SectorBase):
-    id_sector: str = Field(..., max_length=30)
+    id_sector: SectorId
 
     class Config:
         orm_mode = True

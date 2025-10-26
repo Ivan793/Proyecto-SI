@@ -1,29 +1,31 @@
-from typing import Any, Optional, List, TypeVar, Generic
+from typing import Any, Optional, List, Dict
 from fastapi.responses import JSONResponse
 from datetime import datetime, timezone
 from fastapi.encoders import jsonable_encoder
 
 from app.schemas.common import (
-    SuccessResponse,
-    PaginatedResponse,
-    PaginationMeta,
-    MessageResponse,
-    ErrorResponse,
-    ErrorDetail
+    SuccessResponse, PaginatedResponse, ErrorResponse, ErrorDetail,
+    MessageResponse, PaginationMeta, IdResponse, CountResponse, BulkOperationResult
 )
+from app.core.response_codes import ResponseCode, ResponseMessage, HTTP_CODE_TO_RESPONSE_CODE
 
-T = TypeVar('T')
 
-# Crea una respuesta exitosa estandarizada usando el esquema SuccessResponse
+def _get_response_code(status_code: int) -> ResponseCode:
+    """Obtiene el código de respuesta basado en el código HTTP"""
+    return HTTP_CODE_TO_RESPONSE_CODE.get(status_code, ResponseCode.INTERNAL_ERROR)
+
+
 def success_response(
     data: Any,
     message: Optional[str] = None,
     status_code: int = 200
 ) -> JSONResponse:
+    """Respuesta exitosa estandarizada"""
     response_model = SuccessResponse(
         status="success",
-        message=message,
-        data=data
+        message=message or ResponseMessage.SUCCESS,
+        data=data,
+        code=_get_response_code(status_code)
     )
     
     return JSONResponse(
@@ -31,28 +33,15 @@ def success_response(
         content=jsonable_encoder(response_model.model_dump(exclude_none=True))
     )
 
-# Crea una respuesta simple con mensaje usando el esquema MessageResponse
-def message_response(
-    message: str,
-    status_code: int = 200
-) -> JSONResponse:
-    response_model = MessageResponse(
-        status="success",
-        message=message
-    )
-    
-    return JSONResponse(
-        status_code=status_code,
-        content=jsonable_encoder(response_model.model_dump())
-    )
 
-# Crea una respuesta paginada estandarizada usando el esquema PaginatedResponse
 def paginated_response(
     data: List[Any],
     page: int,
     limit: int,
-    total_items: int
+    total_items: int,
+    message: Optional[str] = None
 ) -> JSONResponse:
+    """Respuesta paginada estandarizada"""
     import math
     
     total_pages = math.ceil(total_items / limit) if total_items > 0 else 0
@@ -70,8 +59,10 @@ def paginated_response(
     
     response_model = PaginatedResponse(
         status="success",
+        message=message or "Datos obtenidos correctamente",
         data=data,
-        pagination=pagination_meta
+        pagination=pagination_meta,
+        code=ResponseCode.SUCCESS
     )
     
     return JSONResponse(
@@ -79,52 +70,28 @@ def paginated_response(
         content=jsonable_encoder(response_model.model_dump())
     )
 
-# Respuesta para recursos creados (201 Created)
-def created_response(
-    data: Any,
-    message: str = "Recurso creado exitosamente"
-) -> JSONResponse:
-    return success_response(data, message, status_code=201)
 
-# Respuesta para solicitudes aceptadas (202 Accepted)
-def accepted_response(
-    message: str = "Solicitud aceptada para procesamiento",
-    data: Optional[Any] = None
-) -> JSONResponse:
-    if data:
-        return success_response(data, message, status_code=202)
-    else:
-        return message_response(message, status_code=202)
-
-# Respuesta sin contenido (204 No Content)
-def no_content_response() -> JSONResponse:
-    return JSONResponse(
-        status_code=204,
-        content=None
-    )
-
-# Crea una respuesta de error estandarizada usando el esquema ErrorResponse
 def error_response(
     message: str,
     status_code: int = 400,
-    errors: Optional[List[dict]] = None,
-    code: Optional[str] = None
+    errors: Optional[List[Dict]] = None,
+    code: Optional[str] = None,
+    path: Optional[str] = None
 ) -> JSONResponse:
+    """Respuesta de error estandarizada"""
     error_details = None
     if errors:
         error_details = []
         for error in errors:
-            if isinstance(error, dict):
-                error_details.append(ErrorDetail(**error))
-            else:
-                error_details.append(error)
+            error_details.append(ErrorDetail(**error))
     
     response_model = ErrorResponse(
         status="error",
         message=message,
         errors=error_details,
-        code=code,
-        timestamp=datetime.now(timezone.utc)
+        code=code or _get_response_code(status_code),
+        timestamp=datetime.now(timezone.utc),
+        path=path
     )
     
     return JSONResponse(
@@ -133,23 +100,121 @@ def error_response(
     )
 
 
-# Respuesta para errores 400 Bad Request
+# Respuestas específicas predefinidas
+def created_response(
+    data: Any,
+    message: str = ResponseMessage.CREATED
+) -> JSONResponse:
+    return success_response(data, message, status_code=201)
+
+
+def updated_response(
+    data: Any,
+    message: str = ResponseMessage.UPDATED
+) -> JSONResponse:
+    return success_response(data, message, status_code=200)
+
+
+def deleted_response(
+    message: str = ResponseMessage.DELETED
+) -> JSONResponse:
+    return message_response(message, status_code=200)
+
+
+def message_response(
+    message: str,
+    status_code: int = 200
+) -> JSONResponse:
+    response_model = MessageResponse(
+        status="success",
+        message=message,
+        code=_get_response_code(status_code)
+    )
+    
+    return JSONResponse(
+        status_code=status_code,
+        content=jsonable_encoder(response_model.model_dump())
+    )
+
+
+def id_response(
+    resource_id: str,
+    message: Optional[str] = None
+) -> JSONResponse:
+    response_model = SuccessResponse(
+        status="success",
+        message=message or ResponseMessage.CREATED,
+        data=IdResponse(id=resource_id),
+        code=ResponseCode.CREATED
+    )
+    
+    return JSONResponse(
+        status_code=201,
+        content=jsonable_encoder(response_model.model_dump())
+    )
+
+
+def count_response(
+    count: int,
+    message: Optional[str] = None
+) -> JSONResponse:
+    response_model = SuccessResponse(
+        status="success",
+        message=message or "Conteo obtenido correctamente",
+        data=CountResponse(count=count),
+        code=ResponseCode.SUCCESS
+    )
+    
+    return JSONResponse(
+        status_code=200,
+        content=jsonable_encoder(response_model.model_dump())
+    )
+
+
+def bulk_operation_response(
+    processed: int,
+    successful: int,
+    failed: int,
+    errors: Optional[List[Dict]] = None,
+    message: Optional[str] = None
+) -> JSONResponse:
+    response_model = SuccessResponse(
+        status="success",
+        message=message or "Operación por lotes completada",
+        data=BulkOperationResult(
+            processed=processed,
+            successful=successful,
+            failed=failed,
+            errors=errors
+        ),
+        code=ResponseCode.SUCCESS
+    )
+    
+    return JSONResponse(
+        status_code=200,
+        content=jsonable_encoder(response_model.model_dump(exclude_none=True))
+    )
+
+
+# Respuestas de error específicas
 def bad_request_response(
-    message: str = "Solicitud incorrecta",
-    errors: Optional[List[dict]] = None,
-    code: str = "BAD_REQUEST"
+    message: str = ResponseMessage.VALIDATION_ERROR,
+    errors: Optional[List[Dict]] = None,
+    code: str = ResponseCode.VALIDATION_ERROR,
+    path: Optional[str] = None
 ) -> JSONResponse:
     return error_response(
         message=message,
         status_code=400,
         errors=errors,
-        code=code
+        code=code,
+        path=path
     )
 
-# Respuesta para errores 401 Unauthorized
+
 def unauthorized_response(
-    message: str = "No autorizado",
-    code: str = "UNAUTHORIZED"
+    message: str = ResponseMessage.UNAUTHORIZED,
+    code: str = ResponseCode.UNAUTHORIZED
 ) -> JSONResponse:
     return error_response(
         message=message,
@@ -157,10 +222,10 @@ def unauthorized_response(
         code=code
     )
 
-# Respuesta para errores 403 Forbidden
+
 def forbidden_response(
-    message: str = "No tiene permisos para realizar esta acción",
-    code: str = "FORBIDDEN"
+    message: str = ResponseMessage.FORBIDDEN,
+    code: str = ResponseCode.FORBIDDEN
 ) -> JSONResponse:
     return error_response(
         message=message,
@@ -168,11 +233,11 @@ def forbidden_response(
         code=code
     )
 
-# Respuesta para errores 404 Not Found
+
 def not_found_response(
     resource: str = "Recurso",
     identifier: Optional[str] = None,
-    code: str = "NOT_FOUND"
+    code: str = ResponseCode.NOT_FOUND
 ) -> JSONResponse:
     message = f"{resource} no encontrado"
     if identifier:
@@ -184,10 +249,10 @@ def not_found_response(
         code=code
     )
 
-# Respuesta para errores 409 Conflict
+
 def conflict_response(
-    message: str = "Conflicto con el estado actual del recurso",
-    code: str = "CONFLICT"
+    message: str = ResponseMessage.ALREADY_EXISTS,
+    code: str = ResponseCode.ALREADY_EXISTS
 ) -> JSONResponse:
     return error_response(
         message=message,
@@ -195,22 +260,22 @@ def conflict_response(
         code=code
     )
 
-# Respuesta específica para errores de validación (422)
+
 def validation_error_response(
-    errors: List[dict],
-    message: str = "Error de validación en los datos de entrada"
+    errors: List[Dict],
+    message: str = ResponseMessage.VALIDATION_ERROR
 ) -> JSONResponse:
     return error_response(
         message=message,
         status_code=422,
         errors=errors,
-        code="VALIDATION_ERROR"
+        code=ResponseCode.VALIDATION_ERROR
     )
 
-# Respuesta para errores 500 Internal Server Error
+
 def internal_server_error_response(
     message: str = "Error interno del servidor",
-    code: str = "INTERNAL_SERVER_ERROR"
+    code: str = ResponseCode.INTERNAL_ERROR
 ) -> JSONResponse:
     return error_response(
         message=message,
@@ -218,10 +283,10 @@ def internal_server_error_response(
         code=code
     )
 
-# Respuesta para errores 503 Service Unavailable
+
 def service_unavailable_response(
     message: str = "Servicio no disponible temporalmente",
-    code: str = "SERVICE_UNAVAILABLE"
+    code: str = ResponseCode.SERVICE_UNAVAILABLE
 ) -> JSONResponse:
     return error_response(
         message=message,
@@ -230,77 +295,12 @@ def service_unavailable_response(
     )
 
 
-# Respuesta para actualizaciones exitosas
-def updated_response(
-    data: Any,
-    message: str = "Recurso actualizado exitosamente"
+def rate_limit_response(
+    message: str = "Límite de peticiones excedido",
+    code: str = ResponseCode.RATE_LIMIT_EXCEEDED
 ) -> JSONResponse:
-    return success_response(data, message, status_code=200)
-
-# Respuesta para eliminaciones exitosas (NO CREO QUE SE USE)
-def deleted_response(
-    message: str = "Recurso eliminado exitosamente"
-) -> JSONResponse:
-    return message_response(message, status_code=200)
-
-# Respuesta para login exitoso
-def login_success_response(
-    access_token: str,
-    user_data: dict,
-    refresh_token: Optional[str] = None,
-    message: str = "Inicio de sesión exitoso"
-) -> JSONResponse:
-    data = {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": user_data
-    }
-    
-    if refresh_token:
-        data["refresh_token"] = refresh_token
-    
-    return success_response(data, message, status_code=200)
-
-# Respuesta para logout exitoso
-def logout_success_response(
-    message: str = "Sesión cerrada exitosamente"
-) -> JSONResponse:
-    return message_response(message, status_code=200)
-
-
-# Respuesta para operaciones asíncronas o en proceso
-
-def operation_pending_response(
-    operation_id: str,
-    message: str = "Operación en proceso",
-    estimated_completion: Optional[datetime] = None
-) -> JSONResponse:
-    data = {
-        "operation_id": operation_id,
-        "status": "processing"
-    }
-    
-    if estimated_completion:
-        data["estimated_completion"] = estimated_completion.isoformat()
-    
-    return success_response(data, message, status_code=202)
-
-
-# Respuesta para exportaciones/listados listos para descargar
-
-def export_ready_response(
-    download_url: str,
-    filename: str,
-    message: str = "Exportación completada",
-    expires_at: Optional[datetime] = None
-) -> JSONResponse:
-    data = {
-        "download_url": download_url,
-        "filename": filename,
-        "status": "ready"
-    }
-    
-    if expires_at:
-        data["expires_at"] = expires_at.isoformat()
-    
-    return success_response(data, message, status_code=200)
+    return error_response(
+        message=message,
+        status_code=429,
+        code=code
+    )

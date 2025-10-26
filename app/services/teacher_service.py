@@ -1,12 +1,14 @@
-from typing import List, Optional
+# app/services/teacher_service.py
+from typing import List, Optional, Dict, Any
 import logging
 from firebase_admin import auth as firebase_auth
+from firebase_admin.exceptions import FirebaseError
 
+from app.exceptions.base_exceptions import ValidationException, DatabaseException
 from app.repositories.teacher_repository import TeacherRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.teacher import (
     TeacherCreateWithUser, 
-    TeacherCreateWithExistingUser,
     TeacherUpdate, 
     TeacherResponse, 
     TeacherWithUserResponse
@@ -17,7 +19,16 @@ from app.exceptions.teacher_exceptions import (
     TeacherAlreadyExistsException,
     TeacherHasAssignmentsException
 )
-from app.exceptions.user_exceptions import UserNotFoundException, UserAlreadyExistsException
+from app.exceptions.user_exceptions import (
+    InvalidEmailDomainException, 
+    UserNotFoundException, 
+    UserAlreadyExistsException
+)
+from firebase_admin._auth_utils import (
+    EmailAlreadyExistsError,
+    UserNotFoundError
+)
+from app.core.validators import validate_user_role_email_match
 
 logger = logging.getLogger(__name__)
 
@@ -28,114 +39,240 @@ class TeacherService:
         self.teacher_repo = TeacherRepository()
         self.user_repo = UserRepository()
 
-# Crea un profesor CON su usuario en cascada
     async def create_teacher_with_user(
         self, 
         teacher_data: TeacherCreateWithUser
     ) -> TeacherResponse:
         usuario_data = teacher_data.usuario
         
-        # 1. Validar que la identificación no exista
+        try:
+            await self._validate_teacher_creation_prerequisites(usuario_data)
+            
+            
+            # Variables para rollback
+            firebase_user = None
+            user_created = False
+            teacher_created = False
+            
+            try:
+                firebase_user = await self._create_firebase_user(usuario_data)
+                user_id = firebase_user.uid
+                logger.info(f"Usuario creado en Firebase Auth: {user_id}")
+                
+                await self._create_firestore_user(usuario_data, user_id)
+                user_created = True
+                logger.info(f"Usuario creado en Firestore: {user_id}")
+                
+                teacher_id = await self._create_teacher_record(teacher_data, user_id)
+                teacher_created = True
+                logger.info(f"Docente creado y vinculado: {teacher_id} -> {user_id}")
+                
+                return await self._get_created_teacher(teacher_id)
+                
+            except FirebaseError as e:
+                logger.error(f"Error de Firebase al crear usuario: {str(e)}")
+                raise DatabaseException(
+                    message="Error al crear usuario en el sistema de autenticación",
+                    details={"firebase_error": str(e)}
+                )
+            except Exception as e:
+                logger.error(f"Error inesperado durante creación: {str(e)}")
+                await self._rollback_teacher_creation(
+                    firebase_user, user_created, teacher_created
+                )
+                raise DatabaseException(
+                    message="Error durante la creación del docente",
+                    details={"internal_error": str(e)}
+                )
+                
+        except (ValidationException, UserAlreadyExistsException, InvalidEmailDomainException) as e:
+            logger.warning(f"Error de validación/negocio: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Error inesperado en validaciones iniciales: {str(e)}")
+            raise DatabaseException("Error interno del sistema")
+
+    async def _validate_teacher_creation_prerequisites(self, usuario_data: UserCreate) -> None:
+        # Validar rol
+        if usuario_data.rol != "Docente":
+            raise ValidationException(
+                message="El rol debe ser 'Docente' para este endpoint",
+                field="rol"
+            )
+        
+        # Validar identificación única
         existing_by_id = await self.user_repo.get_by_field(
             "identificacion", 
             usuario_data.identificacion
         )
         if existing_by_id:
-            raise UserAlreadyExistsException("identificacion", usuario_data.identificacion)
+            raise UserAlreadyExistsException(
+                field="identificacion", 
+                value=usuario_data.identificacion
+            )
         
-        # 2. Validar que el correo no exista
+        # Validar correo único
         existing_user = await self.user_repo.get_user_by_email(usuario_data.correo)
         if existing_user:
-            raise UserAlreadyExistsException("correo", usuario_data.correo)
+            raise UserAlreadyExistsException(
+                field="correo", 
+                value=usuario_data.correo
+            )
         
+        # Validar correo único en Firebase Auth
+        if await self._email_exists_in_firebase_auth(usuario_data.correo):
+            raise UserAlreadyExistsException(
+                field="correo", 
+                value=usuario_data.correo
+            )
+        
+        # Validar dominio de correo
         try:
-            # 3. Crear usuario en Firebase Authentication
-            firebase_user = firebase_auth.create_user(
+            validate_user_role_email_match(usuario_data.correo, usuario_data.rol)
+        except ValueError as e:
+            raise InvalidEmailDomainException(role=usuario_data.rol, custom_message=str(e))
+        
+    async def _email_exists_in_firebase_auth(self, email: str) -> bool:
+            """Verifica si el email ya existe en Firebase Authentication"""
+            try:
+                firebase_auth.get_user_by_email(email)
+                return True  # Si no lanza excepción, el usuario existe
+            except firebase_auth.UserNotFoundError:
+                return False  # Usuario no encontrado
+            except Exception as e:
+                logger.warning(f"Error verificando email en Firebase Auth: {str(e)}")
+                # En caso de error, asumimos que no existe para permitir que el flujo continúe
+                # La creación fallará después si realmente existe
+                return False
+
+
+    async def _create_firebase_user(self, usuario_data: UserCreate) -> Any:
+        try:
+            return firebase_auth.create_user(
                 email=usuario_data.correo,
                 password=usuario_data.contraseña,
                 display_name=f"{usuario_data.nombres} {usuario_data.apellidos}",
                 disabled=False
             )
-            
-            user_id = firebase_user.uid
-            logger.info(f"Usuario creado en Firebase Auth: {user_id}")
-            
-            # 4. Crear usuario en Firestore
-            user_dict = usuario_data.model_dump(exclude={"contraseña"})
-            user_dict["estado"] = "ACTIVO"
-            await self.user_repo.create(user_dict, document_id=user_id)
-            logger.info(f"Usuario creado en Firestore: {user_id}")
-            
-            # 5. Crear profesor asociado al usuario
-            teacher_dict = {
-                "id_usuario": user_id,
-                "categoria_docente": teacher_data.categoria_docente,
-                "codigo_programa": teacher_data.codigo_programa,
-                "activo": teacher_data.activo
-            }
-            
-            teacher_id = await self.teacher_repo.create(teacher_dict)
-            logger.info(f"Profesor creado y vinculado: {teacher_id} -> {user_id}")
-            
-            # 6. Obtener y retornar el profesor creado
-            teacher = await self.teacher_repo.get_by_id(teacher_id)
-            return TeacherResponse(**teacher)
-            
-        except Exception as e:
-            # Rollback: si falla, eliminar el usuario de Firebase si se creó
-            if 'firebase_user' in locals():
-                try:
-                    firebase_auth.delete_user(firebase_user.uid)
-                    logger.warning(f"Usuario eliminado de Firebase por rollback: {firebase_user.uid}")
-                except Exception as rollback_error:
-                    logger.error(f"Error en rollback: {rollback_error}")
-            
-            logger.error(f"Error creando profesor con usuario: {str(e)}")
-            raise
-
-# Crea un profesor asignándolo a un usuario YA EXISTENTE (en los squemas que me dieron asi era la logica ya que usaban en id_usuario algo asi)
-    async def create_teacher_with_existing_user(
-        self, 
-        teacher_data: TeacherCreateWithExistingUser
-    ) -> TeacherResponse:
-        # Verificar que el usuario existe
-        user = await self.user_repo.get_by_id(teacher_data.id_usuario)
-        if not user:
-            raise UserNotFoundException(teacher_data.id_usuario)
-
-        # Verificar que NO sea ya un docente
-        existing_teacher = await self.teacher_repo.get_teacher_by_user_id(
-            teacher_data.id_usuario
-        )
-        if existing_teacher:
-            raise TeacherAlreadyExistsException(teacher_data.id_usuario)
-
-        # Crear el docente
-        teacher_dict = teacher_data.model_dump()
-        teacher_id = await self.teacher_repo.create(teacher_dict)
+        except EmailAlreadyExistsError:
+            # Esta excepción específica de email duplicado
+            logger.warning(f"Email ya existe en Firebase Auth: {usuario_data.correo}")
+            raise UserAlreadyExistsException(
+                field="correo", 
+                value=usuario_data.correo
+            )
+        except FirebaseError as e:
+            logger.error(f"Error de Firebase al crear usuario: {str(e)}")
+            raise DatabaseException(
+                message="Error al crear usuario en el sistema de autenticación",
+                details={"firebase_error": str(e)}
+            )
+    async def _create_firestore_user(self, usuario_data: UserCreate, user_id: str) -> None:
+        user_dict = usuario_data.model_dump(exclude={"contraseña"})
+        user_dict.update({
+            "activo": True,
+            "razon_desactivacion": None
+        })
         
+        await self.user_repo.create(user_dict, document_id=user_id)
+
+    async def _create_teacher_record(self, teacher_data: TeacherCreateWithUser, user_id: str) -> str:
+        """Crea registro de docente - VERSIÓN MEJORADA"""
+        teacher_dict = {
+            "id_usuario": user_id,
+            "categoria_docente": teacher_data.categoria_docente,
+            "codigo_programa": teacher_data.codigo_programa
+        }
+        
+        return await self.teacher_repo.create(teacher_dict)
+
+    async def _get_created_teacher(self, teacher_id: str) -> TeacherResponse:
+        """Obtiene docente creado - VERSIÓN MEJORADA"""
         teacher = await self.teacher_repo.get_by_id(teacher_id)
+        if not teacher:
+            raise TeacherNotFoundException(teacher_id)
         return TeacherResponse(**teacher)
+
+    async def _rollback_teacher_creation(
+        self, 
+        firebase_user: Any, 
+        user_created: bool, 
+        teacher_created: bool
+    ) -> None:
+        rollback_errors = []
+        
+        try:
+            if teacher_created:
+                logger.info("Rollback: eliminando docente creado")
+                # await self.teacher_repo.delete(teacher_id)  # Si implementas delete
+                pass
+                
+        except Exception as e:
+            rollback_errors.append(f"Error eliminando docente: {str(e)}")
+            logger.error(f"Error durante rollback de docente: {str(e)}")
+        
+        try:
+            if user_created and firebase_user:
+                await self.user_repo.delete(firebase_user.uid)
+                logger.info(f"Rollback: usuario eliminado de Firestore: {firebase_user.uid}")
+                
+        except Exception as e:
+            rollback_errors.append(f"Error eliminando usuario Firestore: {str(e)}")
+            logger.error(f"Error durante rollback de usuario Firestore: {str(e)}")
+        
+        try:
+            if firebase_user:
+
+                firebase_auth.delete_user(firebase_user.uid)
+                logger.info(f"Rollback: usuario eliminado de Firebase Auth: {firebase_user.uid}")
+                
+        except FirebaseError as e:
+            rollback_errors.append(f"Error eliminando usuario Firebase Auth: {str(e)}")
+            logger.error(f"Error durante rollback de Firebase Auth: {str(e)}")
+        
+        if rollback_errors:
+            logger.warning(f"Errores durante rollback: {rollback_errors}")
+
 
     async def get_teacher(self, teacher_id: str) -> TeacherResponse:
-        teacher = await self.teacher_repo.get_by_id(teacher_id)
-        if not teacher:
-            raise TeacherNotFoundException(teacher_id)
-        return TeacherResponse(**teacher)
+        """Obtiene docente por ID - VERSIÓN MEJORADA"""
+        try:
+            teacher = await self.teacher_repo.get_by_id(teacher_id)
+            if not teacher:
+                raise TeacherNotFoundException(teacher_id)
+            return TeacherResponse(**teacher)
+            
+        except TeacherNotFoundException:
+            raise
+        except Exception as e:
+            logger.error(f"Error obteniendo docente {teacher_id}: {str(e)}")
+            raise DatabaseException("Error al obtener docente")
 
     async def get_teacher_with_user(self, teacher_id: str) -> TeacherWithUserResponse:
-        teacher = await self.teacher_repo.get_by_id(teacher_id)
-        if not teacher:
-            raise TeacherNotFoundException(teacher_id)
+        try:
+            teacher = await self.teacher_repo.get_by_id(teacher_id)
+            if not teacher:
+                raise TeacherNotFoundException(teacher_id)
 
-        user = await self.user_repo.get_by_id(teacher["id_usuario"])
-        if not user:
-            raise UserNotFoundException(teacher["id_usuario"])
+            user_id = teacher.get("id_usuario")
+            if not user_id:
+                raise ValidationException("Docente no tiene usuario asociado")
 
-        return TeacherWithUserResponse(
-            docente=TeacherResponse(**teacher),
-            usuario=user
-        )
+            user = await self.user_repo.get_by_id(user_id)
+            if not user:
+                raise UserNotFoundException(user_id)
+
+            return TeacherWithUserResponse(
+                docente=TeacherResponse(**teacher),
+                usuario=user
+            )
+            
+        except (TeacherNotFoundException, UserNotFoundException, ValidationException) as e:
+            logger.warning(f"Error obteniendo docente con usuario {teacher_id}: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Error inesperado obteniendo docente con usuario {teacher_id}: {str(e)}")
+            raise DatabaseException("Error al obtener información completa del docente")
 
     async def get_all_teachers(
         self, 
@@ -143,50 +280,183 @@ class TeacherService:
         page: int = 1,
         limit: int = 20
     ) -> tuple[List[TeacherResponse], int]:
-        filters = {"activo": True} if active_only else {}
-        teachers = await self.teacher_repo.get_all(filters=filters)
-        
+        try:
+            teachers = await self.teacher_repo.get_all()
+            
+            if active_only:
+                teachers = await self._filter_active_teachers(teachers)
+            
+            return await self._paginate_teachers(teachers, page, limit)
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo todos los docentes: {str(e)}")
+            raise DatabaseException("Error al obtener la lista de docentes")
+
+    async def _filter_active_teachers(self, teachers: List[dict]) -> List[dict]:
+        """Filtra docentes activos - VERSIÓN MEJORADA"""
+        filtered_teachers = []
+        for teacher in teachers:
+            user_id = teacher.get("id_usuario")
+            if user_id:
+                user = await self.user_repo.get_by_id(user_id)
+                if user and user.get("activo", True):
+                    filtered_teachers.append(teacher)
+        return filtered_teachers
+
+    async def _paginate_teachers(
+        self, 
+        teachers: List[dict], 
+        page: int, 
+        limit: int
+    ) -> tuple[List[TeacherResponse], int]:
+        """Pagina lista de docentes"""
         total = len(teachers)
         start = (page - 1) * limit
         end = start + limit
         paginated_teachers = teachers[start:end]
         
-        return [TeacherResponse(**t) for t in paginated_teachers], total
+        teacher_responses = []
+        for teacher in paginated_teachers:
+            try:
+                teacher_responses.append(TeacherResponse(**teacher))
+            except Exception as e:
+                logger.warning(f"Error creando TeacherResponse para {teacher.get('id_docente')}: {str(e)}")
+                continue
+        
+        return teacher_responses, total
 
     async def update_teacher(
         self, 
         teacher_id: str, 
         teacher_data: TeacherUpdate
     ) -> TeacherResponse:
-        teacher = await self.teacher_repo.get_by_id(teacher_id)
-        if not teacher:
-            raise TeacherNotFoundException(teacher_id)
+        try:
+            teacher = await self.teacher_repo.get_by_id(teacher_id)
+            if not teacher:
+                raise TeacherNotFoundException(teacher_id)
 
-        update_dict = teacher_data.model_dump(exclude_none=True)
-        if update_dict:
+            update_dict = teacher_data.model_dump(exclude_none=True)
+            if not update_dict:
+                raise ValidationException("No se proporcionaron campos para actualizar")
+
             await self.teacher_repo.update(teacher_id, update_dict)
 
-        updated_teacher = await self.teacher_repo.get_by_id(teacher_id)
-        return TeacherResponse(**updated_teacher)
+            updated_teacher = await self.teacher_repo.get_by_id(teacher_id)
+            if not updated_teacher:
+                raise TeacherNotFoundException(teacher_id)
+            
+            logger.info(f"Docente actualizado: {teacher_id}")
+            return TeacherResponse(**updated_teacher)
+            
+        except (TeacherNotFoundException, ValidationException) as e:
+            raise
+        except Exception as e:
+            logger.error(f"Error actualizando docente {teacher_id}: {str(e)}")
+            raise DatabaseException("Error al actualizar docente")
 
     async def deactivate_teacher(self, teacher_id: str, reason: str) -> bool:
-        teacher = await self.teacher_repo.get_by_id(teacher_id)
-        if not teacher:
-            raise TeacherNotFoundException(teacher_id)
+        try:
+            teacher = await self.teacher_repo.get_by_id(teacher_id)
+            if not teacher:
+                raise TeacherNotFoundException(teacher_id)
+            if not reason or len(reason.strip()) < 10:
+                raise ValidationException(
+                    message="Debe proporcionar una razón de desactivación válida (mínimo 10 caracteres)",
+                    field="razon"
+                )
+            from app.repositories.teacher_subject_repository import TeacherSubjectRepository
+            ts_repo = TeacherSubjectRepository()
+            if await ts_repo.teacher_has_assignments(teacher_id):
+                raise TeacherHasAssignmentsException(teacher_id)
 
-        from app.repositories.teacher_subject_repository import TeacherSubjectRepository
-        ts_repo = TeacherSubjectRepository()
-        if await ts_repo.teacher_has_assignments(teacher_id):
-            raise TeacherHasAssignmentsException(teacher_id)
-
-        return await self.teacher_repo.update(teacher_id, {
-            "activo": False,
-            "razon_desactivacion": reason
-        })
+            user_id = teacher["id_usuario"]
+            success = await self.user_repo.deactivate_user(user_id, reason)
+            
+            if success:
+                logger.info(f"Docente desactivado: {teacher_id}")
+            else:
+                raise DatabaseException("No se pudo desactivar el docente")
+                
+            return success
+            
+        except (TeacherNotFoundException, ValidationException, TeacherHasAssignmentsException) as e:
+            logger.warning(f"Error desactivando docente {teacher_id}: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Error inesperado desactivando docente {teacher_id}: {str(e)}")
+            raise DatabaseException("Error al desactivar docente")
 
     async def activate_teacher(self, teacher_id: str) -> bool:
-        teacher = await self.teacher_repo.get_by_id(teacher_id)
-        if not teacher:
-            raise TeacherNotFoundException(teacher_id)
+        try:
+            teacher = await self.teacher_repo.get_by_id(teacher_id)
+            if not teacher:
+                raise TeacherNotFoundException(teacher_id)
 
-        return await self.teacher_repo.update(teacher_id, {"activo": True})
+            user_id = teacher["id_usuario"]
+            success = await self.user_repo.activate_user(user_id)
+            
+            if success:
+                logger.info(f"Docente activado: {teacher_id}")
+            else:
+                raise DatabaseException("No se pudo activar el docente")
+                
+            return success
+            
+        except TeacherNotFoundException as e:
+            raise
+        except Exception as e:
+            logger.error(f"Error activando docente {teacher_id}: {str(e)}")
+            raise DatabaseException("Error al activar docente")
+
+    async def get_teachers_by_program(self, program_code: str) -> List[TeacherResponse]:
+        try:
+            teachers = await self.teacher_repo.get_teachers_by_program(program_code)
+            return [TeacherResponse(**teacher) for teacher in teachers]
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo docentes del programa {program_code}: {str(e)}")
+            raise DatabaseException("Error al obtener docentes por programa")
+
+    async def get_teacher_workload(self, teacher_id: str) -> Dict[str, Any]:
+        try:
+            teacher = await self.teacher_repo.get_by_id(teacher_id)
+            if not teacher:
+                raise TeacherNotFoundException(teacher_id)
+
+            from app.repositories.teacher_subject_repository import TeacherSubjectRepository
+            ts_repo = TeacherSubjectRepository()
+            assignments = await ts_repo.get_assignments_by_teacher(teacher_id)
+            
+            active_assignments = [a for a in assignments if a.get("activo", True)]
+            
+            return {
+                "id_docente": teacher_id,
+                "total_asignaciones": len(assignments),
+                "asignaciones_activas": len(active_assignments),
+                "detalle_asignaciones": active_assignments,
+                "estado": "ACTIVO" if teacher.get("activo", True) else "INACTIVO"
+            }
+            
+        except TeacherNotFoundException as e:
+            raise
+        except Exception as e:
+            logger.error(f"Error obteniendo carga de trabajo del docente {teacher_id}: {str(e)}")
+            raise DatabaseException("Error al obtener la carga de trabajo del docente")
+
+    async def teacher_exists(self, teacher_id: str) -> bool:
+        try:
+            teacher = await self.teacher_repo.get_by_id(teacher_id)
+            return teacher is not None
+        except Exception as e:
+            logger.error(f"Error verificando existencia del docente {teacher_id}: {str(e)}")
+            return False
+
+    async def get_teacher_by_user_id(self, user_id: str) -> Optional[TeacherResponse]:
+        try:
+            teacher_data = await self.teacher_repo.get_teacher_by_user_id(user_id)
+            if teacher_data:
+                return TeacherResponse(**teacher_data)
+            return None
+        except Exception as e:
+            logger.error(f"Error obteniendo docente por usuario {user_id}: {str(e)}")
+            return None

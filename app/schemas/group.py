@@ -53,7 +53,6 @@ class GroupUpdate(BaseModel):
     json_schema_extra={
         "example": {
             "codigo_materia": "MAT101",
-            "codigo_grupo": 203,
             "activo": True
         }
     }
@@ -63,6 +62,8 @@ class GroupUpdate(BaseModel):
 
 class GroupResponse(BaseModel):
     codigo_grupo: GroupCode
+    codigo_materia: Optional[SubjectCode] = None
+    activo: StatusActive = Field(default=Defaults.ACTIVE_STATUS)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
