@@ -89,7 +89,6 @@ class Defaults:
     ACTIVE_STATUS = True
     DEFAULT_LANGUAGE = "es"
     DEFAULT_EVENT_STATE = "ACTIVO"
-    EVENT_ALLOWS_GUESTS = True
     ACTIVE_STATUS = True
 
 

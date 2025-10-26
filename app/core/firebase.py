@@ -51,7 +51,11 @@ class FirebaseClient:
         if self._db is None:
             self.initialize()
         return self._db
-    
+
+    @property
+    def db(self) -> firestore.Client:
+        return self.get_db()
+
     def close(self):
         """Cierra la conexión con Firebase"""
         if self._app is not None:
@@ -109,7 +113,9 @@ class Collections:
     # Otros
     SECTORES = "sectores"
     ASISTENCIAS = "asistencias"
-    
+
+firebase_client.initialize()
+
 # ==================== AUTH (Firebase Authentication) ====================
 from firebase_admin import auth
 firebase_auth = auth
