@@ -2,14 +2,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 
+from app.core.validators import TeacherValidatorMixin
 from app.schemas.types import *
 from app.schemas.user import UserCreate
 from app.core.constants import Defaults
 
-class TeacherBase(BaseModel):
+class TeacherBase(BaseModel, TeacherValidatorMixin):
     categoria_docente: TeacherCategoryType
     codigo_programa: ProgramCode
-    activo: bool = Field(default=Defaults.ACTIVE_STATUS)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -21,19 +21,6 @@ class TeacherBase(BaseModel):
         }
     )
 
-# Crear profesor con usuario existente
-class TeacherCreateWithExistingUser(TeacherBase):
-    id_usuario: UserId
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "id_usuario": "L7Tz5A23fWx19oK9jK1a",
-                "categoria_docente": TeacherCategory.INTERNO,
-                "codigo_programa": "ING01"
-            }
-        }
-    )
 
 # Crear profesor CON usuario en cascada
 class TeacherCreateWithUser(TeacherBase):
@@ -47,7 +34,7 @@ class TeacherCreateWithUser(TeacherBase):
                     "identificacion": "1231271982",
                     "nombres": "Camila Andrea",
                     "apellidos": "Torres Palomino",
-                    "genero": "Mujer",
+                    "sexo": "Mujer",
                     "identidad_sexual": "Heterosexual",
                     "fecha_nacimiento": "1980-05-15",
                     "nacionalidad": "Colombiana",
@@ -73,14 +60,12 @@ TeacherCreate = TeacherCreateWithUser
 class TeacherUpdate(BaseModel):
     categoria_docente: Optional[TeacherCategoryType] = None
     codigo_programa: Optional[ProgramCode] = None
-    activo: Optional[bool] = None
 
 class TeacherResponse(BaseModel):
     id_docente: TeacherId
     id_usuario: UserId
     categoria_docente: TeacherCategoryType
     codigo_programa: ProgramCode
-    activo: bool = Field(default=Defaults.ACTIVE_STATUS)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
