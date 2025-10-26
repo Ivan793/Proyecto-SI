@@ -1,20 +1,39 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
-
+from datetime import datetime
+from app.schemas.types import *
+from app.schemas.user import UserCreate, UserResponse
 
 class StudentBase(BaseModel):
-    id_usuario: str = Field(..., max_length=30)
-    codigo_programa: str = Field(..., max_length=10)
-    semestre: int
-    anio_ingreso: int
+    codigo_programa: ProgramCode
+    semestre: Semester
+    anio_ingreso: YearOfEntry
 
+class StudentCreateWithUser(BaseModel):
+    usuario: UserCreate
+    codigo_programa: ProgramCode
+    semestre: Semester
+    anio_ingreso: YearOfEntry
 
-class StudentCreate(StudentBase):
-    pass
+class StudentCreateWithExistingUser(BaseModel):
+    id_usuario: UserId
+    codigo_programa: ProgramCode
+    semestre: Semester
+    anio_ingreso: YearOfEntry
 
+class StudentUpdate(BaseModel):
+    codigo_programa: Optional[ProgramCode] = None
+    activo: Optional[StatusActive] = None
 
 class StudentResponse(StudentBase):
-    id_estudiante: str
+    id_estudiante: StudentId
+    id_usuario: UserId
+    activo: StatusActive
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
+
+class StudentWithUserResponse(BaseModel):
+    estudiante: StudentResponse
+    usuario: UserResponse

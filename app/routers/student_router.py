@@ -1,0 +1,116 @@
+from fastapi import APIRouter, Body, Depends, Request, status
+from typing import Dict, Any
+import logging
+
+from app.schemas.types import ReasonText
+from app.services.student_service import StudentService
+from app.schemas.student import StudentCreateWithUser, StudentUpdate, StudentResponse
+from app.dependencies.auth_dependencies import get_current_student_user
+from app.core.rate_limiter import auth_rate_limit
+from app.utils.responses import (
+    success_response, created_response, updated_response, 
+    not_found_response, bad_request_response, internal_server_error_response,
+    conflict_response
+)
+from app.utils.swagger_docs import ResponseDocumentation
+from app.exceptions.student_exceptions import StudentNotFoundException
+from app.exceptions.user_exceptions import UserNotFoundException, UserAlreadyExistsException
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/estudiantes", tags=["Estudiantes"])
+
+@router.post(
+    "/registro",
+    status_code=status.HTTP_201_CREATED,
+    summary="Registro de estudiante",
+    description="""Registro público de estudiante con creación de usuario.""",
+    responses=ResponseDocumentation.get_standard_responses()
+)
+@auth_rate_limit()
+async def register_student(
+    request: Request,
+    student_data: StudentCreateWithUser = Body(...)
+):
+    try:
+        service = StudentService()
+        student = await service.create_student_with_user(student_data)
+
+        logger.info(f"Estudiante registrado correctamente: {student.id_estudiante}")
+
+        return created_response(
+            data=student.model_dump(),
+            message="Estudiante registrado exitosamente"
+        )
+
+    except UserAlreadyExistsException as e:
+        return conflict_response(message=str(e))
+    except Exception as e:
+        logger.error(f"Error registrando estudiante: {str(e)}")
+        return internal_server_error_response()
+    
+@router.get(
+    "/mi-perfil",
+    status_code=status.HTTP_200_OK,
+    summary="Obtener perfil del estudiante actual",
+    responses=ResponseDocumentation.get_standard_responses()
+)
+async def get_my_profile(
+    request: Request,
+    current_student: Dict[str, Any] = Depends(get_current_student_user)
+):
+    try:
+        service = StudentService()
+        
+        student = await service.student_repo.get_student_by_user_id(current_student["user_id"])
+        if not student:
+            return not_found_response("Estudiante", "asociado a su usuario")
+        
+        student_with_user = await service.get_student_with_user(student["id_estudiante"])
+        
+        return success_response(
+            data=student_with_user.model_dump(),
+            message="Perfil obtenido correctamente"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo perfil: {str(e)}")
+        return internal_server_error_response()
+
+@router.put(
+    "/mi-perfil",
+    status_code=status.HTTP_200_OK,
+    summary="Actualizar perfil del estudiante actual",
+    responses=ResponseDocumentation.get_standard_responses()
+)
+async def update_my_profile(
+    request: Request,
+    student_data: StudentUpdate,
+    current_student: Dict[str, Any] = Depends(get_current_student_user)
+):
+    try:
+        service = StudentService()
+        
+        student = await service.student_repo.get_student_by_user_id(current_student["user_id"])
+        if not student:
+            return not_found_response("Estudiante", "asociado a su usuario")
+        
+        allowed_fields = {"semestre", "codigo_programa"}
+        update_data = {k: v for k, v in student_data.model_dump(exclude_none=True).items() 
+                    if k in allowed_fields}
+        
+        if update_data:
+            updated_student = await service.update_student(student["id_estudiante"], 
+            StudentUpdate(**update_data))
+            return updated_response(
+                data=updated_student.model_dump(),
+                message="Perfil actualizado exitosamente"
+            )
+        else:
+            return bad_request_response(message="No hay campos válidos para actualizar")
+        
+    except StudentNotFoundException:
+        return not_found_response("Estudiante", "asociado a su usuario")
+    except Exception as e:
+        logger.error(f"Error actualizando perfil: {str(e)}")
+        return internal_server_error_response()

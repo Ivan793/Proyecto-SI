@@ -1,28 +1,77 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, field_validator, ConfigDict
+from typing import Optional
+
+from app.schemas.types import *
 
 class SubjectBase(BaseModel):
-    nombre_materia: str = Field(
-        ..., 
-        max_length=50, 
-        description="Nombre descriptivo de la materia. Ejemplo: Programación III"
-    )
-    ciclo_semestral: str = Field(
-        ..., 
-        max_length=25, 
-        description="Ciclo académico al que pertenece la materia (Ej: Ciclo Básico, Profesional, Profundización)"
-    )
+    nombre_materia: SubjectName
+    ciclo_semestral: SubjectCycleType
+    
+    @field_validator("nombre_materia")
+    @classmethod
+    def validate_name_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("El nombre de la materia no puede estar vacío")
+        return v.title()
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "nombre_materia": "Programación III",
+                "ciclo_semestral": SubjectCycle.PROFESIONAL
+            }
+        }
+    )
 
 class SubjectCreate(SubjectBase):
-    pass
-
-
-class SubjectResponse(SubjectBase):
-    codigo_materia: str = Field(
-        ..., 
-        max_length=8, 
-        description="Identificador único de la materia, compuesto por letras y números. Ejemplo: MAT101"
+    codigo_materia: SubjectCode
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "codigo_materia": "PROG3",
+                "nombre_materia": "Programación III",
+                "ciclo_semestral": SubjectCycle.PROFESIONAL
+            }
+        }
     )
 
-    class Config:
-        orm_mode = True
+class SubjectUpdate(BaseModel):
+    nombre_materia: Optional[SubjectName] = None
+    ciclo_semestral: Optional[SubjectCycle] = None
+
+    validate_name_not_empty = field_validator("nombre_materia")(
+        SubjectBase.validate_name_not_empty.__func__
+    )
+
+class SubjectResponse(SubjectBase):
+    codigo_materia: SubjectCode
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "codigo_materia": "PROG3",
+                "nombre_materia": "Programación III",
+                "ciclo_semestral": SubjectCycle.PROFESIONAL
+            }
+        }
+    )
+
+class SubjectSummary(BaseModel):
+    codigo_materia: SubjectCode
+    nombre_materia: SubjectName
+    ciclo_semestral: SubjectCycleType
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "codigo_materia": "PROG3",
+                "nombre_materia": "Programación III",
+                "ciclo_semestral": SubjectCycle.PROFESIONAL
+            }
+        }
+    )
+
