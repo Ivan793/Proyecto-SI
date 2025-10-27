@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from typing import List
 from app.services import teacher_service
-from app.schemas.proyect import Proyecto
+from app.schemas.proyect import ProyectoBase
 from app.schemas.teacher import TeacherBase
 
 router = APIRouter(prefix="/teachers", tags=["Teachers"])
@@ -27,11 +27,11 @@ def get_teacher_subjects(teacher_id: str):
 def get_subject_groups(teacher_id: str, subject_code: str):
     return teacher_service.list_subject_groups(subject_code)
 
-@router.get("/{teacher_id}/projects", response_model=List[Proyecto])
+@router.get("/{teacher_id}/projects", response_model=List[ProyectoBase])
 def get_teacher_projects(teacher_id: str):
     return teacher_service.list_teacher_projects(teacher_id)
 
-@router.get("/{teacher_id}/projects/{project_id}", response_model=Proyecto)
+@router.get("/{teacher_id}/projects/{project_id}", response_model=ProyectoBase)
 def get_project_detail(teacher_id: str, project_id: str):
     try:
         project = teacher_service.get_project_info(project_id)
