@@ -4,7 +4,7 @@ from app.services import teacher_service
 from app.schemas.proyect import ProyectoBase
 from app.schemas.teacher import TeacherBase
 
-router = APIRouter(prefix="/teachers", tags=["Teachers"])
+router = APIRouter(prefix="/teachers", tags=["Docentes"])
 
 @router.get("/projects")
 def get_all_projects():
