@@ -2,29 +2,29 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, Dict
 from datetime import datetime
 from app.schemas.types import *
-from app.schemas.user import UserBase
-from app.core.constants import Defaults, ValidationMessages, Limits
+from app.schemas.user import UserCreate  
+from app.core.constants import ValidationMessages, Limits
 from app.core.patterns import Patterns
 import re
 
 class GuestBase(BaseModel):
     institucion_origen: Optional[Institution] = None
     motivo_visita: Optional[VisitReason] = None
-    activo: StatusActive = Defaults.ACTIVE_STATUS
+    nombre_empresa: Optional[str] = None  
+    id_sector: Optional[str] = None       
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "institucion_origen": "Universidad Nacional",
                 "motivo_visita": "Conferencia académica",
-                "activo": True
+                "nombre_empresa": "Tech Solutions S.A.S",
+                "id_sector": "SEC12345"
             }
         }
     )
 
-class GuestCreate(UserBase, GuestBase):
-    contraseña: UserPassword
-
+class GuestCreate(UserCreate, GuestBase):  # ✅ hereda de UserCreate
     @field_validator("correo")
     def validate_guest_email(cls, v):
         if not re.match(r"^[\w\.-]+@[\w\.-]+\.\w+$", v):
@@ -46,7 +46,7 @@ class GuestCreate(UserBase, GuestBase):
                 "identificacion": "1234567890",
                 "nombres": "Laura",
                 "apellidos": "Castillo Ríos",
-                "genero": "Mujer",
+                "sexo": "Mujer",
                 "identidad_sexual": "Heterosexual",
                 "fecha_nacimiento": "1998-05-17",
                 "nacionalidad": "Colombiana",
@@ -61,7 +61,8 @@ class GuestCreate(UserBase, GuestBase):
                 "rol": "Invitado",
                 "institucion_origen": "Universidad del Norte",
                 "motivo_visita": "Foro de Tecnología",
-                "activo": True
+                "nombre_empresa": "Tech Solutions S.A.S",
+                "id_sector": "SEC12345"
             }
         }
     )
@@ -75,7 +76,8 @@ class GuestCreateExistingUser(GuestBase):
                 "id_usuario": "abc12345",
                 "institucion_origen": "SENA",
                 "motivo_visita": "Capacitación docente",
-                "activo": True
+                "nombre_empresa": None,
+                "id_sector": None
             }
         }
     )
@@ -83,14 +85,16 @@ class GuestCreateExistingUser(GuestBase):
 class GuestUpdate(BaseModel):
     institucion_origen: Optional[Institution] = None
     motivo_visita: Optional[VisitReason] = None
-    activo: Optional[StatusActive] = None
+    nombre_empresa: Optional[str] = None
+    id_sector: Optional[str] = None
 
 class GuestResponse(BaseModel):
     id_invitado: GuestId
     id_usuario: UserId
     institucion_origen: Optional[Institution] = None
     motivo_visita: Optional[VisitReason] = None
-    activo: StatusActive = Defaults.ACTIVE_STATUS
+    nombre_empresa: Optional[str] = None
+    id_sector: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
