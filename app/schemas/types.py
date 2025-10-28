@@ -388,10 +388,12 @@ SubjectCode = Annotated[
 # ==================== TIPOS DE GRUPO ====================
 
 GroupCode = Annotated[
-    int,
+    str,
     Field(
-        gt=0,
-        description="Código único del grupo"
+        min_length=1,
+        max_length=10,
+        pattern=r"^[0-9]+$",
+        description="Código único del grupo (números)"
     )
 ]
 
@@ -558,24 +560,3 @@ FacultyName = Annotated[
     )
 ]
 
-# ==================== TIPOS DE PROGRAMA ACADÉMICO ====================
-
-ProgramCode = Annotated[
-    str, 
-    Field(
-        min_length=Limits.PROGRAM_CODE_MIN,
-        max_length=Limits.PROGRAM_CODE_MAX,
-        pattern=Patterns.PROGRAM_CODE,
-        description="Código único del programa académico (Ej: ING_SIS, ING_IND)"
-    )
-]
-
-ProgramName = Annotated[
-    str,
-    Field(
-        min_length=Limits.NAME_MIN,
-        max_length=100,
-        pattern=Patterns.NAME,
-        description="Nombre completo del programa académico"
-    )
-]

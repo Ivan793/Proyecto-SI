@@ -15,7 +15,7 @@ from app.dependencies.auth_dependencies import get_current_admin_user
 from app.dependencies.service_dependencies import get_teacher_service
 from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
-    success_response, created_response, paginated_response, 
+    internal_server_error_response, success_response, created_response, paginated_response, 
     updated_response, message_response
 )
 from app.utils.swagger_docs import ResponseDocumentation
@@ -121,6 +121,34 @@ async def get_teacher_with_user(
         message="Profesor con información completa"
     )
 
+@router.get(
+    "/{teacher_id}/grupos",
+    status_code=status.HTTP_200_OK,
+    summary="Obtener grupos del profesor",
+    description="Obtiene todos los grupos asignados a un profesor",
+    responses=ResponseDocumentation.get_standard_responses()
+)
+@admin_rate_limit()
+async def get_teacher_groups(
+    request: Request,
+    teacher_id: str,
+    _: Dict[str, Any] = Depends(get_current_admin_user)
+):
+    try:
+        from app.services.group_service import GroupService
+        group_service = GroupService()
+        groups = await group_service.get_groups_by_teacher(teacher_id)
+        
+        return success_response(
+            data=[group.model_dump() for group in groups],
+            message=f"Grupos del profesor {teacher_id} obtenidos correctamente"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo grupos del profesor {teacher_id}: {str(e)}")
+        return internal_server_error_response()
+
+
 
 @router.put(
     "/{teacher_id}",
@@ -216,18 +244,32 @@ async def get_teachers_by_program(
     "/{teacher_id}/carga",
     status_code=status.HTTP_200_OK,
     summary="Obtener carga de trabajo del profesor",
+    description="Obtiene información sobre los grupos asignados al profesor",
     responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_teacher_workload(
     request: Request,
     teacher_id: str,
-    _: Dict[str, Any] = Depends(get_current_admin_user),
-    service: TeacherService = Depends(get_teacher_service)
+    _: Dict[str, Any] = Depends(get_current_admin_user)
 ):
-    workload = await service.get_teacher_workload(teacher_id)
-    
-    return success_response(
-        data=workload,
-        message="Carga de trabajo obtenida correctamente"
-    )
+    try:
+        from app.services.group_service import GroupService
+        group_service = GroupService()
+        groups = await group_service.get_groups_by_teacher(teacher_id)
+        
+        workload_data = {
+            "id_docente": teacher_id,
+            "total_grupos": len(groups),
+            "grupos_activos": len([g for g in groups if getattr(g, 'activo', True)]),
+            "detalle_grupos": [group.model_dump() for group in groups]
+        }
+        
+        return success_response(
+            data=workload_data,
+            message="Carga de trabajo obtenida correctamente"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo carga de trabajo del profesor {teacher_id}: {str(e)}")
+        return internal_server_error_response()

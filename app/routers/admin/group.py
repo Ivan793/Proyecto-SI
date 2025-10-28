@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Body, Depends, Query, status, Request
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import logging
 
 from app.schemas.types import ReasonText
 from app.services.group_service import GroupService
-from app.schemas.group import GroupCreate, GroupUpdate, GroupResponse, GroupWithSubjectResponse
+from app.schemas.group import GroupCreate, GroupUpdate, GroupResponse, GroupWithDetailsResponse
 from app.schemas.common import PaginationParams
 
 from app.dependencies.auth_dependencies import get_current_admin_user
@@ -23,7 +23,7 @@ from app.exceptions.group_exceptions import (
     SubjectNotFoundException,
     TeacherNotFoundException
 )
-from app.exceptions.assignment_exceptions import TeacherNotAvailableException
+from app.exceptions.base_exceptions import ValidationException
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ router = APIRouter(tags=["Grupos - Admin"])
     "",
     status_code=status.HTTP_201_CREATED,
     summary="Crear nuevo grupo",
-    description="Crea un nuevo grupo asignado a una materia y un profesor",
+    description="Crea un nuevo grupo asignado a un profesor (sin materia inicialmente)",
     responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
@@ -45,8 +45,7 @@ async def create_group(
 ):
     try:
         service = GroupService()
-        subject_code = group_data.codigo_materia
-        group = await service.create_group(group_data, subject_code, current_admin["user_id"])
+        group = await service.create_group(group_data, current_admin["user_id"])
         
         logger.info(f"Grupo creado: {group.codigo_grupo} por {current_admin['nombre_completo']}")
         
@@ -57,12 +56,10 @@ async def create_group(
         
     except GroupAlreadyExistsException as e:
         return conflict_response(message=str(e))
-    except SubjectNotFoundException as e:
-        return not_found_response("Materia", group_data.codigo_materia)
     except TeacherNotFoundException as e:
         return not_found_response("Profesor", group_data.id_docente)
-    except TeacherNotAvailableException as e:
-        return conflict_response(message=str(e))
+    except ValidationException as e:
+        return bad_request_response(message=str(e))
     except Exception as e:
         logger.error(f"Error inesperado creando grupo: {str(e)}")
         return internal_server_error_response()
@@ -111,13 +108,13 @@ async def get_groups(
     "/{group_code}",
     status_code=status.HTTP_200_OK,
     summary="Obtener grupo por código",
-    description="Obtiene información detallada de un grupo específico",
+    description="Obtiene información básica de un grupo específico",
     responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def get_group_by_code(
     request: Request,
-    group_code: int,
+    group_code: str,
     _: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
@@ -146,7 +143,7 @@ async def get_group_by_code(
 @admin_rate_limit()
 async def get_group_with_details(
     request: Request,
-    group_code: int,
+    group_code: str,
     _: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
@@ -175,7 +172,7 @@ async def get_group_with_details(
 @admin_rate_limit()
 async def update_group(
     request: Request,
-    group_code: int,
+    group_code: str,
     group_data: GroupUpdate,
     current_admin: Dict[str, Any] = Depends(get_current_admin_user)
 ):
@@ -192,12 +189,10 @@ async def update_group(
         
     except GroupNotFoundException as e:
         return not_found_response("Grupo", group_code)
-    except SubjectNotFoundException as e:
-        return not_found_response("Materia", group_data.codigo_materia)
     except TeacherNotFoundException as e:
-        return not_found_response("Profesor", group_data.id_docente)
-    except TeacherNotAvailableException as e:
-        return conflict_response(message=str(e))
+        return not_found_response("Profesor", group_data.id_docente if group_data.id_docente else "no especificado")
+    except ValidationException as e:
+        return bad_request_response(message=str(e))
     except Exception as e:
         logger.error(f"Error actualizando grupo {group_code}: {str(e)}")
         return internal_server_error_response()
@@ -257,6 +252,32 @@ async def get_groups_by_teacher(
         return internal_server_error_response()
 
 
+@router.get(
+    "/sin-materia/asignados",
+    status_code=status.HTTP_200_OK,
+    summary="Obtener grupos sin materia asignada",
+    description="Obtiene todos los grupos que no tienen materia asignada",
+    responses=ResponseDocumentation.get_standard_responses()
+)
+@admin_rate_limit()
+async def get_groups_without_subject(
+    request: Request,
+    _: Dict[str, Any] = Depends(get_current_admin_user)
+):
+    try:
+        service = GroupService()
+        groups = await service.get_groups_without_subject()
+        
+        return success_response(
+            data=[group.model_dump() for group in groups],
+            message="Grupos sin materia asignada obtenidos correctamente"
+        )
+        
+    except Exception as e:
+        logger.error(f"Error obteniendo grupos sin materia: {str(e)}")
+        return internal_server_error_response()
+
+
 @router.patch(
     "/{group_code}/desactivar",
     status_code=status.HTTP_200_OK,
@@ -267,7 +288,7 @@ async def get_groups_by_teacher(
 @admin_rate_limit()
 async def deactivate_group(
     request: Request,
-    group_code: int,
+    group_code: str,
     razon: ReasonText = Body(..., embed=True),
     current_admin: Dict[str, Any] = Depends(get_current_admin_user)
 ):
@@ -287,4 +308,34 @@ async def deactivate_group(
         return conflict_response(message=str(e))
     except Exception as e:
         logger.error(f"Error desactivando grupo {group_code}: {str(e)}")
+        return internal_server_error_response()
+
+
+@router.patch(
+    "/{group_code}/activar",
+    status_code=status.HTTP_200_OK,
+    summary="Activar grupo",
+    description="Activa un grupo previamente desactivado",
+    responses=ResponseDocumentation.get_standard_responses()
+)
+@admin_rate_limit()
+async def activate_group(
+    request: Request,
+    group_code: str,
+    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
+):
+    try:
+        service = GroupService()
+        success = await service.activate_group(group_code)
+        
+        if success:
+            logger.info(f"Grupo activado: {group_code} por {current_admin['nombre_completo']}")
+            return message_response("Grupo activado exitosamente")
+        else:
+            return bad_request_response(message="No se pudo activar el grupo")
+            
+    except GroupNotFoundException as e:
+        return not_found_response("Grupo", group_code)
+    except Exception as e:
+        logger.error(f"Error activando grupo {group_code}: {str(e)}")
         return internal_server_error_response()
