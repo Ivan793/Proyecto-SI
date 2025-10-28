@@ -54,7 +54,15 @@ class GuestService:
             logger.info(f"Usuario creado en Firebase Auth: {user_id}")
 
             # 🔹 4. Crear usuario en Firestore (tabla usuarios)
-            user_dict = guest_data.model_dump(exclude={"contraseña", "institucion_origen", "motivo_visita", "activo"})
+            user_dict = guest_data.model_dump(
+                exclude={
+                    "contraseña",
+                    "institucion_origen",
+                    "motivo_visita",
+                    "nombre_empresa",
+                    "id_sector"
+                }
+            )
             user_dict["estado"] = "ACTIVO"
             await self.user_repo.create(user_dict, document_id=user_id)
             logger.info(f"Usuario creado en Firestore: {user_id}")
@@ -64,7 +72,8 @@ class GuestService:
                 "id_usuario": user_id,
                 "institucion_origen": guest_data.institucion_origen,
                 "motivo_visita": guest_data.motivo_visita,
-                "activo": guest_data.activo if guest_data.activo is not None else True,
+                "nombre_empresa": guest_data.nombre_empresa,
+                "id_sector": guest_data.id_sector,
                 "created_at": datetime.utcnow(),
                 "updated_at": datetime.utcnow()
             }
@@ -106,27 +115,31 @@ class GuestService:
         guest_dict = guest_data.model_dump()
         guest_dict.update({
             "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
-            "activo": guest_dict.get("activo", True)
+            "updated_at": datetime.utcnow()
         })
 
         new_guest = await self.guest_repo.create(guest_dict)
-        if "activo" not in new_guest:
-            new_guest["activo"] = guest_dict["activo"]
-
         return GuestResponse(**new_guest)
 
     # ---------------------------
-    # Obtener todos los invitados (solo activos)
+    # Obtener todos los invitados (solo usuarios activos)
     # ---------------------------
     async def get_all_guests(self, page: int = 1, limit: int = 20):
-        filters = {"activo": True}
-        guests, total = await self.guest_repo.get_all_paginated(filters, page, limit)
+        try:
+            guests, total = await self.guest_repo.get_all_paginated(page=page, limit=limit)
+            active_guests = []
 
-        for g in guests:
-            g["activo"] = g.get("activo", True)
+            # 🔍 Filtrar por usuarios activos
+            for g in guests:
+                user_id = g.get("id_usuario")
+                user = await self.user_repo.get_by_id(user_id)
+                if user and user.get("activo", False) is True:
+                    active_guests.append(GuestResponse(**g))
 
-        return [GuestResponse(**g) for g in guests], total
+            return active_guests, len(active_guests)
+        except Exception as e:
+            logger.error(f"Error al listar invitados activos: {e}")
+            raise ValueError(f"Error al obtener invitados: {str(e)}")
 
     # ---------------------------
     # Obtener invitado por ID
@@ -139,7 +152,6 @@ class GuestService:
         if not guest:
             raise GuestNotFoundException(guest_id)
 
-        guest["activo"] = guest.get("activo", True)
         return GuestResponse(**guest)
 
     # ---------------------------
@@ -157,7 +169,6 @@ class GuestService:
 
         updated_data = guest_data.model_dump(exclude_unset=True)
         updated_data["updated_at"] = datetime.utcnow()
-        updated_data["activo"] = updated_data.get("activo", guest.get("activo", True))
 
         success = await self.guest_repo.update(real_id, updated_data)  # ← Devuelve True/False
 
@@ -167,10 +178,10 @@ class GuestService:
         # Obtener el documento ACTUALIZADO
         updated_guest = await self.guest_repo.get_by_id(real_id)  # ← Esto devuelve el dict
 
-        return GuestResponse(**updated_guest) 
+        return GuestResponse(**updated_guest)
 
     # ---------------------------
-    # Desactivar invitado
+    # Desactivar invitado (actualiza usuario)
     # ---------------------------
     async def deactivate_guest(self, guest_id: str, reason: str):
         guest = await self.guest_repo.get_by_id(guest_id)
@@ -180,14 +191,19 @@ class GuestService:
         if not guest:
             raise GuestNotFoundException(guest_id)
 
-        id_to_update = guest.get("id_invitado") or guest.get("id") or guest_id
+        user_id = guest.get("id_usuario")
+        if not user_id:
+            raise GuestNotFoundException(f"No se encontró usuario asociado al invitado {guest_id}")
 
-        await self.guest_repo.update(
-            id_to_update,
+        # 🔹 Actualizar usuario, no invitado
+        await self.user_repo.update(
+            user_id,
             {
                 "activo": False,
-                "updated_at": datetime.utcnow(),
-                "desactivacion_motivo": reason
+                "razon_desactivacion": reason,
+                "updated_at": datetime.utcnow()
             }
         )
+
+        logger.info(f"Invitado {guest_id} desactivado y usuario {user_id} inactivado correctamente.")
         return True

@@ -38,8 +38,15 @@ async def create_graduate_with_user(
             data=result.model_dump(),
             message="Egresado creado exitosamente"
         )
+
+    except HTTPException as e:
+        # ✅ Devolvemos el mismo formato estructurado del servicio
+        logger.warning(f"Error controlado al crear egresado: {e.detail}")
+        return e
+
     except ValueError as e:
         return bad_request_response(message=str(e))
+
     except Exception as e:
         logger.error(f"Error interno creando egresado: {str(e)}")
         return internal_server_error_response()
