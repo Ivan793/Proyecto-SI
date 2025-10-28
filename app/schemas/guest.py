@@ -9,7 +9,6 @@ import re
 
 class GuestBase(BaseModel):
     institucion_origen: Optional[Institution] = None
-    motivo_visita: Optional[VisitReason] = None
     nombre_empresa: Optional[str] = None  
     id_sector: Optional[str] = None       
 
@@ -17,7 +16,6 @@ class GuestBase(BaseModel):
         json_schema_extra={
             "example": {
                 "institucion_origen": "Universidad Nacional",
-                "motivo_visita": "Conferencia académica",
                 "nombre_empresa": "Tech Solutions S.A.S",
                 "id_sector": "SEC12345"
             }
@@ -60,7 +58,6 @@ class GuestCreate(UserCreate, GuestBase):  # ✅ hereda de UserCreate
                 "contraseña": "Invitado123#",
                 "rol": "Invitado",
                 "institucion_origen": "Universidad del Norte",
-                "motivo_visita": "Foro de Tecnología",
                 "nombre_empresa": "Tech Solutions S.A.S",
                 "id_sector": "SEC12345"
             }
@@ -75,7 +72,6 @@ class GuestCreateExistingUser(GuestBase):
             "example": {
                 "id_usuario": "abc12345",
                 "institucion_origen": "SENA",
-                "motivo_visita": "Capacitación docente",
                 "nombre_empresa": None,
                 "id_sector": None
             }
@@ -84,7 +80,6 @@ class GuestCreateExistingUser(GuestBase):
 
 class GuestUpdate(BaseModel):
     institucion_origen: Optional[Institution] = None
-    motivo_visita: Optional[VisitReason] = None
     nombre_empresa: Optional[str] = None
     id_sector: Optional[str] = None
 
@@ -92,7 +87,6 @@ class GuestResponse(BaseModel):
     id_invitado: GuestId
     id_usuario: UserId
     institucion_origen: Optional[Institution] = None
-    motivo_visita: Optional[VisitReason] = None
     nombre_empresa: Optional[str] = None
     id_sector: Optional[str] = None
     created_at: Optional[datetime] = None
