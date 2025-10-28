@@ -58,7 +58,6 @@ class GuestService:
                 exclude={
                     "contraseña",
                     "institucion_origen",
-                    "motivo_visita",
                     "nombre_empresa",
                     "id_sector"
                 }
@@ -71,7 +70,6 @@ class GuestService:
             guest_dict = {
                 "id_usuario": user_id,
                 "institucion_origen": guest_data.institucion_origen,
-                "motivo_visita": guest_data.motivo_visita,
                 "nombre_empresa": guest_data.nombre_empresa,
                 "id_sector": guest_data.id_sector,
                 "created_at": datetime.utcnow(),
