@@ -1,8 +1,6 @@
 # schemas/proyecto_schema.py
-from pydantic import BaseModel
-from typing import Optional
-from pydantic import BaseModel, Field, field_serializer
-from typing import Optional
+from pydantic import BaseModel, Field, field_serializer, field_validator
+from typing import Optional, List
 from datetime import datetime
 from app.core.constants import Limits
 from app.core.enums import TipoActividadEnum

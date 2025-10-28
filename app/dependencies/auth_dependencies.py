@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import auth as firebase_auth
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Union, List
 import logging
 
 from app.repositories.user_repository import UserRepository
@@ -10,6 +10,17 @@ from app.repositories.student_repository import StudentRepository
 logger = logging.getLogger(__name__)
 
 security = HTTPBearer()
+
+class InsufficientPermissionsException(HTTPException):
+    """Exception to indicate insufficient permissions with a standardized detail payload."""
+    def __init__(self, message: str = "Se requieren permisos insuficientes", required_role: Optional[Union[str, List[str]]] = None):
+        detail = {
+            "status": "error",
+            "mensaje": message
+        }
+        if required_role is not None:
+            detail["required_role"] = required_role
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 async def get_current_user(

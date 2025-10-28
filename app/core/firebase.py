@@ -23,9 +23,6 @@ class FirebaseClient:
             cls._instance = super(FirebaseClient, cls).__new__(cls)
         return cls._instance
     
-   # app/core/firebase.py
-# SOLO REEMPLAZA EL MÉTODO initialize()
-
     def initialize(self):
         app_exists = False
         try:
@@ -47,16 +44,23 @@ class FirebaseClient:
                     'databaseURL': settings.FIREBASE_DATABASE_URL
                 } if settings.FIREBASE_DATABASE_URL else {})
                 
-                print("INFO:app.core.firebase:Firebase inicializado correctamente.")
+                # 3. Inicializar el cliente de Firestore
+                self._db = firestore.client()
+                
+                logger.info("Firebase inicializado correctamente.")
                 
             except Exception as e:
-                print(f"ERROR:app.core.firebase:Error al inicializar Firebase: {e}")
+                logger.error(f"Error al inicializar Firebase: {e}")
                 raise
         else:
             self._app = firebase_admin.get_app()
-            print("INFO:app.core.firebase:Firebase ya estaba inicializado.")
+            # Asegurar que _db esté inicializado
+            if self._db is None:
+                self._db = firestore.client()
+            logger.info("Firebase ya estaba inicializado.")
     
     def get_db(self) -> firestore.Client:
+        """Obtiene el cliente de Firestore, inicializándolo si es necesario"""
         if self._db is None:
             self.initialize()
         return self._db
