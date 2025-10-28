@@ -98,7 +98,6 @@ class Collections:
     FACULTADES = "facultades"
     MATERIAS = "materias"
     GRUPOS = "grupos"
-    DOCENTE_MATERIAS = "docente_materias"
     ESTUDIANTE_MATERIAS = "estudiante_materias"
     
     # Investigación

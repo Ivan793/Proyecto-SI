@@ -364,11 +364,18 @@ class TeacherService:
                     message="Debe proporcionar una razón de desactivación válida (mínimo 10 caracteres)",
                     field="razon"
                 )
-            from app.repositories.teacher_subject_repository import TeacherSubjectRepository
-            ts_repo = TeacherSubjectRepository()
-            if await ts_repo.teacher_has_assignments(teacher_id):
-                raise TeacherHasAssignmentsException(teacher_id)
+            
+            # Verificar si el docente tiene grupos activos usando GroupRepository
+            from app.repositories.group_repository import GroupRepository
+            group_repo = GroupRepository()
+            groups = await group_repo.get_groups_by_teacher(teacher_id)
 
+            # Filtrar grupos activos
+            active_groups = [group for group in groups if group.get("activo", True)]
+
+            if active_groups:
+                raise TeacherHasAssignmentsException(teacher_id)
+            
             user_id = teacher["id_usuario"]
             success = await self.user_repo.deactivate_user(user_id, reason)
             
@@ -423,20 +430,36 @@ class TeacherService:
             if not teacher:
                 raise TeacherNotFoundException(teacher_id)
 
-            from app.repositories.teacher_subject_repository import TeacherSubjectRepository
-            ts_repo = TeacherSubjectRepository()
-            assignments = await ts_repo.get_assignments_by_teacher(teacher_id)
+            # Obtener grupos del docente
+            from app.repositories.group_repository import GroupRepository
+            group_repo = GroupRepository()
+            groups = await group_repo.get_groups_by_teacher(teacher_id)
             
-            active_assignments = [a for a in assignments if a.get("activo", True)]
+            # Enriquecer grupos con información básica
+            enriched_groups = []
+            for group in groups:
+                group_code = group.get("codigo_grupo")
+                if group_code:
+                    # Obtener información básica del grupo
+                    group_details = await group_repo.get_group_with_details(group_code)
+                    if group_details:
+                        enriched_groups.append({
+                            "codigo_grupo": group_code,
+                            "codigo_materia": group.get("codigo_materia"),
+                            "nombre_materia": group_details.get("nombre_materia"),
+                            "activo": group.get("activo", True)
+                        })
+            
+            active_groups = [g for g in enriched_groups if g.get("activo", True)]
             
             return {
                 "id_docente": teacher_id,
-                "total_asignaciones": len(assignments),
-                "asignaciones_activas": len(active_assignments),
-                "detalle_asignaciones": active_assignments,
+                "total_grupos": len(groups),
+                "grupos_activos": len(active_groups),
+                "detalle_grupos": active_groups,
                 "estado": "ACTIVO" if teacher.get("activo", True) else "INACTIVO"
             }
-            
+        
         except TeacherNotFoundException as e:
             raise
         except Exception as e:

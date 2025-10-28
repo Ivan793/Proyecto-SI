@@ -7,13 +7,7 @@ import logging
 import traceback
 
 from .base_exceptions import AppException
-from app.exceptions.teacher_subject_exceptions import (
-    TeacherSubjectNotFoundException,
-    TeacherSubjectAlreadyExistsException,
-    TeacherSubjectAssignmentException,
-    TeacherSubjectHasDependenciesException,
-    TeacherNotAvailableException
-)
+
 
 from app.exceptions.event_exceptions import (
     EventNotFoundException,
@@ -229,13 +223,6 @@ def register_exception_handlers(app):
     
     # Excepciones personalizadas
     app.add_exception_handler(AppException, app_exception_handler)
-    
-    # Excepciones de asignación docente-materia
-    app.add_exception_handler(TeacherSubjectNotFoundException, app_exception_handler)
-    app.add_exception_handler(TeacherSubjectAlreadyExistsException, app_exception_handler)
-    app.add_exception_handler(TeacherSubjectAssignmentException, app_exception_handler)
-    app.add_exception_handler(TeacherSubjectHasDependenciesException, app_exception_handler)
-    app.add_exception_handler(TeacherNotAvailableException, app_exception_handler)
     
     # Excepciones de eventos
     app.add_exception_handler(EventNotFoundException, app_exception_handler)
