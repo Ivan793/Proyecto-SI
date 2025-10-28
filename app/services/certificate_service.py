@@ -137,6 +137,11 @@ class CertificateService:
         if not proyecto:
             raise ValueError(f"Proyecto con ID {id_proyecto} no encontrado")
         
+        # ✅ CORRECCIÓN: Convertir tipo_actividad a string si es necesario
+        tipo_actividad = proyecto.get('tipo_actividad')
+        if tipo_actividad is not None and not isinstance(tipo_actividad, str):
+            tipo_actividad = str(tipo_actividad)
+        
         # Convertir calificación a string si es necesario
         calificacion = proyecto.get('calificacion')
         if calificacion is not None and not isinstance(calificacion, str):
@@ -153,7 +158,7 @@ class CertificateService:
         return DatosProyectoCertificado(
             id_proyecto=id_proyecto,
             titulo_proyecto=proyecto['titulo_proyecto'],
-            tipo_actividad=proyecto['tipo_actividad'],
+            tipo_actividad=tipo_actividad,
             calificacion=calificacion,
             fecha_subida=fecha_subida
         )

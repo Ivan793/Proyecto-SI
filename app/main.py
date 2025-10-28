@@ -62,7 +62,11 @@ async def lifespan(app: FastAPI):
     try:
         firebase_client.initialize()
         logger.info("✅ Firebase inicializado en lifespan")
-    
+    except Exception as e:
+        logger.error(f"Error CRÍTICO al inicializar Firebase: {e}")
+        # Si la inicialización falla, la aplicación no debería continuar
+        raise
+
     # Importar y registrar routers después de que Firebase esté inicializado
     routers = []
     
@@ -99,11 +103,6 @@ async def lifespan(app: FastAPI):
             logger.info(f"✅ {name} router registrado en {prefix}")
         except Exception as e:
             logger.error(f"❌ Error registrando {name} router: {str(e)}")
-    
-    except Exception as e:
-        logger.error(f"Error CRÍTICO al inicializar Firebase: {e}")
-        # Si la inicialización falla, la aplicación no debería continuar
-        raise
 
     # 2. Imprimir Rutas Registradas (Solución al problema de logs)
     # Ejecutamos esta lógica aquí para garantizar que se registre después de 
