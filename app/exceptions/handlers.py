@@ -23,6 +23,13 @@ from app.exceptions.event_exceptions import (
     InvalidEventStateTransitionException,
     EventNotActiveException
 )
+from app.exceptions.academic_exceptions import (
+    FacultyNotFoundException,
+    FacultyAlreadyExistsException,
+    ProgramNotFoundException,
+    ProgramAlreadyExistsException,
+    InvalidFacultyException
+)
 
 from app.exceptions.research_exceptions import (
     ResearchLineNotFoundException,
@@ -280,6 +287,13 @@ def register_exception_handlers(app):
     app.add_exception_handler(TokenNotFoundException, app_exception_handler)
     app.add_exception_handler(InsufficientPermissionsException, app_exception_handler)
     app.add_exception_handler(AccountDisabledException, app_exception_handler)
+
+    # Excepciones de facultad y programa
+    app.add_exception_handler(FacultyNotFoundException, app_exception_handler)
+    app.add_exception_handler(FacultyAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(ProgramNotFoundException, app_exception_handler)
+    app.add_exception_handler(ProgramAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(InvalidFacultyException, app_exception_handler)
 
     # Excepciones de validación
     app.add_exception_handler(RequestValidationError, validation_exception_handler)

@@ -535,3 +535,47 @@ StatusActive = Annotated[
     bool,
     Field(description="Estado activo/inactivo del registro")
 ]
+
+# ==================== TIPOS DE FACULTAD ====================
+
+FacultyId = Annotated[
+    str,
+    Field(
+        min_length=Limits.FACULTY_ID_MIN,
+        max_length=Limits.FACULTY_ID_MAX,
+        pattern=Patterns.FACULTY_ID,
+        description="Código único de la facultad (Ej: FAC_ING, FAC_EDU)"
+    )
+]
+
+FacultyName = Annotated[
+    str,
+    Field(
+        min_length=Limits.NAME_MIN,
+        max_length=100,
+        pattern=Patterns.NAME,
+        description="Nombre completo de la facultad"
+    )
+]
+
+# ==================== TIPOS DE PROGRAMA ACADÉMICO ====================
+
+ProgramCode = Annotated[
+    str, 
+    Field(
+        min_length=Limits.PROGRAM_CODE_MIN,
+        max_length=Limits.PROGRAM_CODE_MAX,
+        pattern=Patterns.PROGRAM_CODE,
+        description="Código único del programa académico (Ej: ING_SIS, ING_IND)"
+    )
+]
+
+ProgramName = Annotated[
+    str,
+    Field(
+        min_length=Limits.NAME_MIN,
+        max_length=100,
+        pattern=Patterns.NAME,
+        description="Nombre completo del programa académico"
+    )
+]

@@ -18,7 +18,23 @@ class ThematicAreaUpdate(BaseModel):
     nombre_area: Optional[ThematicAreaName] = None
     codigo_sublinea: Optional[SubResearchLineCode] = None
 
-class ThematicAreaResponse(ThematicAreaBase):
+class ThematicAreaResponsePublic(ThematicAreaBase):
+    """Schema público"""
+    codigo_area: ThematicAreaCode
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "codigo_area": 1,
+                "nombre_area": "Desarrollo de sistemas de información",
+                "codigo_sublinea": 1
+            }
+        }
+    )
+
+class ThematicAreaResponseAdmin(ThematicAreaBase):
+    """Schema administrativo"""
     codigo_area: ThematicAreaCode
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
