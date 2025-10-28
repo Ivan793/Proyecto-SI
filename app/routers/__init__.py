@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from .admin import router as admin_router
-from . import auth, graduate_router, guest_router, proyect_router, student_router, public_research_router
+from . import auth, graduate_router, guest_router, proyect_router, student_router, public_research_router, teacher_router
 
 router = APIRouter(prefix="/api/v1")
 
@@ -14,3 +14,4 @@ router.include_router(guest_router.router)
 router.include_router(proyect_router.router)
 router.include_router(student_router.router)
 router.include_router(public_research_router.router)
+router.include_router(teacher_router.router)
