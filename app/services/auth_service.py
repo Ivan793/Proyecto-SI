@@ -57,22 +57,18 @@ class AuthService:
                 )
             
             # VERIFICAR ESTADO DE LA CUENTA
-            estado = user.get("estado", "").upper()
+            activo = user.get("activo", True)
             
-            if estado == "INACTIVO":
+            if activo == False:
                 logger.warning(f"Login fallido: cuenta inactiva - {correo}")
                 raise AccountDisabledException()
+
             
-            if estado == "PENDIENTE":
-                logger.warning(f"Login fallido: cuenta pendiente - {correo}")
-                raise AccountPendingApprovalException()
-            
-            if estado != "ACTIVO":
-                logger.warning(f"Login fallido: estado inválido '{estado}' - {correo}")
+            if activo != True:
+                logger.warning(f"Login fallido: estado inválido '{activo}' - {correo}")
                 raise AccountDisabledException(
-                    f"Estado de cuenta inválido: {estado}"
+                    f"Estado de cuenta inválido: {activo}"
                 )
-            
             # AUTENTICAR CON FIREBASE AUTHENTICATION
             try:
                 firebase_response = self._authenticate_firebase(correo, password)
