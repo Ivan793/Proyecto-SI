@@ -2,6 +2,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query
 from app.dependencies.auth_dependencies import get_current_admin_user
 from app.services.assistence_service import AssistenceService
+from app.schemas.assistence import AsistenciaBase
 
 router = APIRouter(prefix="/asistencia", tags=["Asistencia"])
 service = AssistenceService()
@@ -34,12 +35,12 @@ async def generar_qr_evento(
     }
 
 @router.post("/registrar/{id_evento}")
-async def registrar_asistencia(id_evento: str, datos: Dict[str, str]):
+async def registrar_asistencia(id_evento: str, datos: AsistenciaBase):
     """
     Registra la asistencia de un usuario en el evento.
     """
-    correo = datos.get("correo")
-
+    correo = datos.correo_usuario
+    print(correo)
     if not correo:
         raise HTTPException(status_code=400, detail="Faltan datos obligatorios")
 
