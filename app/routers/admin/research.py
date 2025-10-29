@@ -7,9 +7,9 @@ from app.services.research_service import (
     SubResearchLineService, 
     ThematicAreaService
 )
-from app.schemas.researchLine import ResearchLineCreate, ResearchLineUpdate
-from app.schemas.SubResearchLine import SubResearchLineCreate, SubResearchLineUpdate
-from app.schemas.ThematicArea import ThematicAreaCreate, ThematicAreaUpdate
+from app.schemas.researchLine import ResearchLineCreate, ResearchLineUpdate, ResearchLineAdminResponse
+from app.schemas.SubResearchLine import SubResearchLineCreate, SubResearchLineUpdate, SubResearchLineResponseAdmin
+from app.schemas.ThematicArea import ThematicAreaCreate, ThematicAreaUpdate, ThematicAreaResponseAdmin
 
 from app.dependencies.auth_dependencies import get_current_admin_user
 from app.core.rate_limiter import admin_rate_limit
