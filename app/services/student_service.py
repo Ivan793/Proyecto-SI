@@ -72,6 +72,7 @@ class StudentService:
                 "codigo_programa": student_data.codigo_programa,
                 "semestre": student_data.semestre,
                 "anio_ingreso": student_data.anio_ingreso,
+                "periodo": student_data.periodo,  # 🔹 CAMBIO: se agrega campo periodo
                 "activo": True
             }
             
@@ -175,9 +176,8 @@ class StudentService:
             raise StudentNotFoundException(student_id)
 
         return await self.student_repo.update(student_id, {
-            "activo": False,
-            "razon_desactivacion": reason
-        })
+            "activo": False
+        })  # 🔹 CAMBIO: se elimina razon_desactivacion
 
     async def activate_student(self, student_id: str) -> bool:
         student = await self.student_repo.get_by_id(student_id)
