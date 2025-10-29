@@ -1,32 +1,35 @@
-# Ignorar entorno virtual
-.venv/
-
-# Entorno virtual
+# =========================================
+# Entornos virtuales de Python
+# =========================================
 venv/
 env/
+.venv/
+ENV/
 
-# Archivos de caché
+# =========================================
+# Archivos de caché y compilados de Python
+# =========================================
 __pycache__/
 *.pyc
-
-# Archivos del sistema
-.DS_Store
-
-# Archivos de configuración local
-*.env
-
-# Ignorar entorno virtual de Python
-.venv/
-
-
-.venv/
-
-# Python
-__pycache__/
+*.pyo
+*.pyd
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# =========================================
+# Archivos del sistema
+# =========================================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# =========================================
+# Archivos de construcción y distribución
+# =========================================
 build/
 develop-eggs/
 dist/
@@ -43,49 +46,54 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-ENV/
-env/
-.venv/
-
-# IDEs
+# =========================================
+# IDEs y editores
+# =========================================
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
 
-# Environment variables
+# =========================================
+# Variables de entorno y archivos sensibles
+# =========================================
 .env
 .env.local
 .env.*.local
-
-# Firebase credentials
+credentials/serviceAccountKey.json
 firebase_credentials.json
 serviceAccountKey.json
 *-firebase-adminsdk-*.json
+*.firebase.json
+*.key.json
+*.credentials.json
+*.pem
+*.crt
+*.csr
+*.key
 
-# Logs
+# =========================================
+# Archivos de log
+# =========================================
 *.log
 logs/
 
-# OS
-.DS_Store
-Thumbs.db
+# =========================================
+# Bases de datos locales
+# =========================================
+*.db
+*.sqlite
+*.sqlite3
 
-# Testing
+# =========================================
+# Archivos de pruebas
+# =========================================
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Temporary files
+# =========================================
+# Archivos temporales
+# =========================================
 tmp/
 temp/
 *.tmp

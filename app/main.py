@@ -52,11 +52,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
-
-# Registrar manejadores de excepciones globales
 register_exception_handlers(app)
 
 # Routers
@@ -72,5 +69,3 @@ handler = Mangum(app=app)
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {"firebase": "connected" if firebase_client._db else "disconnected"}
-
-#
