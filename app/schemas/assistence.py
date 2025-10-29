@@ -8,7 +8,7 @@ class AsistenciaBase(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
-                "correo": "ana@unicesar.edu.co",
+                "correo": "pinzon123@unicesar.edu.co",
             }
         }
     }
