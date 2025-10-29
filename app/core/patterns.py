@@ -9,3 +9,4 @@ class Patterns:
     # Email básico
     EMAIL = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
     EMAIL_INSTITUTIONAL = r"^[a-zA-Z0-9_.+-]+@unicesar\.edu\.co$"
+    FACULTY_ID = r"^[A-Z0-9_]+$"

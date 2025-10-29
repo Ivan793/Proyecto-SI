@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
-from app.schemas.SubResearchLine import SubResearchLineWithAreas
+from app.schemas.SubResearchLine import SubResearchLineWithAreasAdmin, SubResearchLineWithAreasPublic
 from app.schemas.types import (
     ResearchLineCode, ResearchLineName
 )
@@ -16,7 +16,22 @@ class ResearchLineCreate(ResearchLineBase):
 class ResearchLineUpdate(BaseModel):
     nombre_linea: Optional[ResearchLineName] = None
 
-class ResearchLineResponse(ResearchLineBase):
+class ResearchLinePublicResponse(ResearchLineBase):
+    """Schema público - sin timestamps"""
+    codigo_linea: ResearchLineCode
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "codigo_linea": 1,
+                "nombre_linea": "Tecnologías de la Información y la comunicación"
+            }
+        }
+    )
+
+class ResearchLineAdminResponse(ResearchLineBase):
+    """Schema administrativo - con timestamps completos"""
     codigo_linea: ResearchLineCode
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -33,5 +48,10 @@ class ResearchLineResponse(ResearchLineBase):
         }
     )
 
-class ResearchLineWithSublines(ResearchLineResponse):
-    sublineas: list[SubResearchLineWithAreas] = []
+class ResearchLineWithSublinesPublic(ResearchLinePublicResponse):
+    """Jerarquía pública - sin timestamps"""
+    sublineas: list[SubResearchLineWithAreasPublic] = []
+
+class ResearchLineWithSublinesAdmin(ResearchLineAdminResponse):
+    """Jerarquía administrativa - con timestamps"""
+    sublineas: list[SubResearchLineWithAreasAdmin] = []

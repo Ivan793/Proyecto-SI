@@ -27,7 +27,7 @@ class DocumentType(str, Enum):
     PAS = "PAS"  # Pasaporte
 
 
-class Gender(str, Enum):
+class Sex(str, Enum):
     HOMBRE = "Hombre"
     MUJER = "Mujer"
     HERMAFRODITA = "Hermafrodita"
