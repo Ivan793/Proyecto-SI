@@ -44,23 +44,17 @@ class BaseRepository(Generic[T]):
 
         converted = {}
         for key, value in data.items():
-            if type(value).__name__ == "DatetimeWithNanoseconds":
-                # Convertir DatetimeWithNanoseconds a datetime estándar
-                converted[key] = datetime.fromisoformat(value.isoformat())
-
+            # Convertir cualquier datetime a naive
+            if isinstance(value, (datetime, DatetimeWithNanoseconds)):
+                # Si tiene timezone, convertirlo a naive removiendo el timezone
+                if value.tzinfo is not None:
+                    converted[key] = value.replace(tzinfo=None)
+                else:
+                    converted[key] = value
             elif isinstance(value, dict):
-                # Recursivamente convertir diccionarios anidados
                 converted[key] = self._convert_firestore_data(value)
-
             elif isinstance(value, list):
-                # Convertir elementos de listas
-                converted[key] = [
-                    self._convert_firestore_data(item) if isinstance(item, dict) else
-                    datetime.fromisoformat(item.isoformat()) if type(item).__name__ == "DatetimeWithNanoseconds" else
-                    item
-                    for item in value
-                ]
-
+                converted[key] = [self._convert_firestore_data(item) if isinstance(item, dict) else item for item in value]
             else:
                 converted[key] = value
 
@@ -122,7 +116,9 @@ class BaseRepository(Generic[T]):
             # Aplicar filtros
             if filters:
                 for field, value in filters.items():
-                    query = query.where(field, "==", value)
+                    # NUEVO: Usar filter() en lugar de where()
+                    from google.cloud.firestore_v1.base_query import FieldFilter
+                    query = query.where(filter=FieldFilter(field, "==", value))
             
             # Ordenar
             if order_by:
@@ -203,13 +199,14 @@ class BaseRepository(Generic[T]):
     # Elimina un documento de forma lógica (marca como inactivo)
     async def soft_delete(self, document_id: str) -> bool:
         return await self.update(document_id, {
-            'estado': 'INACTIVO',
+            'activo': False,
             'deleted_at': datetime.now(timezone.utc)
         })
     
     async def exists(self, field: str, value: Any) -> bool:
         try:
-            docs = self.collection.where(field, "==", value).limit(1).stream()
+            from google.cloud.firestore_v1.base_query import FieldFilter
+            docs = self.collection.where(filter=FieldFilter(field, "==", value)).limit(1).stream()
             return len(list(docs)) > 0
             
         except Exception as e:
@@ -236,7 +233,8 @@ class BaseRepository(Generic[T]):
     
     async def get_by_field(self, field: str, value: Any) -> Optional[Dict[str, Any]]:
         try:
-            docs = self.collection.where(field, "==", value).limit(1).stream()
+            from google.cloud.firestore_v1.base_query import FieldFilter
+            docs = self.collection.where(filter=FieldFilter(field, "==", value)).limit(1).stream()
             docs_list = list(docs)
             
             if docs_list:

@@ -30,6 +30,7 @@ from firebase_admin._auth_utils import (
 )
 from app.core.validators import validate_user_role_email_match
 from app.services.auth_service import AuthService
+from app.schemas.teacher import UserBasicInfo
 
 logger = logging.getLogger(__name__)
 
@@ -276,9 +277,12 @@ class TeacherService:
             if not user:
                 raise UserNotFoundException(user_id)
 
+            # Usar el método centralizado
+            user_info = UserBasicInfo.from_user_data(user)
+
             return TeacherWithUserResponse(
                 docente=TeacherResponse(**teacher),
-                usuario=user
+                usuario=user_info
             )
             
         except (TeacherNotFoundException, UserNotFoundException, ValidationException) as e:
@@ -300,11 +304,52 @@ class TeacherService:
             if active_only:
                 teachers = await self._filter_active_teachers(teachers)
             
-            return await self._paginate_teachers(teachers, page, limit)
+            # Enriquecer con información del usuario
+            enriched_teachers = await self._enrich_teachers_with_user_info(teachers)
+
+            return await self._paginate_enriched_teachers(enriched_teachers, page, limit)
             
         except Exception as e:
             logger.error(f"Error obteniendo todos los docentes: {str(e)}")
             raise DatabaseException("Error al obtener la lista de docentes")
+    
+    async def _enrich_teachers_with_user_info(
+        self, 
+        teachers: List[dict]
+    ) -> List[TeacherWithUserResponse]:
+        """Enriquece lista de docentes con información del usuario asociado"""
+        enriched_teachers = []
+        
+        for teacher in teachers:
+            try:
+                user_id = teacher.get("id_usuario")
+                if not user_id:
+                    logger.warning(f"Docente {teacher.get('id_docente')} sin usuario asociado")
+                    continue
+                
+                # Obtener información del usuario
+                user = await self.user_repo.get_by_id(user_id)
+                if not user:
+                    logger.warning(f"Usuario {user_id} no encontrado para docente {teacher.get('id_docente')}")
+                    continue
+                
+                # Usar el método de clase para crear UserBasicInfo
+                user_info = UserBasicInfo.from_user_data(user)
+                
+                enriched_teachers.append(
+                    TeacherWithUserResponse(
+                        docente=TeacherResponse(**teacher),
+                        usuario=user_info
+                    )
+                )
+                
+            except Exception as e:
+                logger.warning(
+                    f"Error enriqueciendo docente {teacher.get('id_docente')}: {str(e)}"
+                )
+                continue
+        
+        return enriched_teachers
 
     async def _filter_active_teachers(self, teachers: List[dict]) -> List[dict]:
         """Filtra docentes activos - VERSIÓN MEJORADA"""
@@ -317,27 +362,19 @@ class TeacherService:
                     filtered_teachers.append(teacher)
         return filtered_teachers
 
-    async def _paginate_teachers(
+    async def _paginate_enriched_teachers(
         self, 
-        teachers: List[dict], 
+        teachers: List[TeacherWithUserResponse], 
         page: int, 
         limit: int
-    ) -> tuple[List[TeacherResponse], int]:
-        """Pagina lista de docentes"""
+    ) -> tuple[List[TeacherWithUserResponse], int]:
+        """Pagina lista de docentes enriquecidos"""
         total = len(teachers)
         start = (page - 1) * limit
         end = start + limit
         paginated_teachers = teachers[start:end]
         
-        teacher_responses = []
-        for teacher in paginated_teachers:
-            try:
-                teacher_responses.append(TeacherResponse(**teacher))
-            except Exception as e:
-                logger.warning(f"Error creando TeacherResponse para {teacher.get('id_docente')}: {str(e)}")
-                continue
-        
-        return teacher_responses, total
+        return paginated_teachers, total
 
     async def update_teacher(
         self, 

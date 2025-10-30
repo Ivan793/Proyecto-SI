@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator, ConfigDict, model_validator
-from typing import Optional, ClassVar
+from typing import Any, Dict, Optional, ClassVar
 from datetime import datetime
 
 # Importar tipos Annotated
@@ -138,3 +138,37 @@ class UserResponse(UserBase):
     updated_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
+
+class UserBasicInfo(BaseModel):
+    """Información básica del usuario reutilizable para todos los roles"""
+    id_usuario: Optional[UserId] = None
+    nombre_completo: str = Field(description="Nombre completo del usuario")
+    identificacion: UserIdentification
+    correo: UserEmail
+    telefono: Optional[UserPhone] = None
+    activo: Optional[StatusActive] = True
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id_usuario": "user_456def",
+                "nombre_completo": "Juan Carlos Pérez González",
+                "identificacion": "1023456789",
+                "correo": "juan.perez@unicesar.edu.co",
+                "telefono": "+57301343343",
+                "activo": True
+            }
+        }
+    )
+
+    @classmethod
+    def from_user_data(cls, user_data: Dict[str, Any]) -> 'UserBasicInfo':
+        """Crea UserBasicInfo a partir de datos de usuario de Firestore"""
+        return cls(
+            id_usuario=user_data.get("id_usuario") or user_data.get("id"),
+            nombre_completo=f"{user_data.get('nombres', '')} {user_data.get('apellidos', '')}".strip(),
+            identificacion=user_data.get('identificacion', ''),
+            correo=user_data.get('correo', ''),
+            telefono=user_data.get('telefono'),
+            activo=user_data.get('activo', True)
+        )
