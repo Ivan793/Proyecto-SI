@@ -94,9 +94,6 @@ class SubjectService:
         
         await self.subject_repo.create(subject_dict, subject_data.codigo_materia)
         
-        # Asignar grupos a la materia (actualizar cada grupo)
-        await self._assign_groups_to_subject(group_codes, subject_data.codigo_materia)
-        
         # Retornar materia con grupos asignados
         created_subject = await self.subject_repo.get_by_id(subject_data.codigo_materia)
         return SubjectResponse(**created_subject)
@@ -120,22 +117,6 @@ class SubjectService:
         if missing:
             raise GroupNotFoundException(missing[0])
 
-    async def _assign_groups_to_subject(
-        self, 
-        group_codes: List[str], 
-        subject_code: str
-    ):
-        """Asignar materia a múltiples grupos"""
-        
-        update_tasks = [
-            self.group_repo.update(code, {
-                "codigo_materia": subject_code,
-                "updated_at": datetime.now(timezone.utc)
-            })
-            for code in group_codes
-        ]
-        
-        await asyncio.gather(*update_tasks)
 
     async def get_subject(self, subject_code: str) -> SubjectResponse:
         """Obtener materia por código"""
