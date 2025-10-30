@@ -89,7 +89,7 @@ class AuthService:
             try:
                 user_id = user.get("id_usuario") or user.get("id")
                 await self.user_repo.update(user_id, {
-                    "ultima_conexion": datetime.now(timezone.utc)
+                    "ultima_conexion": datetime.now()
                 })
             except Exception as e:
                 logger.warning(f"No se pudo actualizar última conexión: {str(e)}")
