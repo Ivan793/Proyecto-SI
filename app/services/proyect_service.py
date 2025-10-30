@@ -2,14 +2,16 @@ from typing import List, Optional
 from datetime import datetime
 import json
 from fastapi import HTTPException
+from app.repositories.event_repository import EventRepository
 from app.schemas.proyect import ProyectoCreate, ProyectoResponse, ProyectoUpdate
 from app.services.cloudinary_service import upload_pdf_to_cloudinary
 from app.core.firebase import firebase_client, Collections
 from google.cloud.firestore_v1.base_query import FieldFilter 
 db = firebase_client.get_db()
 proyectos_ref = db.collection(Collections.PROYECTOS)
+evento_repo = EventRepository()
 
-# ---------------------------------------------------------------
+# --------------    -------------------------------------------------
 # FUNCIONES AUXILIARES
 # ---------------------------------------------------------------
 def _generar_id_proyecto() -> str:
@@ -72,31 +74,36 @@ def _validar_existencia_ids(proyecto: any):
     if not _existe_en_coleccion(Collections.GRUPOS, "codigo_grupo", proyecto["id_grupo"]):
         raise ValueError(f"No existe ningún grupo con ID '{proyecto["id_grupo"]}'.")
 
+    # Validar Linea de Investigacion
     if proyecto["codigo_linea"] and not _existe_en_coleccion(Collections.LINEAS_INVESTIGACION, "codigo_linea", proyecto["codigo_linea"]):
         raise ValueError(f"No existe ninguna línea de investigación con código '{proyecto["codigo_linea"]}'.")
     
+    # Validar Sub_linea de investigacion
     if proyecto["codigo_sublinea"] and not _existe_en_coleccion(Collections.LINEAS_INVESTIGACION + "/" + str(proyecto["codigo_linea"]) + "/sublineas",  "codigo_sublinea", proyecto["codigo_sublinea"]):
         
         raise ValueError(f"No existe ninguna sublínea de investigación con código '{proyecto["codigo_sublinea"]}'.")
     
-    if proyecto["codigo_sublinea"] and not _existe_en_coleccion(Collections.LINEAS_INVESTIGACION + "/" + str(proyecto["codigo_linea"]) + "/sublineas", "codigo_sublinea", proyecto["codigo_sublinea"], proyecto["id_area_tematica"] ):
+    # Validar Area Tematica
+    if proyecto["codigo_sublinea"] and not _existe_en_coleccion(Collections.LINEAS_INVESTIGACION + "/" + str(proyecto["codigo_linea"]) + "/sublineas", "codigo_sublinea", proyecto["codigo_sublinea"], proyecto["codigo_area"] ):
         
-        raise ValueError(f"No existe ninguna area tematica con código '{proyecto["id_area_tematica"]}'.")
+        raise ValueError(f"No existe ninguna area tematica con código '{proyecto["codigo_area"]}'.")
     
     
     #  Validar materia
-    if not _existe_en_coleccion(Collections.MATERIAS, "codigo_materia", proyecto["id_materia"]):
-        raise ValueError(f"No existe ninguna materia con ID '{proyecto["id_materia"]}'.")
+    if not _existe_en_coleccion(Collections.MATERIAS, "codigo_materia", proyecto["codigo_materia"]):
+        raise ValueError(f"No existe ninguna materia con ID '{proyecto["codigo_materia"]}'.")
+
+    evento_ref = db.collection(Collections.EVENTOS).document(proyecto["id_evento"])
+    evento_doc = evento_ref.get()
+
+    print("UID recibido para evento:", proyecto["id_evento"])  # <-- Verificación en consola
+    if not evento_doc.exists:
+        raise ValueError(f"No existe ningún evento con UID '{proyecto["id_evento"]}' en la base de datos.")
+    else:
+        print("Evento encontrado:", evento_doc.to_dict())
 
 
-    #  Validar evento
-    if not _existe_en_coleccion(Collections.EVENTOS, "id_evento", proyecto.id_evento):
-        raise ValueError(f"No existe ningún evento con ID '{proyecto.id_evento}'.")
-
-    #  Validar línea y sublínea (si se enviaron)
-
-
-    return True ("objeto existente")
+    return True, ("objeto existente")
 
 
 # ---------------------------------------------------------------
@@ -127,16 +134,20 @@ async def create_proyecto(proyecto: ProyectoCreate, archivo) -> ProyectoResponse
         raise ValueError("El ID del docente no cumple el tamaño mínimo de 3 caracteres.")
     if not proyecto.titulo_proyecto or len(proyecto.titulo_proyecto.strip()) < 3:
         raise ValueError("El título del proyecto debe tener al menos 3 caracteres.")
-    for field in ["id_grupo", "id_area_tematica", "id_evento", "id_materia"]:
+    for field in ["id_grupo", "codigo_area", "id_evento", "id_materia"]:
         valor = getattr(proyecto, field, None)
         if not valor or len(valor.strip()) < 3:
             raise ValueError(f"El campo '{field}' es obligatorio y debe tener al menos 3 caracteres.")
     if not proyecto.tipo_actividad or len(proyecto.tipo_actividad.strip()) < 3:
         raise ValueError("El tipo de actividad debe tener al menos 3 caracteres.")
 
-    #  Validar existencia real en Firestore
-    _validar_existencia_ids(proyecto)
 
+
+    # Validar las demás referencias (como diccionario)
+    _validar_existencia_ids(proyecto.dict())
+
+
+    
     #  Generar ID y subir PDF
     id_proyecto = _generar_id_proyecto()
     pdf_url = await upload_pdf_to_cloudinary(archivo)
@@ -148,9 +159,9 @@ async def create_proyecto(proyecto: ProyectoCreate, archivo) -> ProyectoResponse
         "id_docente": proyecto.id_docente,
         "id_estudiantes": proyecto.id_estudiantes,
         "id_grupo": proyecto.id_grupo,
-        "id_area_tematica": proyecto.id_area_tematica,
+        "codigo_area": proyecto.codigo_area,
         "id_evento": proyecto.id_evento,
-        "id_materia": proyecto.id_materia,
+        "id_materia": proyecto.codigo_materia,
         "codigo_linea": proyecto.codigo_linea,
         "codigo_sublinea": proyecto.codigo_sublinea,
         "titulo_proyecto": proyecto.titulo_proyecto.strip(),
