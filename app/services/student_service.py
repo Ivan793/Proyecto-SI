@@ -17,6 +17,7 @@ from app.exceptions.student_exceptions import (
     StudentAlreadyExistsException
 )
 from app.exceptions.user_exceptions import UserNotFoundException, UserAlreadyExistsException
+from app.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class StudentService:
     def __init__(self):
         self.student_repo = StudentRepository()
         self.user_repo = UserRepository()
+        self.auth_service = AuthService()
 
     async def create_student_with_user(
         self, 
@@ -77,7 +79,19 @@ class StudentService:
             
             student_id = await self.student_repo.create(student_dict)
             logger.info(f"Estudiante creado y vinculado: {student_id} -> {user_id}")
-            
+            # ENVIAR EMAIL DE VERIFICACIÓN
+            try:
+                email_sent = await self.auth_service.send_email_verification(
+                    usuario_data.correo
+                )
+                if email_sent:
+                    logger.info(f"Email de verificación enviado a: {usuario_data.correo}")
+                else:
+                    logger.warning(f"No se pudo enviar email de verificación")
+            except Exception as e:
+                # No detener el proceso si falla el envío
+                logger.error(f"Error enviando email de verificación: {str(e)}")
+                
             # Obtener y retornar el estudiante creado
             student = await self.student_repo.get_by_id(student_id)
             return StudentResponse(**student)

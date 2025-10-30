@@ -16,3 +16,4 @@ router.include_router(student_router.router)
 router.include_router(public_research_router.router)
 router.include_router(assistence_router.router)
 router.include_router(public_academic_router.router) 
+
