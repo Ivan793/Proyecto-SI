@@ -29,6 +29,7 @@ from firebase_admin._auth_utils import (
     UserNotFoundError
 )
 from app.core.validators import validate_user_role_email_match
+from app.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class TeacherService:
     def __init__(self):
         self.teacher_repo = TeacherRepository()
         self.user_repo = UserRepository()
+        self.auth_service = AuthService()
 
     async def create_teacher_with_user(
         self, 
@@ -66,6 +68,18 @@ class TeacherService:
                 teacher_id = await self._create_teacher_record(teacher_data, user_id)
                 teacher_created = True
                 logger.info(f"Docente creado y vinculado: {teacher_id} -> {user_id}")
+                # enviar email de verificacion
+                try:
+                    email_sent = await self.auth_service.send_email_verification(
+                        usuario_data.correo
+                    )
+                    if email_sent:
+                        logger.info(f"Email de verificación enviado a: {usuario_data.correo}")
+                    else:
+                        logger.warning(f"No se pudo enviar email de verificación a: {usuario_data.correo}")
+                except Exception as e:
+                    # No detener el proceso si falla el envío de email
+                    logger.error(f"Error enviando email de verificación: {str(e)}")
                 
                 return await self._get_created_teacher(teacher_id)
                 

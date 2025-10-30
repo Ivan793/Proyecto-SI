@@ -93,7 +93,6 @@ class Defaults:
     ACTIVE_STATUS = True
     DEFAULT_LANGUAGE = "es"
     DEFAULT_EVENT_STATE = "ACTIVO"
-    ACTIVE_STATUS = True
 
 
 class ValidationMessages:
