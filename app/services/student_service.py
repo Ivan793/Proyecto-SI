@@ -46,6 +46,7 @@ class StudentService:
         existing_user = await self.user_repo.get_user_by_email(usuario_data.correo)
         if existing_user:
             raise UserAlreadyExistsException("correo", usuario_data.correo)
+
         try:
             # Crear usuario en Firebase Authentication
             firebase_user = firebase_auth.create_user(
@@ -58,7 +59,7 @@ class StudentService:
             user_id = firebase_user.uid
             logger.info(f"Usuario creado en Firebase Auth: {user_id}")
             
-            # Crear usuario en Firestore (forzar rol de Estudiante)
+            # Crear usuario en Firestore (forzar rol y estado)
             user_dict = usuario_data.model_dump(exclude={"contraseña"})
             user_dict.update({
                 "estado": "ACTIVO",
@@ -68,13 +69,13 @@ class StudentService:
             await self.user_repo.create(user_dict, document_id=user_id)
             logger.info(f"Usuario creado en Firestore: {user_id}")
             
-            # Crear estudiante asociado al usuario
+            # Crear estudiante asociado al usuario (sin campo activo)
             student_dict = {
                 "id_usuario": user_id,
                 "codigo_programa": student_data.codigo_programa,
                 "semestre": student_data.semestre,
                 "anio_ingreso": student_data.anio_ingreso,
-                "activo": True
+                "periodo": student_data.periodo
             }
             
             student_id = await self.student_repo.create(student_dict)
@@ -157,9 +158,9 @@ class StudentService:
         page: int = 1,
         limit: int = 20
     ) -> tuple[List[StudentResponse], int]:
-        filters = {"activo": True} if active_only else {}
-        students = await self.student_repo.get_all(filters=filters)
-        
+        # Ya no filtramos por 'activo' en estudiantes, sino por usuarios activos
+        students = await self.student_repo.get_all()
+
         total = len(students)
         start = (page - 1) * limit
         end = start + limit
@@ -184,21 +185,24 @@ class StudentService:
         return StudentResponse(**updated_student)
 
     async def deactivate_student(self, student_id: str, reason: str) -> bool:
+        """Desactiva al estudiante deshabilitando su usuario (no el documento del estudiante)."""
         student = await self.student_repo.get_by_id(student_id)
         if not student:
             raise StudentNotFoundException(student_id)
 
-        return await self.student_repo.update(student_id, {
-            "activo": False,
-            "razon_desactivacion": reason
-        })
+        user_id = student["id_usuario"]
+        await self.user_repo.update(user_id, {"estado": "INACTIVO"})
+        return True
 
     async def activate_student(self, student_id: str) -> bool:
+        """Activa al estudiante habilitando su usuario."""
         student = await self.student_repo.get_by_id(student_id)
         if not student:
             raise StudentNotFoundException(student_id)
 
-        return await self.student_repo.update(student_id, {"activo": True})
+        user_id = student["id_usuario"]
+        await self.user_repo.update(user_id, {"estado": "ACTIVO"})
+        return True
 
     async def get_students_by_program(self, program_code: str) -> List[StudentResponse]:
         students = await self.student_repo.get_students_by_program(program_code)
