@@ -2,6 +2,7 @@
 from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 import logging
+from fastapi import Response
 import requests
 from firebase_admin import auth as firebase_auth
 
@@ -76,6 +77,14 @@ class AuthService:
                 logger.warning(f"Login fallido: Firebase auth falló - {correo}")
                 raise e
             
+            if correo != settings.ADMIN_DEFAULT_EMAIL:
+                firebase_user = firebase_auth.get_user_by_email(correo)
+                if not firebase_user.email_verified:
+                    raise AccountPendingApprovalException(
+                        "Debes verificar tu correo electrónico antes de iniciar sesión. "
+                        "Revisa tu bandeja de entrada."
+                    )
+            
             # ACTUALIZAR ÚLTIMA CONEXIÓN
             try:
                 user_id = user.get("id_usuario") or user.get("id")
@@ -88,7 +97,7 @@ class AuthService:
             # PREPARAR DATOS DEL USUARIO
             user_data = self._prepare_minimal_user_data(user)
             
-            logger.info(f"Login exitoso: {correo} (rol: {user_role})")
+            logger.info(f"Login exitoso: {correo} (rol: {user.get('rol')})")
             
             return {
                 "access_token": firebase_response["idToken"],
@@ -149,6 +158,54 @@ class AuthService:
         except requests.RequestException as e:
             logger.error(f"Error conectando con Firebase: {str(e)}")
             raise InvalidCredentialsException("Error de conexión")
+        
+
+    async def send_email_verification(self, email: str) -> bool:
+            """Envía email de verificación usando Firebase"""
+            try:
+                url = (
+                    f"https://identitytoolkit.googleapis.com/v1/"
+                    f"accounts:sendOobCode?key={settings.FIREBASE_API_KEY}"
+                )
+                
+                # Primero obtener el idToken del usuario
+                firebase_user = firebase_auth.get_user_by_email(email)
+                
+                # Generar un token temporal para enviar el email
+                custom_token = firebase_auth.create_custom_token(firebase_user.uid)
+                
+                # Intercambiar por idToken
+                sign_in_response = requests.post(
+                    f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={settings.FIREBASE_API_KEY}",
+                    json={"token": custom_token.decode(), "returnSecureToken": True}
+                )
+                
+                if sign_in_response.status_code != 200:
+                    logger.error(f"Error obteniendo idToken: {sign_in_response.text}")
+                    return False
+                
+                id_token = sign_in_response.json().get("idToken")
+                
+                # Enviar email de verificación
+                response = requests.post(
+                    url,
+                    json={
+                        "requestType": "VERIFY_EMAIL",
+                        "idToken": id_token
+                    },
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    logger.info(f"Email de verificación enviado a: {email}")
+                    return True
+                else:
+                    logger.error(f"Error enviando email de verificación: {response.text}")
+                    return False
+                    
+            except Exception as e:
+                logger.error(f"Error enviando email de verificación: {str(e)}")
+                return False
 
 
 
@@ -170,7 +227,7 @@ class AuthService:
                 raise InvalidCredentialsException("Usuario no encontrado")
             
             # Verificar estado activo
-            if user.get("estado") != "ACTIVO":
+            if not user.get("activo", True):
                 raise AccountDisabledException()
             
             return {
@@ -190,8 +247,40 @@ class AuthService:
             raise InvalidCredentialsException("Error al verificar token")
 
 # Refresca un token de Firebase
-    async def refresh_token(self, refresh_token: str) -> Dict[str, Any]:
+    async def verify_firebase_token(self, token: str) -> Dict[str, Any]:
+        """Verifica un token de Firebase y obtiene los datos del usuario"""
+        try:
+            decoded_token = firebase_auth.verify_id_token(token)
+            
+            email = decoded_token.get("email")
+            if not email:
+                raise InvalidCredentialsException("Token no contiene email")
+            
+            user = await self.user_repo.get_by_field("correo", email)
+            
+            if not user:
+                raise InvalidCredentialsException("Usuario no encontrado")
+            
+            if not user.get("activo", True):
+                raise AccountDisabledException()
+            
+            return {
+                "user_id": user.get("id_usuario") or user.get("id"),
+                "email": user.get("correo"),
+                "rol": user.get("rol"),
+                "nombre_completo": f"{user.get('nombres')} {user.get('apellidos')}"
+            }
+            
+        except firebase_auth.InvalidIdTokenError:
+            raise InvalidCredentialsException("Token inválido")
+        except firebase_auth.ExpiredIdTokenError:
+            raise InvalidCredentialsException("Token expirado")
+        except Exception as e:
+            logger.error(f"Error verificando token: {str(e)}")
+            raise InvalidCredentialsException("Error al verificar token")
 
+    async def refresh_token(self, refresh_token: str) -> Dict[str, Any]:
+        """Refresca un token de Firebase"""
         try:
             url = (
                 f"https://securetoken.googleapis.com/v1/token"
