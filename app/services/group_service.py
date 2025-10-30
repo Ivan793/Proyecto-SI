@@ -57,7 +57,6 @@ class GroupService:
             "activo": True,
             "created_at": datetime.now(timezone.utc),
             "created_by": created_by,
-            "codigo_materia": None  # Asegurar que no tiene materia inicialmente
         })
         
         await self.group_repo.create(group_dict, group_data.codigo_grupo)
