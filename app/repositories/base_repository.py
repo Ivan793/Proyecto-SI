@@ -3,7 +3,7 @@ from google.cloud.firestore_v1 import Client, DocumentReference, Query
 from datetime import datetime, timezone
 import logging
 
-from app.core.firebase import get_firestore_client
+from app.core.firebase import firebase_client
 from app.exceptions.base_exceptions import DatabaseException, NotFoundException
 
 # Importar para manejar los datetime de Firestore
@@ -21,15 +21,12 @@ class BaseRepository(Generic[T]):
 
     def __init__(self, collection_name: str, id_field: str = "id"):
         self.collection_name = collection_name
-        self._db: Optional[Client] = None
         self.id_field = id_field
     
     @property
     def db(self) -> Client:
         """Obtiene el cliente de Firestore de forma lazy"""
-        if self._db is None:
-            self._db = get_firestore_client()
-        return self._db
+        return firebase_client.get_db()
     
     @property
     def collection(self):
