@@ -10,14 +10,14 @@ from app.schemas.common import PaginationParams
 from app.dependencies.auth_dependencies import get_current_admin_user
 from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
-    success_response, created_response, paginated_response, 
+    success_response, created_response, paginated_response,
     updated_response, not_found_response, conflict_response,
     bad_request_response, internal_server_error_response,
     message_response
 )
 from app.utils.swagger_docs import ResponseDocumentation
 from app.exceptions.group_exceptions import (
-    GroupNotFoundException, 
+    GroupNotFoundException,
     GroupAlreadyExistsException,
     GroupHasDependenciesException,
     SubjectNotFoundException,
@@ -39,21 +39,21 @@ router = APIRouter(tags=["Grupos - Admin"])
 )
 @admin_rate_limit()
 async def create_group(
-    request: Request,
-    group_data: GroupCreate,
-    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
+        request: Request,
+        group_data: GroupCreate,
+        current_admin: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = GroupService()
         group = await service.create_group(group_data, current_admin["user_id"])
-        
+
         logger.info(f"Grupo creado: {group.codigo_grupo} por {current_admin['nombre_completo']}")
-        
+
         return created_response(
             data=group.model_dump(),
             message="Grupo creado exitosamente"
         )
-        
+
     except GroupAlreadyExistsException as e:
         return conflict_response(message=str(e))
     except TeacherNotFoundException as e:
@@ -74,12 +74,12 @@ async def create_group(
 )
 @admin_rate_limit()
 async def get_groups(
-    request: Request,
-    activos: bool = Query(True, description="Filtrar solo grupos activos"),
-    materia: Optional[str] = Query(None, description="Filtrar por código de materia"),
-    profesor: Optional[str] = Query(None, description="Filtrar por ID de profesor"),
-    params: PaginationParams = Depends(),
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+        request: Request,
+        activos: bool = Query(True, description="Filtrar solo grupos activos"),
+        materia: Optional[str] = Query(None, description="Filtrar por código de materia"),
+        profesor: Optional[str] = Query(None, description="Filtrar por ID de profesor"),
+        params: PaginationParams = Depends(),
+        _: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = GroupService()
@@ -98,7 +98,7 @@ async def get_groups(
             total_items=total,
             message="Grupos obtenidos exitosamente"
         )
-        
+
     except Exception as e:
         logger.error(f"Error obteniendo grupos: {str(e)}")
         return internal_server_error_response()
@@ -113,19 +113,19 @@ async def get_groups(
 )
 @admin_rate_limit()
 async def get_group_by_code(
-    request: Request,
-    group_code: str,
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+        request: Request,
+        group_code: str,
+        _: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = GroupService()
         group = await service.get_group(group_code)
-        
+
         return success_response(
             data=group.model_dump(),
             message="Grupo obtenido correctamente"
         )
-        
+
     except GroupNotFoundException as e:
         return not_found_response("Grupo", group_code)
     except Exception as e:
@@ -142,19 +142,19 @@ async def get_group_by_code(
 )
 @admin_rate_limit()
 async def get_group_with_details(
-    request: Request,
-    group_code: str,
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+        request: Request,
+        group_code: str,
+        _: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = GroupService()
         group_with_details = await service.get_group_with_details(group_code)
-        
+
         return success_response(
             data=group_with_details.model_dump(),
             message="Grupo con detalles obtenido correctamente"
         )
-        
+
     except GroupNotFoundException as e:
         return not_found_response("Grupo", group_code)
     except Exception as e:
@@ -171,22 +171,22 @@ async def get_group_with_details(
 )
 @admin_rate_limit()
 async def update_group(
-    request: Request,
-    group_code: str,
-    group_data: GroupUpdate,
-    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
+        request: Request,
+        group_code: str,
+        group_data: GroupUpdate,
+        current_admin: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = GroupService()
         group = await service.update_group(group_code, group_data)
-        
+
         logger.info(f"Grupo actualizado: {group_code} por {current_admin['nombre_completo']}")
-        
+
         return updated_response(
             data=group.model_dump(),
             message="Grupo actualizado exitosamente"
         )
-        
+
     except GroupNotFoundException as e:
         return not_found_response("Grupo", group_code)
     except TeacherNotFoundException as e:
@@ -207,19 +207,19 @@ async def update_group(
 )
 @admin_rate_limit()
 async def get_groups_by_subject(
-    request: Request,
-    subject_code: str,
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+        request: Request,
+        subject_code: str,
+        _: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = GroupService()
         groups = await service.get_groups_by_subject(subject_code)
-        
+
         return success_response(
             data=[group.model_dump() for group in groups],
             message=f"Grupos de la materia {subject_code} obtenidos correctamente"
         )
-        
+
     except Exception as e:
         logger.error(f"Error obteniendo grupos de materia {subject_code}: {str(e)}")
         return internal_server_error_response()
@@ -234,19 +234,19 @@ async def get_groups_by_subject(
 )
 @admin_rate_limit()
 async def get_groups_by_teacher(
-    request: Request,
-    teacher_id: str,
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+        request: Request,
+        teacher_id: str,
+        _: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = GroupService()
         groups = await service.get_groups_by_teacher(teacher_id)
-        
+
         return success_response(
             data=[group.model_dump() for group in groups],
             message=f"Grupos del profesor {teacher_id} obtenidos correctamente"
         )
-        
+
     except Exception as e:
         logger.error(f"Error obteniendo grupos del profesor {teacher_id}: {str(e)}")
         return internal_server_error_response()
@@ -261,18 +261,18 @@ async def get_groups_by_teacher(
 )
 @admin_rate_limit()
 async def get_groups_without_subject(
-    request: Request,
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+        request: Request,
+        _: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = GroupService()
         groups = await service.get_groups_without_subject()
-        
+
         return success_response(
             data=[group.model_dump() for group in groups],
             message="Grupos sin materia asignada obtenidos correctamente"
         )
-        
+
     except Exception as e:
         logger.error(f"Error obteniendo grupos sin materia: {str(e)}")
         return internal_server_error_response()
@@ -287,21 +287,21 @@ async def get_groups_without_subject(
 )
 @admin_rate_limit()
 async def deactivate_group(
-    request: Request,
-    group_code: str,
-    razon: ReasonText = Body(..., embed=True),
-    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
+        request: Request,
+        group_code: str,
+        razon: ReasonText = Body(..., embed=True),
+        current_admin: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = GroupService()
         success = await service.deactivate_group(group_code, razon)
-        
+
         if success:
             logger.info(f"Grupo desactivado: {group_code} por {current_admin['nombre_completo']}")
             return message_response("Grupo desactivado exitosamente")
         else:
             return bad_request_response(message="No se pudo desactivar el grupo")
-            
+
     except GroupNotFoundException as e:
         return not_found_response("Grupo", group_code)
     except GroupHasDependenciesException as e:
@@ -320,20 +320,20 @@ async def deactivate_group(
 )
 @admin_rate_limit()
 async def activate_group(
-    request: Request,
-    group_code: str,
-    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
+        request: Request,
+        group_code: str,
+        current_admin: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = GroupService()
         success = await service.activate_group(group_code)
-        
+
         if success:
             logger.info(f"Grupo activado: {group_code} por {current_admin['nombre_completo']}")
             return message_response("Grupo activado exitosamente")
         else:
             return bad_request_response(message="No se pudo activar el grupo")
-            
+
     except GroupNotFoundException as e:
         return not_found_response("Grupo", group_code)
     except Exception as e:
