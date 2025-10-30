@@ -40,7 +40,7 @@ async def registrar_asistencia(id_evento: str, datos: AsistenciaBase):
     Registra la asistencia de un usuario en el evento.
     """
     correo = datos.correo_usuario
-    print(correo)
+
     if not correo:
         raise HTTPException(status_code=400, detail="Faltan datos obligatorios")
 
