@@ -38,15 +38,22 @@ async def create_graduate_with_user(
             data=result.model_dump(),
             message="Egresado creado exitosamente"
         )
+
+    except HTTPException as e:
+        # ✅ Devolvemos el mismo formato estructurado del servicio
+        logger.warning(f"Error controlado al crear egresado: {e.detail}")
+        return e
+
     except ValueError as e:
         return bad_request_response(message=str(e))
+
     except Exception as e:
         logger.error(f"Error interno creando egresado: {str(e)}")
         return internal_server_error_response()
 
 
 @router.get(
-    "", 
+    "",
     response_model=None,
     summary="Listar egresados activos",
     responses=ResponseDocumentation.get_standard_responses()
@@ -66,7 +73,7 @@ async def get_all_graduates(
 
 
 @router.get(
-    "/{graduate_id}", 
+    "/{graduate_id}",
     response_model=None,
     summary="Obtener egresado por ID",
     responses=ResponseDocumentation.get_standard_responses()
@@ -86,14 +93,14 @@ async def get_graduate(
 
 
 @router.put(
-    "/{graduate_id}", 
+    "/{graduate_id}",
     response_model=None,
     summary="Actualizar egresado",
     responses=ResponseDocumentation.get_standard_responses()
 )
 async def update_graduate(
     request: Request,
-    graduate_id: str, 
+    graduate_id: str,
     graduate_data: GraduateUpdate
 ):
     try:
@@ -107,7 +114,7 @@ async def update_graduate(
 
 
 @router.delete(
-    "/{graduate_id}", 
+    "/{graduate_id}",
     summary="Desactivar egresado",
     responses=ResponseDocumentation.get_standard_responses()
 )
