@@ -9,7 +9,7 @@ from app.core.constants import Defaults
 class GroupBase(BaseModel):
     codigo_grupo: GroupCode
     id_docente: TeacherId  # Docente es obligatorio en el grupo
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -73,7 +73,7 @@ class GroupWithDetailsResponse(GroupResponse):
     nombre_materia: Optional[str] = None
     nombre_docente: Optional[str] = None
     total_estudiantes: int = Field(default=0, ge=0)
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 

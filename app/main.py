@@ -8,6 +8,7 @@ from app.core.firebase import firebase_client
 from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.exceptions.handlers import register_exception_handlers
 from slowapi.errors import RateLimitExceeded
+from mangum import Mangum
 
 # Importar todos los routers de forma centralizada
 from app.routers import  router as api_router
@@ -51,11 +52,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
-
-# Registrar manejadores de excepciones globales
 register_exception_handlers(app)
 
 # Routers
@@ -65,6 +63,8 @@ app.include_router(api_router)
 @app.get("/", tags=["Health"])
 async def root():
     return {"status": "ok", "message": "ExpoSoftware API funcionando"}
+
+handler = Mangum(app=app)
 
 @app.get("/health", tags=["Health"])
 async def health_check():
