@@ -24,30 +24,43 @@ class FirebaseClient:
         return cls._instance
     
     def initialize(self):
-        """Inicializa la conexión con Firebase"""
-        if self._app is not None:
-            logger.info("Firebase ya está inicializado")
-            return
-        
+        app_exists = False
         try:
-            # Cargar credenciales desde el archivo JSON
-            cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
-            
-            # Inicializar la app de Firebase
-            self._app = firebase_admin.initialize_app(cred, {
-                'databaseURL': settings.FIREBASE_DATABASE_URL
-            } if settings.FIREBASE_DATABASE_URL else {})
-            
-            # Obtener cliente de Firestore
-            self._db = firestore.client()
-            
-            logger.info("Firebase inicializado correctamente")
-            
-        except Exception as e:
-            logger.error(f"Error al inicializar Firebase: {str(e)}")
-            raise
+            # Intenta obtener la aplicación por defecto sin un nombre
+            # Si tiene éxito, significa que ya está inicializada
+            firebase_admin.get_app() 
+            app_exists = True
+        except ValueError:
+            # Si get_app() falla con ValueError, es porque NO está inicializada
+            app_exists = False
+        
+        if not app_exists:
+            try:
+                # 1. Cargar las credenciales
+                cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
+                
+                # 2. Inicializar la app
+                self._app = firebase_admin.initialize_app(cred, {
+                    'databaseURL': settings.FIREBASE_DATABASE_URL
+                } if settings.FIREBASE_DATABASE_URL else {})
+                
+                # 3. Inicializar el cliente de Firestore
+                self._db = firestore.client()
+                
+                logger.info("Firebase inicializado correctamente.")
+                
+            except Exception as e:
+                logger.error(f"Error al inicializar Firebase: {e}")
+                raise
+        else:
+            self._app = firebase_admin.get_app()
+            # Asegurar que _db esté inicializado
+            if self._db is None:
+                self._db = firestore.client()
+            logger.info("Firebase ya estaba inicializado.")
     
     def get_db(self) -> firestore.Client:
+        """Obtiene el cliente de Firestore, inicializándolo si es necesario"""
         if self._db is None:
             self.initialize()
         return self._db
@@ -98,7 +111,6 @@ class Collections:
     FACULTADES = "facultades"
     MATERIAS = "materias"
     GRUPOS = "grupos"
-    DOCENTE_MATERIAS = "docente_materias"
     ESTUDIANTE_MATERIAS = "estudiante_materias"
     
     # Investigación

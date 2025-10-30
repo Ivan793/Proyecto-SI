@@ -69,5 +69,3 @@ handler = Mangum(app=app)
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {"firebase": "connected" if firebase_client._db else "disconnected"}
-
-#

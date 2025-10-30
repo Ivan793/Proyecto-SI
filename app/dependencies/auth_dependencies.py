@@ -1,46 +1,143 @@
-from fastapi import Depends, Header
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Optional, Dict, Any
+from firebase_admin import auth as firebase_auth
+from typing import Dict, Any, Optional, Union, List
 import logging
 
-from app.services.auth_service import AuthService
-from app.exceptions.auth_exceptions import (
-    TokenNotFoundException,
-    InvalidCredentialsException,
-    InsufficientPermissionsException,
-    AccountDisabledException
-)
+from app.repositories.user_repository import UserRepository
+from app.repositories.student_repository import StudentRepository
 
 logger = logging.getLogger(__name__)
 
-# Esquema de seguridad Bearer
 security = HTTPBearer()
 
+class InsufficientPermissionsException(HTTPException):
+    """Exception to indicate insufficient permissions with a standardized detail payload."""
+    def __init__(self, message: str = "Se requieren permisos insuficientes", required_role: Optional[Union[str, List[str]]] = None):
+        detail = {
+            "status": "error",
+            "mensaje": message
+        }
+        if required_role is not None:
+            detail["required_role"] = required_role
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> Dict[str, Any]:
+    """
+    Obtiene el usuario actual desde el token JWT de Firebase.
+    
+    Args:
+        credentials: Credenciales del bearer token
+        
+    Returns:
+        Diccionario con la información del usuario
+        
+    Raises:
+        HTTPException: Si el token es inválido
+    """
+    try:
+        # Verificar token con Firebase
+        token = credentials.credentials
+        decoded_token = firebase_auth.verify_id_token(token)
+        
+        # Obtener UID del usuario
+        uid = decoded_token['uid']
+        
+        # Obtener información del usuario desde Firestore
+        user_repo = UserRepository()
+        user = await user_repo.get_by_id(uid)
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "status": "error",
+                    "mensaje": "Usuario no encontrado en la base de datos"
+                }
+            )
+        
+        # Validar que el usuario esté activo
+        if user.get('estado') != 'ACTIVO':
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "status": "error",
+                    "mensaje": "Usuario inactivo"
+                }
+            )
+        
+        return user
+    
+    except firebase_auth.InvalidIdTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "status": "error",
+                "mensaje": "Token de autenticacion invalido"
+            }
+        )
+    
+    except firebase_auth.ExpiredIdTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "status": "error",
+                "mensaje": "Token de autenticacion expirado"
+            }
+        )
+    
+    except Exception as e:
+        logger.error(f"Error verificando token: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "status": "error",
+                "mensaje": "Error de autenticacion"
+            }
+        )
+    
 
 async def get_current_user_from_token(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> Dict[str, Any]:
     """
-    Obtiene el usuario actual desde el token JWT de Firebase
+    Alias para get_current_user - mantiene compatibilidad con código existente.
+    
+    Args:
+        credentials: Credenciales del bearer token
+        
+    Returns:
+        Diccionario con la información del usuario
     """
-    if not credentials:
-        raise TokenNotFoundException()
-    
-    token = credentials.credentials
-    
-    # Usar AuthService para verificar el token de Firebase
-    auth_service = AuthService()
-    
-    try:
-        user_info = await auth_service.verify_firebase_token(token)
-        return user_info
-    except Exception as e:
-        logger.error(f"Error verificando token: {str(e)}")
-        raise InvalidCredentialsException("Token inválido o expirado")
+    return await get_current_user(credentials)
 
+async def get_role_context(
+    current_user: Dict[str, Any] = Depends(get_current_user_from_token)
+) -> Dict[str, Any]:
+    """
+    Devuelve un contexto de rol estándar para personalizar respuestas.
+    Ejemplo de retorno:
+    {
+        "rol": "Administrativo",
+        "is_admin": True,
+        "is_teacher": False,
+        "is_student": False
+    }
+    """
+    rol = (current_user.get("rol") or "").strip().lower()
+
+    return {
+        "rol": rol,
+        "is_admin": rol == "administrativo",
+        "is_teacher": rol == "docente",
+        "is_student": rol in ["estudiante", "egresado"]
+    }
 
 async def get_current_admin_user(
-    current_user: Dict[str, Any] = Depends(get_current_user_from_token)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Verifica que el usuario actual sea un administrador"""
     if current_user.get("rol") != "Administrativo":
@@ -99,57 +196,67 @@ async def get_authenticated_user(
     return current_user
 
 
-async def optional_authentication(
-    authorization: Optional[str] = Header(None)
-) -> Optional[Dict[str, Any]]:
-    """Autenticación opcional - permite acceso sin token"""
-    if not authorization:
-        return None
-    
-    try:
-        if not authorization.startswith("Bearer "):
-            return None
-        
-        token = authorization.replace("Bearer ", "")
-        
-        auth_service = AuthService()
-        user_info = await auth_service.verify_firebase_token(token)
-        
-        return user_info
-        
-    except Exception as e:
-        logger.warning(f"Error en autenticación opcional: {str(e)}")
-        return None
-
-
-# ==================== VERIFICADORES DE PERMISOS ====================
+# ==================== NUEVAS FUNCIONES PARA COMPATIBILIDAD ====================
 
 class PermissionChecker:
     """Verificador de permisos basado en roles"""
     
-    def __init__(self, allowed_roles: list[str]):
+    def __init__(self, allowed_roles: list):
         self.allowed_roles = allowed_roles
     
     async def __call__(
         self,
-        current_user: Dict[str, Any] = Depends(get_current_user_from_token)
+        current_user: Dict[str, Any] = Depends(get_current_user)
     ) -> Dict[str, Any]:
         """Verifica que el usuario tenga uno de los roles permitidos"""
         user_role = current_user.get("rol")
         
         if user_role not in self.allowed_roles:
-            raise InsufficientPermissionsException(
-                message=f"Se requiere uno de los siguientes roles: {', '.join(self.allowed_roles)}",
-                required_role=", ".join(self.allowed_roles)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "status": "error",
+                    "mensaje": f"Se requiere uno de los siguientes roles: {', '.join(self.allowed_roles)}"
+                }
             )
         
         return current_user
 
 
 # Instancias pre-configuradas
-require_admin = PermissionChecker(["Administrativo"])
+require_admin = PermissionChecker(["Administrador", "Admin", "Administrativo"])
 require_teacher = PermissionChecker(["Docente"])
 require_student = PermissionChecker(["Estudiante", "Egresado"])
-require_admin_or_teacher = PermissionChecker(["Administrativo", "Docente"])
+require_admin_or_teacher = PermissionChecker(["Administrador", "Admin", "Administrativo", "Docente"])
 require_any_authenticated = PermissionChecker(["Administrativo", "Docente", "Estudiante", "Egresado", "Invitado"])
 
+
+
+
+# ==================== FUNCIONES ALIAS ADICIONALES ====================
+
+async def get_admin_or_teacher_user(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Verifica que el usuario sea administrador o docente.
+    
+    Args:
+        current_user: Usuario actual
+        
+    Returns:
+        Diccionario con la información del usuario
+        
+    Raises:
+        HTTPException: Si el usuario no es admin ni docente
+    """
+    if current_user.get('rol') not in ['Administrador', 'Admin', 'Administrativo', 'Docente']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "status": "error",
+                "mensaje": "Acceso denegado. Se requieren permisos de administrador o docente"
+            }
+        )
+    
+    return current_user

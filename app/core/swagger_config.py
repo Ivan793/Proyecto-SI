@@ -8,9 +8,10 @@ COMMON_EXAMPLES = {
     "event_id": "EV7Tz5A23fWx19oK9jK1a",
     "project_id": "P4Tz5A23fWx19oK9jK1a",
     "subject_code": "MAT101",
-    "program_code": "ING01",
-    "faculty_id": "FAC001",
-    "group_code": 101
+    "faculty_id": "FAC_ING",
+    "program_code": "ING_SIS",
+    "group_code": 101,
+    
 }
 
 # Ejemplos específicos por esquema
@@ -86,7 +87,17 @@ SCHEMA_EXAMPLES: Dict[str, Dict[str, Any]] = {
         "tipo_actividad": 1,
         "formato_pdf": "PDF",
         "calificacion": "4.5"
-    }
+    },
+    "FacultyCreate": {
+        "id_facultad": "FAC_ING",
+        "nombre_facultad": "Ingenierías y Tecnologías"
+    },
+    
+    "ProgramCreate": {
+        "codigo_programa": "ING_SIS",
+        "nombre_programa": "Ingeniería de Sistemas",
+        "id_facultad": "FAC_ING"
+    },
 }
 
 # Respuestas de ejemplo para Swagger
