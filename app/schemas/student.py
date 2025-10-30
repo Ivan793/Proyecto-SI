@@ -4,7 +4,6 @@ from datetime import datetime
 
 from app.schemas.types import *
 from app.schemas.user import UserCreate
-from app.core.constants import Defaults
 
 
 # BASE DEL ESTUDIANTE
@@ -13,7 +12,6 @@ class StudentBase(BaseModel):
     semestre: int = Field(..., ge=1, le=20, description="Semestre actual del estudiante")
     anio_ingreso: int = Field(..., ge=2000, le=2100, description="Año de ingreso del estudiante")
     periodo: int = Field(..., ge=1, le=2, description="Periodo académico actual (1 o 2)")
-    activo: bool = Field(default=Defaults.ACTIVE_STATUS)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -21,16 +19,13 @@ class StudentBase(BaseModel):
                 "codigo_programa": "ING01",
                 "semestre": 4,
                 "anio_ingreso": 2022,
-                "periodo": 1,
-                "activo": True
+                "periodo": 1
             }
         }
     )
 
 
-
-#  CREAR ESTUDIANTE CON USUARIO EXISTENTE
-
+# CREAR ESTUDIANTE CON USUARIO EXISTENTE
 class StudentCreateWithExistingUser(StudentBase):
     id_usuario: str = Field(..., description="ID del usuario existente")
 
@@ -47,9 +42,7 @@ class StudentCreateWithExistingUser(StudentBase):
     )
 
 
-
 # CREAR ESTUDIANTE CON USUARIO NUEVO (EN CASCADA)
-
 class StudentCreateWithUser(StudentBase):
     usuario: UserCreate = Field(..., description="Datos completos del usuario asociado")
 
@@ -88,18 +81,15 @@ class StudentCreateWithUser(StudentBase):
 StudentCreate = StudentCreateWithUser
 
 
-#  ACTUALIZAR ESTUDIANTE
-
+# ACTUALIZAR ESTUDIANTE
 class StudentUpdate(BaseModel):
     codigo_programa: Optional[str] = None
     semestre: Optional[int] = None
     anio_ingreso: Optional[int] = None
     periodo: Optional[int] = Field(None, ge=1, le=2, description="Periodo académico actual")
-    activo: Optional[bool] = None
 
 
-
-#  RESPUESTA BASE
+# RESPUESTA BASE
 class StudentResponse(BaseModel):
     id_estudiante: str
     id_usuario: str
@@ -107,14 +97,13 @@ class StudentResponse(BaseModel):
     semestre: int
     anio_ingreso: int
     periodo: int
-    activo: bool
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
-#  RESPUESTA CON DATOS DEL USUARIO
+# RESPUESTA CON DATOS DEL USUARIO
 class StudentWithUserResponse(BaseModel):
     estudiante: StudentResponse
     usuario: dict  # evita importación circular

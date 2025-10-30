@@ -9,7 +9,8 @@ from app.dependencies.auth_dependencies import get_current_student_user
 from app.core.rate_limiter import auth_rate_limit
 from app.utils.responses import (
     success_response, created_response, updated_response, 
-    not_found_response, bad_request_response, internal_server_error_response
+    not_found_response, bad_request_response, internal_server_error_response,
+    conflict_response
 )
 from app.exceptions.student_exceptions import StudentNotFoundException
 from app.exceptions.user_exceptions import UserNotFoundException, UserAlreadyExistsException
@@ -18,16 +19,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/estudiantes", tags=["Estudiantes"])
 
+
+
+# Registro público de estudiante
 @router.post(
     "/registro",
     status_code=status.HTTP_201_CREATED,
     summary="Registro de estudiante",
-    description="""Registro público de estudiante con creación de usuario."""
+    description="""Registro público de estudiante con creación de usuario asociado 
+    (incluye datos personales, académicos y periodo actual)."""
 )
 @auth_rate_limit()
 async def register_student(
     request: Request,
-    student_data: StudentCreateWithUser = Body(...)
+    student_data: StudentCreateWithUser = Body(
+        ..., 
+        description="Datos completos del estudiante y del usuario asociado"
+    )
 ):
     """
     Endpoint público para registrar un estudiante junto con su usuario asociado.
@@ -37,7 +45,7 @@ async def register_student(
         service = StudentService()
         student = await service.create_student_with_user(student_data)
 
-        logger.info(f"Estudiante registrado correctamente: {student.id_estudiante}")
+        logger.info(f" Estudiante registrado correctamente: {student.id_estudiante}")
 
         return created_response(
             data=student.model_dump(),
@@ -47,9 +55,11 @@ async def register_student(
     except UserAlreadyExistsException as e:
         return conflict_response(message=str(e))
     except Exception as e:
-        logger.error(f"Error registrando estudiante: {str(e)}")
+        logger.error(f" Error registrando estudiante: {str(e)}")
         return internal_server_error_response()
-    
+
+
+# Obtener perfil del estudiante autenticado
 @router.get(
     "/mi-perfil",
     status_code=status.HTTP_200_OK,
@@ -61,6 +71,7 @@ async def get_my_profile(
 ):
     """
     El estudiante autenticado puede ver su propio perfil completo
+    (incluyendo su usuario asociado).
     """
     try:
         service = StudentService()
@@ -79,9 +90,12 @@ async def get_my_profile(
         )
         
     except Exception as e:
-        logger.error(f"Error obteniendo perfil: {str(e)}")
+        logger.error(f" Error obteniendo perfil: {str(e)}")
         return internal_server_error_response()
 
+
+
+# Actualizar perfil del estudiante autenticado
 @router.put(
     "/mi-perfil",
     status_code=status.HTTP_200_OK,
@@ -93,7 +107,8 @@ async def update_my_profile(
     current_student: Dict[str, Any] = Depends(get_current_student_user)
 ):
     """
-    El estudiante autenticado puede actualizar ciertos campos de su perfil
+    El estudiante autenticado puede actualizar ciertos campos de su perfil,
+    como el semestre actual o el programa académico.
     """
     try:
         service = StudentService()
@@ -104,13 +119,17 @@ async def update_my_profile(
             return not_found_response("Estudiante", "asociado a su usuario")
         
         # Actualizar solo campos permitidos para el estudiante
-        allowed_fields = {"semestre", "codigo_programa"}  # Campos que el estudiante puede modificar
-        update_data = {k: v for k, v in student_data.model_dump(exclude_none=True).items() 
-                    if k in allowed_fields}
+        allowed_fields = {"semestre", "codigo_programa"}  # Campos editables por el estudiante
+        update_data = {
+            k: v for k, v in student_data.model_dump(exclude_none=True).items()
+            if k in allowed_fields
+        }
         
         if update_data:
-            updated_student = await service.update_student(student["id_estudiante"], 
-            StudentUpdate(**update_data))
+            updated_student = await service.update_student(
+                student["id_estudiante"], 
+                StudentUpdate(**update_data)
+            )
             return updated_response(
                 data=updated_student.model_dump(),
                 message="Perfil actualizado exitosamente"
@@ -123,6 +142,3 @@ async def update_my_profile(
     except Exception as e:
         logger.error(f"Error actualizando perfil: {str(e)}")
         return internal_server_error_response()
-
-# Importar aquí para evitar dependencias circulares
-from app.utils.responses import conflict_response
