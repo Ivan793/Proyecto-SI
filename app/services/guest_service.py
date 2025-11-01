@@ -78,8 +78,20 @@ class GuestService:
 
             guest_id = await self.guest_repo.create(guest_dict)
             logger.info(f"Invitado creado y vinculado: {guest_id} -> {user_id}")
+             # 🔹 6. Enviar email de verificación
+            try:
+                from app.services.auth_service import AuthService
+                auth_service = AuthService()
+                email_sent = await auth_service.send_email_verification(guest_data.correo)
 
-            # 🔹 6. Obtener y retornar invitado completo
+                if email_sent:
+                    logger.info(f"Email de verificación enviado a: {guest_data.correo}")
+                else:
+                    logger.warning(f"No se pudo enviar email de verificación a: {guest_data.correo}")
+            except Exception as e:
+                logger.error(f"Error enviando email de verificación: {str(e)}")
+                
+            # 🔹 7. Obtener y retornar invitado completo
             guest = await self.guest_repo.get_by_id(guest_id)
             return GuestResponse(**guest)
 
