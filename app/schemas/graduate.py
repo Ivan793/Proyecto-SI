@@ -49,11 +49,11 @@ class GraduateCreate(UserCreate, GraduateBase):  # ✅ hereda de UserCreate
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "tipo_documento": "CC",
+                "tipo_documento": DocumentType.CC,
                 "identificacion": "1002431808",
                 "nombres": "David José",
                 "apellidos": "Rodríguez González",
-                "sexo": "Hombre",
+                "sexo": Sex.HOMBRE,
                 "identidad_sexual": "Heterosexual",
                 "fecha_nacimiento": "2000-06-03",
                 "nacionalidad": "Colombiana",
@@ -65,7 +65,7 @@ class GraduateCreate(UserCreate, GraduateBase):  # ✅ hereda de UserCreate
                 "telefono": "+57301343343",
                 "correo": "egresado@unicesar.edu.co",
                 "contraseña": "Egresado123#",
-                "rol": "Egresado",
+                "rol": Role.EGRESADO,
                 "codigo_programa": "ING-SIS-001",
                 "programa_academico": "Ingeniería de Sistemas",
                 "año_graduacion": 2023,
