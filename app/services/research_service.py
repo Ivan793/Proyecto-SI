@@ -15,20 +15,25 @@ from app.exceptions.research_exceptions import (
 )
 from app.schemas.SubResearchLine import (
     SubResearchLineCreate, 
-    SubResearchLineResponse, 
+    SubResearchLineResponseAdmin,
+    SubResearchLineResponsePublic, 
     SubResearchLineUpdate, 
-    SubResearchLineWithAreas
+    SubResearchLineWithAreasAdmin,
+    SubResearchLineWithAreasPublic
 )
 from app.schemas.ThematicArea import (
     ThematicAreaCreate, 
-    ThematicAreaResponse, 
+    ThematicAreaResponseAdmin,
+    ThematicAreaResponsePublic, 
     ThematicAreaUpdate
 )
 from app.schemas.researchLine import (
-    ResearchLineCreate, 
-    ResearchLineResponse, 
+    ResearchLineAdminResponse,
+    ResearchLineCreate,
+    ResearchLinePublicResponse, 
     ResearchLineUpdate, 
-    ResearchLineWithSublines
+    ResearchLineWithSublinesAdmin,
+    ResearchLineWithSublinesPublic
 )
 
 logger = logging.getLogger(__name__)
@@ -39,7 +44,7 @@ class ResearchLineService:
     def __init__(self):
         self.line_repo = ResearchLineRepository()
     
-    async def create_line(self, line_data: ResearchLineCreate) -> ResearchLineResponse:
+    async def create_line(self, line_data: ResearchLineCreate) -> ResearchLineAdminResponse:
         """Crea una línea de investigación (solo código 1 o 2)"""
         if await self.line_repo.line_exists(line_data.codigo_linea):
             raise ResearchLineAlreadyExistsException(line_data.codigo_linea)
@@ -48,22 +53,44 @@ class ResearchLineService:
         await self.line_repo.create_line(line_data.codigo_linea, data)
         
         created_line = await self.line_repo.get_by_code(line_data.codigo_linea)
-        return ResearchLineResponse(**created_line)
+        return ResearchLineAdminResponse(**created_line)
     
-    async def get_line(self, line_code: int) -> ResearchLineResponse:
+    async def get_line(self, line_code: int, is_admin: bool = False) -> ResearchLinePublicResponse | ResearchLineAdminResponse:
         """Obtiene una línea por código"""
         line = await self.line_repo.get_by_code(line_code)
         if not line:
             raise ResearchLineNotFoundException(line_code)
-        return ResearchLineResponse(**line)
+        
+        if is_admin:
+            return ResearchLineAdminResponse(**line)
+        else:
+            # Para usuarios no admin, crear respuesta sin timestamps
+            public_data = {
+                "codigo_linea": line["codigo_linea"],
+                "nombre_linea": line["nombre_linea"]
+            }
+            return ResearchLinePublicResponse(**public_data)
     
-    async def get_all_lines(self) -> List[ResearchLineResponse]:
+    async def get_all_lines(self, is_admin: bool = False) -> List[ResearchLinePublicResponse | ResearchLineAdminResponse]:
         """Obtiene todas las líneas"""
         lines = await self.line_repo.get_all()
-        return [ResearchLineResponse(**line) for line in lines]
+        
+        result = []
+        for line in lines:
+            if is_admin:
+                result.append(ResearchLineAdminResponse(**line))
+            else:
+                # Para usuarios no admin, filtrar campos
+                public_data = {
+                    "codigo_linea": line["codigo_linea"],
+                    "nombre_linea": line["nombre_linea"]
+                }
+                result.append(ResearchLinePublicResponse(**public_data))
+        
+        return result
     
     async def update_line(self, line_code: int, 
-                        line_data: ResearchLineUpdate) -> ResearchLineResponse:
+                        line_data: ResearchLineUpdate) -> ResearchLineAdminResponse:
         """Actualiza una línea"""
         if not await self.line_repo.line_exists(line_code):
             raise ResearchLineNotFoundException(line_code)
@@ -73,7 +100,7 @@ class ResearchLineService:
             await self.line_repo.update(str(line_code), update_dict)
         
         updated_line = await self.line_repo.get_by_code(line_code)
-        return ResearchLineResponse(**updated_line)
+        return ResearchLineAdminResponse(**updated_line)
 
 # ==================== SERVICIO DE SUBLÍNEAS ====================
 
@@ -84,7 +111,7 @@ class SubResearchLineService:
         self.line_repo = ResearchLineRepository()
     
     async def create_subline(self, 
-        subline_data: SubResearchLineCreate) -> SubResearchLineResponse:
+        subline_data: SubResearchLineCreate) -> SubResearchLineResponseAdmin:
         """Crea una sublínea dentro de una línea (subcollection)"""
         line_code = subline_data.codigo_linea
         
@@ -109,22 +136,46 @@ class SubResearchLineService:
         
         # Obtener sublínea creada
         created_subline = await self.subline_repo.get_by_id(line_code, next_code)
-        return SubResearchLineResponse(**created_subline)
+        return SubResearchLineResponseAdmin(**created_subline)
     
-    async def get_subline(self, line_code: int, subline_code: int) -> SubResearchLineResponse:
+    async def get_subline(self, line_code: int, subline_code: int, is_admin: bool = False) -> SubResearchLineResponsePublic | SubResearchLineResponseAdmin:
         """Obtiene una sublínea específica"""
         subline = await self.subline_repo.get_by_id(line_code, subline_code)
         if not subline:
             raise SubResearchLineNotFoundException(subline_code)
-        return SubResearchLineResponse(**subline)
+        
+        if is_admin:
+            return SubResearchLineResponseAdmin(**subline)
+        else:
+            # Para usuarios no admin, filtrar campos
+            public_data = {
+                "codigo_sublinea": subline["codigo_sublinea"],
+                "nombre_sublinea": subline["nombre_sublinea"],
+                "codigo_linea": subline["codigo_linea"]
+            }
+            return SubResearchLineResponsePublic(**public_data)
     
-    async def get_sublines_by_line(self, line_code: int) -> List[SubResearchLineResponse]:
+    async def get_sublines_by_line(self, line_code: int, is_admin: bool = False) -> List[SubResearchLineResponsePublic | SubResearchLineResponseAdmin]:
         """Obtiene todas las sublíneas de una línea"""
         sublines = await self.subline_repo.get_by_research_line(line_code)
-        return [SubResearchLineResponse(**sub) for sub in sublines]
+        
+        result = []
+        for subline in sublines:
+            if is_admin:
+                result.append(SubResearchLineResponseAdmin(**subline))
+            else:
+                # Para usuarios no admin, filtrar campos
+                public_data = {
+                    "codigo_sublinea": subline["codigo_sublinea"],
+                    "nombre_sublinea": subline["nombre_sublinea"],
+                    "codigo_linea": subline["codigo_linea"]
+                }
+                result.append(SubResearchLineResponsePublic(**public_data))
+        
+        return result
     
     async def update_subline(self, line_code: int, subline_code: int, 
-                            subline_data: SubResearchLineUpdate) -> SubResearchLineResponse:
+                            subline_data: SubResearchLineUpdate) -> SubResearchLineResponseAdmin:
         """Actualiza una sublínea"""
         subline = await self.subline_repo.get_by_id(line_code, subline_code)
         if not subline:
@@ -145,7 +196,7 @@ class SubResearchLineService:
             await self.subline_repo.update_subline(line_code, subline_code, update_dict)
         
         updated_subline = await self.subline_repo.get_by_id(line_code, subline_code)
-        return SubResearchLineResponse(**updated_subline)
+        return SubResearchLineResponseAdmin(**updated_subline)
     
 # ==================== SERVICIO DE ÁREAS TEMÁTICAS ====================
 
@@ -156,7 +207,7 @@ class ThematicAreaService:
         self.subline_repo = SubResearchLineRepository()
     
     async def create_area(self, line_code: int, 
-                        area_data: ThematicAreaCreate) -> ThematicAreaResponse:
+                        area_data: ThematicAreaCreate) -> ThematicAreaResponseAdmin:
         """Crea un área temática embebida en una sublínea"""
         subline_code = area_data.codigo_sublinea
         
@@ -184,30 +235,36 @@ class ThematicAreaService:
         # Obtener área creada
         created_area = await self.area_repo.get_by_id(line_code, subline_code, next_code)
         created_area['codigo_sublinea'] = subline_code
-        return ThematicAreaResponse(**created_area)
+        return ThematicAreaResponseAdmin(**created_area)
     
     async def get_area(self, line_code: int, subline_code: int, 
-                        area_code: int) -> ThematicAreaResponse:
+                        area_code: int, is_admin: bool = False) -> ThematicAreaResponsePublic | ThematicAreaResponseAdmin:
         """Obtiene un área específica"""
         area = await self.area_repo.get_by_id(line_code, subline_code, area_code)
         if not area:
             raise ThematicAreaNotFoundException(area_code)
         area['codigo_sublinea'] = subline_code
-        return ThematicAreaResponse(**area)
+        
+        if is_admin:
+            return ThematicAreaResponseAdmin(**area)
+        return ThematicAreaResponsePublic(**area)
     
     async def get_areas_by_subline(self, line_code: int, 
-                                    subline_code: int) -> List[ThematicAreaResponse]:
+                                    subline_code: int, is_admin: bool = False) -> List[ThematicAreaResponsePublic | ThematicAreaResponseAdmin]:
         """Obtiene todas las áreas de una sublínea"""
         areas = await self.area_repo.get_by_subline(line_code, subline_code)
         result = []
         for area in areas:
             area['codigo_sublinea'] = subline_code
-            result.append(ThematicAreaResponse(**area))
+            if is_admin:
+                result.append(ThematicAreaResponseAdmin(**area))
+            else:
+                result.append(ThematicAreaResponsePublic(**area))
         return result
     
     async def update_area(self, line_code: int, subline_code: int, 
                         area_code: int, 
-                        area_data: ThematicAreaUpdate) -> ThematicAreaResponse:
+                        area_data: ThematicAreaUpdate) -> ThematicAreaResponseAdmin:
         """Actualiza un área temática"""
         area = await self.area_repo.get_by_id(line_code, subline_code, area_code)
         if not area:
@@ -230,7 +287,7 @@ class ThematicAreaService:
         
         updated_area = await self.area_repo.get_by_id(line_code, subline_code, area_code)
         updated_area['codigo_sublinea'] = subline_code
-        return ThematicAreaResponse(**updated_area)
+        return ThematicAreaResponseAdmin(**updated_area)
     
 # ==================== SERVICIO COMBINADO ====================
 class ResearchService:
@@ -241,7 +298,7 @@ class ResearchService:
         self.subline_service = SubResearchLineService()
         self.area_service = ThematicAreaService()
     
-    async def get_line_with_hierarchy(self, line_code: int) -> ResearchLineWithSublines:
+    async def get_line_with_hierarchy(self, line_code: int, is_admin: bool = False) -> ResearchLineWithSublinesPublic | ResearchLineWithSublinesAdmin:
         """
         Obtiene línea con sublíneas y áreas en SOLO 2 CONSULTAS.
         """
@@ -251,22 +308,29 @@ class ResearchService:
         if not line_data:
             raise ResearchLineNotFoundException(line_code)
         
-        return ResearchLineWithSublines(**line_data)
+        if is_admin:
+            return ResearchLineWithSublinesAdmin(**line_data)
+        return ResearchLineWithSublinesPublic(**line_data)
     
     async def get_subline_with_areas(self, line_code: int, 
-                                    subline_code: int) -> SubResearchLineWithAreas:
+                                    subline_code: int, is_admin: bool = False) -> SubResearchLineWithAreasPublic | SubResearchLineWithAreasAdmin:
         """Obtiene una sublínea con sus áreas temáticas"""
-        subline = await self.subline_service.get_subline(line_code, subline_code)
-        areas = await self.area_service.get_areas_by_subline(line_code, subline_code)
+        subline = await self.subline_service.get_subline(line_code, subline_code, is_admin)
+        areas = await self.area_service.get_areas_by_subline(line_code, subline_code, is_admin)
         
         subline_dict = subline.model_dump()
         subline_dict["areas_tematicas"] = [area.model_dump() for area in areas]
-        return SubResearchLineWithAreas(**subline_dict)
+        
+        if is_admin:
+            return SubResearchLineWithAreasAdmin(**subline_dict)
+        return SubResearchLineWithAreasPublic(**subline_dict)
     
-    async def get_all_lines_with_hierarchy(self) -> List[ResearchLineWithSublines]:
+    async def get_all_lines_with_hierarchy(self, is_admin: bool = False) -> List[ResearchLineWithSublinesPublic | ResearchLineWithSublinesAdmin]:
         """
         Obtiene todas las líneas con su jerarquía completa.
-        
         """
         lines_data = await self.line_repo.get_all_lines_with_hierarchy()
-        return [ResearchLineWithSublines(**line) for line in lines_data]
+        
+        if is_admin:
+            return [ResearchLineWithSublinesAdmin(**line) for line in lines_data]
+        return [ResearchLineWithSublinesPublic(**line) for line in lines_data]

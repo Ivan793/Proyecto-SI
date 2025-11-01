@@ -251,3 +251,4 @@ class GraduateService:
 
         logger.info(f"Egresado {graduate_id} desactivado y usuario {user_id} inactivado correctamente.")
         return True
+

@@ -54,6 +54,10 @@ class Limits:
     USER_ID_MIN = 10
     USER_ID_MAX = 30
 
+    # Facultad ID
+    FACULTY_ID_MIN =3
+    FACULTY_ID_MAX =10
+
     # Materia
     SUBJECT_NAME_MIN = 3
     SUBJECT_NAME_MAX = 100
@@ -89,7 +93,6 @@ class Defaults:
     ACTIVE_STATUS = True
     DEFAULT_LANGUAGE = "es"
     DEFAULT_EVENT_STATE = "ACTIVO"
-    ACTIVE_STATUS = True
 
 
 class ValidationMessages:
