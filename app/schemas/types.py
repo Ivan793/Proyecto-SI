@@ -388,10 +388,12 @@ SubjectCode = Annotated[
 # ==================== TIPOS DE GRUPO ====================
 
 GroupCode = Annotated[
-    int,
+    str,
     Field(
-        gt=0,
-        description="Código único del grupo"
+        min_length=1,
+        max_length=10,
+        pattern=r"^[0-9]+$",
+        description="Código único del grupo (números)"
     )
 ]
 
@@ -458,8 +460,6 @@ AttendanceDateTime = Annotated[
 ResearchLineCode = Annotated[
     int,
     Field(
-        ge=1,
-        le=2,
         description="Código de la línea de investigación (1 o 2)"
     )
 ]
@@ -535,3 +535,26 @@ StatusActive = Annotated[
     bool,
     Field(description="Estado activo/inactivo del registro")
 ]
+
+# ==================== TIPOS DE FACULTAD ====================
+
+FacultyId = Annotated[
+    str,
+    Field(
+        min_length=Limits.FACULTY_ID_MIN,
+        max_length=Limits.FACULTY_ID_MAX,
+        pattern=Patterns.FACULTY_ID,
+        description="Código único de la facultad (Ej: FAC_ING, FAC_EDU)"
+    )
+]
+
+FacultyName = Annotated[
+    str,
+    Field(
+        min_length=Limits.NAME_MIN,
+        max_length=100,
+        pattern=Patterns.NAME,
+        description="Nombre completo de la facultad"
+    )
+]
+

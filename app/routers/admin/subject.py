@@ -2,12 +2,16 @@ from fastapi import APIRouter, Body, Depends, Query, status, Request
 from typing import Optional, Dict, Any, List
 import logging
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from app.schemas.types import ReasonText, TeacherId, GroupCode
+from app.schemas.types import ReasonText
 from app.services.subject_service import SubjectService
-from app.schemas.subject import SubjectCreate, SubjectUpdate, SubjectResponse, SubjectSummary
-from app.schemas.group import GroupCreate
+from app.schemas.subject import (
+    SubjectCreate, 
+    SubjectWithGroupsCreate, 
+    SubjectUpdate, 
+    SubjectResponse
+)
 from app.schemas.common import PaginationParams
 from app.dependencies.auth_dependencies import get_current_admin_user
 from app.core.rate_limiter import admin_rate_limit
@@ -24,8 +28,7 @@ from app.exceptions.subject_exceptions import (
     SubjectHasDependenciesException,
     MinimumGroupsRequiredException
 )
-from app.exceptions.group_exceptions import GroupAlreadyExistsException
-from app.exceptions.teacher_exceptions import TeacherNotFoundException
+from app.exceptions.group_exceptions import GroupNotFoundException
 from app.exceptions.base_exceptions import ValidationException
 
 logger = logging.getLogger(__name__)
@@ -33,108 +36,73 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Materias - Admin"])
 
 
-class GroupWithTeacher(BaseModel):
-    codigo_grupo: GroupCode
-    id_docente: TeacherId
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "codigo_grupo": 101,
-                "id_docente": "BU7rpAz6Nbn9DKq517wb"
-            }
-        }
-    }
-
-
-class SubjectWithGroupsAndTeachersCreate(BaseModel):
-    materia: SubjectCreate
-    grupos_con_docentes: List[GroupWithTeacher] = Field(..., min_items=1)
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "materia": {
-                    "codigo_materia": "PROG3",
-                    "nombre_materia": "Programación III",
-                    "ciclo_semestral": "Ciclo Profesional"
-                },
-                "grupos_con_docentes": [
-                    {
-                        "codigo_grupo": 101,
-                        "id_docente": "BU7rpAz6Nbn9DKq517wb"
-                    },
-                    {
-                        "codigo_grupo": 102,
-                        "id_docente": "TEElkzBShoDC6beuFjHE"
-                    }
-                ]
-            }
-        }
-    }
-
-
-class AddGroupToSubjectRequest(BaseModel):
-    codigo_grupo: GroupCode
-    id_docente: TeacherId
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "codigo_grupo": 103,
-                "id_docente": "BU7rpAz6Nbn9DKq517wb"
-            }
-        }
-    }
-
 
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
-    summary="Crear nueva materia con grupos y docentes",
-    description="Crea una nueva materia con grupos y asigna docentes a cada grupo",
+    summary="Crear nueva materia simple",
+    description="Crea una nueva materia sin grupos asignados",
     responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
-async def create_subject_with_groups_and_teachers(
+async def create_subject_simple(
     request: Request,
-    subject_data: SubjectWithGroupsAndTeachersCreate,
+    subject_data: SubjectCreate,
     current_admin: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = SubjectService()
-        subject = await service.create_subject_with_groups_and_teachers(
-            subject_data.materia,
-            [grupo.model_dump() for grupo in subject_data.grupos_con_docentes],
-            current_admin["user_id"]
+        subject = await service.create_subject_simple(subject_data, current_admin["user_id"])
+        
+        logger.info(f"Materia creada: {subject.codigo_materia} por {current_admin['nombre_completo']}")
+        
+        return created_response(
+            data=subject.model_dump(),
+            message="Materia creada exitosamente"
         )
         
+    except SubjectAlreadyExistsException as e:
+        return conflict_response(message=str(e))
+    except Exception as e:
+        logger.error(f"Error inesperado creando materia: {str(e)}", exc_info=True)
+        return internal_server_error_response()
+
+
+@router.post(
+    "/con-grupos",
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear materia con grupos existentes",
+    description="Crea una nueva materia y asigna grupos existentes a ella",
+    responses=ResponseDocumentation.get_standard_responses()
+)
+@admin_rate_limit()
+async def create_subject_with_groups(
+    request: Request,
+    subject_with_groups: SubjectWithGroupsCreate,
+    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
+):
+    try:
+        service = SubjectService()
+        subject = await service.create_subject_with_groups(subject_with_groups, current_admin["user_id"])
+        
         logger.info(
-            f"Materia creada: {subject.codigo_materia} con "
-            f"{len(subject_data.grupos_con_docentes)} grupos y docentes "
-            f"por {current_admin['nombre_completo']}"
+            f"Materia creada con grupos: {subject.codigo_materia} con "
+            f"{len(subject_with_groups.codigos_grupo)} grupos por {current_admin['nombre_completo']}"
         )
         
         return created_response(
             data=subject.model_dump(),
-            message=f"Materia creada exitosamente con {len(subject_data.grupos_con_docentes)} grupos y docentes asignados"
+            message=f"Materia creada exitosamente con {len(subject_with_groups.codigos_grupo)} grupos asignados"
         )
         
     except SubjectAlreadyExistsException as e:
         return conflict_response(message=str(e))
     except MinimumGroupsRequiredException as e:
         return bad_request_response(message=str(e))
-    except GroupAlreadyExistsException as e:
-        return conflict_response(message=str(e))
-    except TeacherNotFoundException as e:
-        return not_found_response("Profesor", str(e.identifier) if hasattr(e, 'identifier') else "no especificado")
-    except ValidationException as e:
-        return bad_request_response(
-            message=str(e),
-            errors=e.details if hasattr(e, 'details') else None
-        )
+    except GroupNotFoundException as e:
+        return not_found_response("Grupo", str(e.identifier) if hasattr(e, 'identifier') else "no especificado")
     except Exception as e:
-        logger.error(f"Error inesperado creando materia: {str(e)}", exc_info=True)
+        logger.error(f"Error inesperado creando materia con grupos: {str(e)}", exc_info=True)
         return internal_server_error_response()
 
 
@@ -177,7 +145,7 @@ async def get_subjects(
     "/{subject_code}",
     status_code=status.HTTP_200_OK,
     summary="Obtener materia por código",
-    description="Obtiene información detallada de una materia específica",
+    description="Obtiene información básica de una materia específica",
     responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
@@ -205,12 +173,12 @@ async def get_subject_by_code(
 @router.get(
     "/{subject_code}/completo",
     status_code=status.HTTP_200_OK,
-    summary="Obtener materia con grupos y asignaciones",
+    summary="Obtener materia con grupos y docentes",
     description="Obtiene información completa de una materia incluyendo sus grupos y docentes asignados",
     responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
-async def get_subject_with_groups_and_assignments(
+async def get_subject_with_groups(
     request: Request,
     subject_code: str,
     _: Dict[str, Any] = Depends(get_current_admin_user)
@@ -228,6 +196,35 @@ async def get_subject_with_groups_and_assignments(
         return not_found_response("Materia", subject_code)
     except Exception as e:
         logger.error(f"Error obteniendo materia completa {subject_code}: {str(e)}")
+        return internal_server_error_response()
+
+
+@router.get(
+    "/{subject_code}/docentes",
+    status_code=status.HTTP_200_OK,
+    summary="Obtener docentes de la materia",
+    description="Obtiene todos los docentes asignados a una materia específica",
+    responses=ResponseDocumentation.get_standard_responses()
+)
+@admin_rate_limit()
+async def get_teachers_for_subject(
+    request: Request,
+    subject_code: str,
+    _: Dict[str, Any] = Depends(get_current_admin_user)
+):
+    try:
+        service = SubjectService()
+        teachers = await service.get_teachers_for_subject(subject_code)
+        
+        return success_response(
+            data=teachers,
+            message=f"Docentes de la materia {subject_code} obtenidos correctamente"
+        )
+        
+    except SubjectNotFoundException as e:
+        return not_found_response("Materia", subject_code)
+    except Exception as e:
+        logger.error(f"Error obteniendo docentes de materia {subject_code}: {str(e)}")
         return internal_server_error_response()
 
 
@@ -264,38 +261,26 @@ async def update_subject(
 
 
 @router.post(
-    "/{subject_code}/grupos",
-    status_code=status.HTTP_201_CREATED,
-    summary="Agregar grupo a materia con docente",
-    description="Agrega un nuevo grupo a una materia existente y asigna un docente",
+    "/{subject_code}/grupos/{group_code}",
+    status_code=status.HTTP_200_OK,
+    summary="Agregar grupo a materia",
+    description="Agrega un grupo existente a una materia",
     responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
-async def add_group_to_subject_with_teacher(
+async def add_group_to_subject(
     request: Request,
     subject_code: str,
-    group_data: AddGroupToSubjectRequest,
+    group_code: str,
     current_admin: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = SubjectService()
-        group_create = GroupCreate(
-            codigo_grupo=group_data.codigo_grupo,
-            codigo_materia=subject_code
-        )
-        success = await service.add_group_to_subject(
-            subject_code, 
-            group_create,
-            group_data.id_docente,
-            current_admin["user_id"]
-        )
+        success = await service.add_group_to_subject(subject_code, group_code)
         
         if success:
-            logger.info(
-                f"Grupo {group_data.codigo_grupo} agregado a materia {subject_code} "
-                f"con docente {group_data.id_docente} por {current_admin['nombre_completo']}"
-            )
-            return message_response("Grupo agregado a la materia con docente asignado exitosamente")
+            logger.info(f"Grupo {group_code} agregado a materia {subject_code} por {current_admin['nombre_completo']}")
+            return message_response("Grupo agregado a la materia exitosamente")
         else:
             return bad_request_response(
                 message="No se pudo agregar el grupo a la materia"
@@ -303,10 +288,8 @@ async def add_group_to_subject_with_teacher(
             
     except SubjectNotFoundException as e:
         return not_found_response("Materia", subject_code)
-    except GroupAlreadyExistsException as e:
-        return conflict_response(message=str(e))
-    except TeacherNotFoundException as e:
-        return not_found_response("Profesor", group_data.id_docente)
+    except GroupNotFoundException as e:
+        return not_found_response("Grupo", group_code)
     except ValidationException as e:
         return bad_request_response(message=str(e))
     except Exception as e:
@@ -314,32 +297,72 @@ async def add_group_to_subject_with_teacher(
         return internal_server_error_response()
 
 
-@router.get(
-    "/{subject_code}/asignaciones",
+@router.post(
+    "/{subject_code}/grupos-multiples",
     status_code=status.HTTP_200_OK,
-    summary="Obtener asignaciones de docentes de la materia",
-    description="Obtiene todas las asignaciones de docentes para una materia específica",
+    summary="Agregar múltiples grupos a materia",
+    description="Agrega varios grupos existentes a una materia",
     responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
-async def get_subject_assignments(
+async def add_groups_to_subject(
     request: Request,
     subject_code: str,
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+    codigos_grupo: List[str] = Body(..., embed=True, description="Lista de códigos de grupos"),
+    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = SubjectService()
-        assignments = await service.get_subject_assignments(subject_code)
+        result = await service.add_groups_to_subject(subject_code, codigos_grupo)
+        
+        logger.info(f"{len(codigos_grupo)} grupos agregados a materia {subject_code} por {current_admin['nombre_completo']}")
         
         return success_response(
-            data=assignments,
-            message=f"Asignaciones de docentes para la materia {subject_code} obtenidas correctamente"
+            data=result,
+            message=f"{len(codigos_grupo)} grupos agregados a la materia exitosamente"
         )
-        
+            
     except SubjectNotFoundException as e:
         return not_found_response("Materia", subject_code)
+    except GroupNotFoundException as e:
+        return not_found_response("Grupo", str(e.identifier) if hasattr(e, 'identifier') else "no especificado")
     except Exception as e:
-        logger.error(f"Error obteniendo asignaciones de materia {subject_code}: {str(e)}")
+        logger.error(f"Error agregando grupos a materia {subject_code}: {str(e)}")
+        return internal_server_error_response()
+
+
+@router.delete(
+    "/{subject_code}/grupos/{group_code}",
+    status_code=status.HTTP_200_OK,
+    summary="Remover grupo de materia",
+    description="Remueve un grupo de una materia",
+    responses=ResponseDocumentation.get_standard_responses()
+)
+@admin_rate_limit()
+async def remove_group_from_subject(
+    request: Request,
+    subject_code: str,
+    group_code: str,
+    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
+):
+    try:
+        service = SubjectService()
+        success = await service.remove_group_from_subject(subject_code, group_code)
+        
+        if success:
+            logger.info(f"Grupo {group_code} removido de materia {subject_code} por {current_admin['nombre_completo']}")
+            return message_response("Grupo removido de la materia exitosamente")
+        else:
+            return bad_request_response(
+                message="No se pudo remover el grupo de la materia"
+            )
+            
+    except SubjectNotFoundException as e:
+        return not_found_response("Materia", subject_code)
+    except GroupNotFoundException as e:
+        return not_found_response("Grupo", group_code)
+    except Exception as e:
+        logger.error(f"Error removiendo grupo de materia {subject_code}: {str(e)}")
         return internal_server_error_response()
 
 

@@ -38,6 +38,27 @@ async def get_current_user_from_token(
         logger.error(f"Error verificando token: {str(e)}")
         raise InvalidCredentialsException("Token inválido o expirado")
 
+async def get_role_context(
+    current_user: Dict[str, Any] = Depends(get_current_user_from_token)
+) -> Dict[str, Any]:
+    """
+    Devuelve un contexto de rol estándar para personalizar respuestas.
+    Ejemplo de retorno:
+    {
+        "rol": "Administrativo",
+        "is_admin": True,
+        "is_teacher": False,
+        "is_student": False
+    }
+    """
+    rol = (current_user.get("rol") or "").strip().lower()
+
+    return {
+        "rol": rol,
+        "is_admin": rol == "administrativo",
+        "is_teacher": rol == "docente",
+        "is_student": rol in ["estudiante", "egresado"]
+    }
 
 async def get_current_admin_user(
     current_user: Dict[str, Any] = Depends(get_current_user_from_token)
@@ -152,4 +173,3 @@ require_teacher = PermissionChecker(["Docente"])
 require_student = PermissionChecker(["Estudiante", "Egresado"])
 require_admin_or_teacher = PermissionChecker(["Administrativo", "Docente"])
 require_any_authenticated = PermissionChecker(["Administrativo", "Docente", "Estudiante", "Egresado", "Invitado"])
-

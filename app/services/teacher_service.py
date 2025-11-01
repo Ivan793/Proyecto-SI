@@ -29,6 +29,8 @@ from firebase_admin._auth_utils import (
     UserNotFoundError
 )
 from app.core.validators import validate_user_role_email_match
+from app.services.auth_service import AuthService
+from app.schemas.teacher import UserBasicInfo
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,7 @@ class TeacherService:
     def __init__(self):
         self.teacher_repo = TeacherRepository()
         self.user_repo = UserRepository()
+        self.auth_service = AuthService()
 
     async def create_teacher_with_user(
         self, 
@@ -66,6 +69,18 @@ class TeacherService:
                 teacher_id = await self._create_teacher_record(teacher_data, user_id)
                 teacher_created = True
                 logger.info(f"Docente creado y vinculado: {teacher_id} -> {user_id}")
+                # enviar email de verificacion
+                try:
+                    email_sent = await self.auth_service.send_email_verification(
+                        usuario_data.correo
+                    )
+                    if email_sent:
+                        logger.info(f"Email de verificación enviado a: {usuario_data.correo}")
+                    else:
+                        logger.warning(f"No se pudo enviar email de verificación a: {usuario_data.correo}")
+                except Exception as e:
+                    # No detener el proceso si falla el envío de email
+                    logger.error(f"Error enviando email de verificación: {str(e)}")
                 
                 return await self._get_created_teacher(teacher_id)
                 
@@ -262,9 +277,12 @@ class TeacherService:
             if not user:
                 raise UserNotFoundException(user_id)
 
+            # Usar el método centralizado
+            user_info = UserBasicInfo.from_user_data(user)
+
             return TeacherWithUserResponse(
                 docente=TeacherResponse(**teacher),
-                usuario=user
+                usuario=user_info
             )
             
         except (TeacherNotFoundException, UserNotFoundException, ValidationException) as e:
@@ -286,11 +304,52 @@ class TeacherService:
             if active_only:
                 teachers = await self._filter_active_teachers(teachers)
             
-            return await self._paginate_teachers(teachers, page, limit)
+            # Enriquecer con información del usuario
+            enriched_teachers = await self._enrich_teachers_with_user_info(teachers)
+
+            return await self._paginate_enriched_teachers(enriched_teachers, page, limit)
             
         except Exception as e:
             logger.error(f"Error obteniendo todos los docentes: {str(e)}")
             raise DatabaseException("Error al obtener la lista de docentes")
+    
+    async def _enrich_teachers_with_user_info(
+        self, 
+        teachers: List[dict]
+    ) -> List[TeacherWithUserResponse]:
+        """Enriquece lista de docentes con información del usuario asociado"""
+        enriched_teachers = []
+        
+        for teacher in teachers:
+            try:
+                user_id = teacher.get("id_usuario")
+                if not user_id:
+                    logger.warning(f"Docente {teacher.get('id_docente')} sin usuario asociado")
+                    continue
+                
+                # Obtener información del usuario
+                user = await self.user_repo.get_by_id(user_id)
+                if not user:
+                    logger.warning(f"Usuario {user_id} no encontrado para docente {teacher.get('id_docente')}")
+                    continue
+                
+                # Usar el método de clase para crear UserBasicInfo
+                user_info = UserBasicInfo.from_user_data(user)
+                
+                enriched_teachers.append(
+                    TeacherWithUserResponse(
+                        docente=TeacherResponse(**teacher),
+                        usuario=user_info
+                    )
+                )
+                
+            except Exception as e:
+                logger.warning(
+                    f"Error enriqueciendo docente {teacher.get('id_docente')}: {str(e)}"
+                )
+                continue
+        
+        return enriched_teachers
 
     async def _filter_active_teachers(self, teachers: List[dict]) -> List[dict]:
         """Filtra docentes activos - VERSIÓN MEJORADA"""
@@ -303,27 +362,19 @@ class TeacherService:
                     filtered_teachers.append(teacher)
         return filtered_teachers
 
-    async def _paginate_teachers(
+    async def _paginate_enriched_teachers(
         self, 
-        teachers: List[dict], 
+        teachers: List[TeacherWithUserResponse], 
         page: int, 
         limit: int
-    ) -> tuple[List[TeacherResponse], int]:
-        """Pagina lista de docentes"""
+    ) -> tuple[List[TeacherWithUserResponse], int]:
+        """Pagina lista de docentes enriquecidos"""
         total = len(teachers)
         start = (page - 1) * limit
         end = start + limit
         paginated_teachers = teachers[start:end]
         
-        teacher_responses = []
-        for teacher in paginated_teachers:
-            try:
-                teacher_responses.append(TeacherResponse(**teacher))
-            except Exception as e:
-                logger.warning(f"Error creando TeacherResponse para {teacher.get('id_docente')}: {str(e)}")
-                continue
-        
-        return teacher_responses, total
+        return paginated_teachers, total
 
     async def update_teacher(
         self, 
@@ -364,11 +415,18 @@ class TeacherService:
                     message="Debe proporcionar una razón de desactivación válida (mínimo 10 caracteres)",
                     field="razon"
                 )
-            from app.repositories.teacher_subject_repository import TeacherSubjectRepository
-            ts_repo = TeacherSubjectRepository()
-            if await ts_repo.teacher_has_assignments(teacher_id):
-                raise TeacherHasAssignmentsException(teacher_id)
+            
+            # Verificar si el docente tiene grupos activos usando GroupRepository
+            from app.repositories.group_repository import GroupRepository
+            group_repo = GroupRepository()
+            groups = await group_repo.get_groups_by_teacher(teacher_id)
 
+            # Filtrar grupos activos
+            active_groups = [group for group in groups if group.get("activo", True)]
+
+            if active_groups:
+                raise TeacherHasAssignmentsException(teacher_id)
+            
             user_id = teacher["id_usuario"]
             success = await self.user_repo.deactivate_user(user_id, reason)
             
@@ -423,20 +481,36 @@ class TeacherService:
             if not teacher:
                 raise TeacherNotFoundException(teacher_id)
 
-            from app.repositories.teacher_subject_repository import TeacherSubjectRepository
-            ts_repo = TeacherSubjectRepository()
-            assignments = await ts_repo.get_assignments_by_teacher(teacher_id)
+            # Obtener grupos del docente
+            from app.repositories.group_repository import GroupRepository
+            group_repo = GroupRepository()
+            groups = await group_repo.get_groups_by_teacher(teacher_id)
             
-            active_assignments = [a for a in assignments if a.get("activo", True)]
+            # Enriquecer grupos con información básica
+            enriched_groups = []
+            for group in groups:
+                group_code = group.get("codigo_grupo")
+                if group_code:
+                    # Obtener información básica del grupo
+                    group_details = await group_repo.get_group_with_details(group_code)
+                    if group_details:
+                        enriched_groups.append({
+                            "codigo_grupo": group_code,
+                            "codigo_materia": group.get("codigo_materia"),
+                            "nombre_materia": group_details.get("nombre_materia"),
+                            "activo": group.get("activo", True)
+                        })
+            
+            active_groups = [g for g in enriched_groups if g.get("activo", True)]
             
             return {
                 "id_docente": teacher_id,
-                "total_asignaciones": len(assignments),
-                "asignaciones_activas": len(active_assignments),
-                "detalle_asignaciones": active_assignments,
+                "total_grupos": len(groups),
+                "grupos_activos": len(active_groups),
+                "detalle_grupos": active_groups,
                 "estado": "ACTIVO" if teacher.get("activo", True) else "INACTIVO"
             }
-            
+        
         except TeacherNotFoundException as e:
             raise
         except Exception as e:

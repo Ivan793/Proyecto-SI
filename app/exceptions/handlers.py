@@ -7,13 +7,7 @@ import logging
 import traceback
 
 from .base_exceptions import AppException
-from app.exceptions.teacher_subject_exceptions import (
-    TeacherSubjectNotFoundException,
-    TeacherSubjectAlreadyExistsException,
-    TeacherSubjectAssignmentException,
-    TeacherSubjectHasDependenciesException,
-    TeacherNotAvailableException
-)
+
 
 from app.exceptions.event_exceptions import (
     EventNotFoundException,
@@ -22,6 +16,13 @@ from app.exceptions.event_exceptions import (
     InvalidEventDatesException,
     InvalidEventStateTransitionException,
     EventNotActiveException
+)
+from app.exceptions.academic_exceptions import (
+    FacultyNotFoundException,
+    FacultyAlreadyExistsException,
+    ProgramNotFoundException,
+    ProgramAlreadyExistsException,
+    InvalidFacultyException
 )
 
 from app.exceptions.research_exceptions import (
@@ -223,13 +224,6 @@ def register_exception_handlers(app):
     # Excepciones personalizadas
     app.add_exception_handler(AppException, app_exception_handler)
     
-    # Excepciones de asignación docente-materia
-    app.add_exception_handler(TeacherSubjectNotFoundException, app_exception_handler)
-    app.add_exception_handler(TeacherSubjectAlreadyExistsException, app_exception_handler)
-    app.add_exception_handler(TeacherSubjectAssignmentException, app_exception_handler)
-    app.add_exception_handler(TeacherSubjectHasDependenciesException, app_exception_handler)
-    app.add_exception_handler(TeacherNotAvailableException, app_exception_handler)
-    
     # Excepciones de eventos
     app.add_exception_handler(EventNotFoundException, app_exception_handler)
     app.add_exception_handler(EventAlreadyExistsException, app_exception_handler)
@@ -280,6 +274,13 @@ def register_exception_handlers(app):
     app.add_exception_handler(TokenNotFoundException, app_exception_handler)
     app.add_exception_handler(InsufficientPermissionsException, app_exception_handler)
     app.add_exception_handler(AccountDisabledException, app_exception_handler)
+
+    # Excepciones de facultad y programa
+    app.add_exception_handler(FacultyNotFoundException, app_exception_handler)
+    app.add_exception_handler(FacultyAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(ProgramNotFoundException, app_exception_handler)
+    app.add_exception_handler(ProgramAlreadyExistsException, app_exception_handler)
+    app.add_exception_handler(InvalidFacultyException, app_exception_handler)
 
     # Excepciones de validación
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
