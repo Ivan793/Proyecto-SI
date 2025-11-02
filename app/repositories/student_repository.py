@@ -14,9 +14,6 @@ class StudentRepository(BaseRepository):
     async def get_students_by_program(self, program_code: str) -> List[Dict[str, Any]]:
         return await self.get_all(filters={"codigo_programa": program_code})
 
-    async def get_active_students(self) -> List[Dict[str, Any]]:
-        return await self.get_all(filters={"activo": True})
-
     async def get_student_by_user_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         return await self.get_by_field("id_usuario", user_id)
 

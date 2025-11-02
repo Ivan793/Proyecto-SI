@@ -460,8 +460,6 @@ AttendanceDateTime = Annotated[
 ResearchLineCode = Annotated[
     int,
     Field(
-        ge=1,
-        le=2,
         description="Código de la línea de investigación (1 o 2)"
     )
 ]

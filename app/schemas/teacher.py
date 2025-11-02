@@ -4,7 +4,7 @@ from datetime import datetime
 
 from app.core.validators import TeacherValidatorMixin
 from app.schemas.types import *
-from app.schemas.user import UserCreate
+from app.schemas.user import UserBasicInfo, UserCreate
 from app.core.constants import Defaults
 
 
@@ -78,4 +78,26 @@ class TeacherResponse(BaseModel):
 
 class TeacherWithUserResponse(BaseModel):
     docente: TeacherResponse
-    usuario: dict  # Cambiado a dict para evitar importación circular
+    usuario: UserBasicInfo  # ← Usar el esquema centralizado
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "docente": {
+                    "id_docente": "doc_123abc",
+                    "id_usuario": "user_456def",
+                    "categoria_docente": "Interno",
+                    "codigo_programa": "ING02",
+                    "created_at": "2024-01-15T10:30:00",
+                    "updated_at": "2024-01-15T10:30:00"
+                },
+                "usuario": {
+                    "nombre_completo": "Camila Andrea Torres Palomino",
+                    "identificacion": "1231271982",
+                    "correo": "camila.torres@unicesar.edu.co",
+                    "telefono": "+573112345678",
+                    "activo": True
+                }
+            }
+        }
+    )
