@@ -28,7 +28,7 @@ class GraduateService:
         self.user_repo = UserRepository()
         self.graduate_repo = GraduateRepository()
 
-    # -------------------------------
+        # -------------------------------
     # Crear egresado con usuario (CASCADA)
     # -------------------------------
     async def create_graduate_with_user(self, graduate_data: GraduateCreate) -> GraduateResponse:
@@ -105,7 +105,21 @@ class GraduateService:
                 else graduate_created
             )
 
-            # 🔹 6. Obtener y retornar el egresado
+            # ✅ 🔹 6. Enviar email de verificación (nuevo)
+            try:
+                from app.services.auth_service import AuthService
+                auth_service = AuthService()
+                email_sent = await auth_service.send_email_verification(graduate_data.correo)
+
+                if email_sent:
+                    logger.info(f"Email de verificación enviado a: {graduate_data.correo}")
+                else:
+                    logger.warning(f"No se pudo enviar email de verificación a: {graduate_data.correo}")
+            except Exception as e:
+                logger.error(f"Error enviando email de verificación: {str(e)}")
+                # No interrumpe la creación del egresado
+
+            # 🔹 7. Obtener y retornar el egresado
             graduate = await self.graduate_repo.get_by_id(graduate_id)
             return GraduateResponse(**graduate)
 
@@ -131,6 +145,7 @@ class GraduateService:
                     "timestamp": datetime.utcnow().isoformat()
                 }
             )
+
 
     # -------------------------------
     # Obtener egresados activos
@@ -251,3 +266,4 @@ class GraduateService:
 
         logger.info(f"Egresado {graduate_id} desactivado y usuario {user_id} inactivado correctamente.")
         return True
+

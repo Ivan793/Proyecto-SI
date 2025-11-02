@@ -2,15 +2,17 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, Dict
 from datetime import datetime
 from app.schemas.types import *
-from app.schemas.user import UserCreate
+from app.schemas.user import UserCreate  
 from app.core.constants import ValidationMessages, Limits
 from app.core.patterns import Patterns
 import re
+from app.core.enums import Sector
+
 
 class GuestBase(BaseModel):
     institucion_origen: Optional[Institution] = None
-    nombre_empresa: Optional[str] = None
-    id_sector: Optional[str] = None
+    nombre_empresa: Optional[str] = None  
+    id_sector: Optional[Sector] = None       
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -40,11 +42,11 @@ class GuestCreate(UserCreate, GuestBase):  # ✅ hereda de UserCreate
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "tipo_documento": "CC",
+                "tipo_documento": DocumentType.CC,
                 "identificacion": "1234567890",
                 "nombres": "Laura",
                 "apellidos": "Castillo Ríos",
-                "sexo": "Mujer",
+                "sexo": Sex.MUJER,
                 "identidad_sexual": "Heterosexual",
                 "fecha_nacimiento": "1998-05-17",
                 "nacionalidad": "Colombiana",
@@ -56,10 +58,10 @@ class GuestCreate(UserCreate, GuestBase):  # ✅ hereda de UserCreate
                 "telefono": "+573002223334",
                 "correo": "laura.castillo@gmail.com",
                 "contraseña": "Invitado123#",
-                "rol": "Invitado",
+                "rol": Role.INVITADO,
                 "institucion_origen": "Universidad del Norte",
                 "nombre_empresa": "Tech Solutions S.A.S",
-                "id_sector": "SEC12345"
+                "id_sector": Sector.EMPRESARIAL
             }
         }
     )
@@ -81,14 +83,14 @@ class GuestCreateExistingUser(GuestBase):
 class GuestUpdate(BaseModel):
     institucion_origen: Optional[Institution] = None
     nombre_empresa: Optional[str] = None
-    id_sector: Optional[str] = None
+    id_sector: Optional[Sector] = None
 
 class GuestResponse(BaseModel):
     id_invitado: GuestId
     id_usuario: UserId
     institucion_origen: Optional[Institution] = None
     nombre_empresa: Optional[str] = None
-    id_sector: Optional[str] = None
+    id_sector: Optional[Sector] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
