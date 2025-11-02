@@ -19,7 +19,7 @@ class Limits:
     
     # Nombres y apellidos
     NAME_MIN = 2
-    NAME_MAX = 50
+    NAME_MAX = 15
     
     # Identificación
     IDENTIFICATION_MIN = 6
@@ -48,7 +48,7 @@ class Limits:
     
     # Código de programa
     PROGRAM_CODE_MIN = 3
-    PROGRAM_CODE_MAX = 15
+    PROGRAM_CODE_MAX = 10
     
     # User ID
     USER_ID_MIN = 10

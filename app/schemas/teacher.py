@@ -32,8 +32,10 @@ class TeacherCreateWithUser(TeacherBase):
                 "usuario": {
                     "tipo_documento": "CC",
                     "identificacion": "1231271982",
-                    "nombres": "Camila Andrea",
-                    "apellidos": "Torres Palomino",
+                    "primer_nombre": "Camila",
+                    "segundo_nombre": "Andrea",
+                    "primer_apellido": "Torres",
+                    "segundo_apellido": "Palomino",
                     "sexo": "Mujer",
                     "identidad_sexual": "Heterosexual",
                     "fecha_nacimiento": "1980-05-15",

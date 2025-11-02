@@ -11,8 +11,10 @@ from app.core.validators import UserValidatorMixin, BaseValidators
 class UserBase(BaseModel, UserValidatorMixin):
     tipo_documento: UserDocumentType
     identificacion: UserIdentification
-    nombres: UserName
-    apellidos: UserName
+    primer_nombre: UserName
+    segundo_nombre: Optional[UserName] = None
+    primer_apellido: UserName
+    segundo_apellido: Optional[UserName] = None
     sexo: UserSex
     identidad_sexual: UserSexualIdentity
     fecha_nacimiento: datetime
@@ -48,8 +50,10 @@ class UserBase(BaseModel, UserValidatorMixin):
             "example": {
                 "tipo_documento": DocumentType.CC,
                 "identificacion": "1023456789",
-                "nombres": "David José",
-                "apellidos": "Rodríguez González",
+                "primer_nombre": "David",
+                "segundo_nombre": "Jose",
+                "primer_apellido": "Rodríguez",
+                "segundo_apellido": "González",
                 "sexo": Sex.HOMBRE,
                 "identidad_sexual": "Heterosexual",
                 "fecha_nacimiento": "2000-06-03",
@@ -58,7 +62,7 @@ class UserBase(BaseModel, UserValidatorMixin):
                 "departamento": "Cesar",
                 "municipio": "Valledupar",
                 "ciudad_residencia": "Valledupar",
-                "direccion_residencia": "Calle 45 #22-10, Barrio San José",
+                "direccion_residencia": "Calle 45 #22-10, Barrio San Jose",
                 "telefono": "+57301343343",
                 "correo": "david.rodriguez@unicesar.edu.co",
                 "rol": Role.ESTUDIANTE,
@@ -79,8 +83,10 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):    
-    nombres: Optional[UserName] = None
-    apellidos: Optional[UserName] = None
+    primer_nombre: Optional[UserName] = None
+    segundo_nombre: Optional[UserName] = None
+    primer_apellido: Optional[UserName] = None
+    segundo_apellido: Optional[UserName] = None
     sexo: Optional[UserSex] = None
     identidad_sexual: Optional[UserSexualIdentity] = None
     fecha_nacimiento: Optional[datetime] = None
@@ -92,7 +98,6 @@ class UserUpdate(BaseModel):
     direccion_residencia: Optional[UserAddress] = None
     telefono: Optional[UserPhone] = None
     contraseña: Optional[UserPassword] = None
-    rol: Optional[UserRole] = None
     activo: Optional[StatusActive] = None
     razon_desactivacion: Optional[ReasonText] = None
 
@@ -112,7 +117,7 @@ class UserUpdate(BaseModel):
         return self
 
     # Validadores opcionales para actualización
-    @field_validator('nombres', 'apellidos')
+    @field_validator('primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido')
     @classmethod
     def transform_names_optional(cls, v: Optional[str]) -> Optional[str]:
         """Transforma nombres si se proporcionan."""
@@ -166,7 +171,7 @@ class UserBasicInfo(BaseModel):
         """Crea UserBasicInfo a partir de datos de usuario de Firestore"""
         return cls(
             id_usuario=user_data.get("id_usuario") or user_data.get("id"),
-            nombre_completo=f"{user_data.get('nombres', '')} {user_data.get('apellidos', '')}".strip(),
+            nombre_completo=f"{user_data.get('primer_nombre', '')} {user_data.get('segundo_nombre', '')} {user_data.get('primer_apellido', '')} {user_data.get('segundo_apellido', '')}".strip(),
             identificacion=user_data.get('identificacion', ''),
             correo=user_data.get('correo', ''),
             telefono=user_data.get('telefono'),

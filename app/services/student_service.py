@@ -163,7 +163,7 @@ class StudentService:
             return firebase_auth.create_user(
                 email=usuario_data.correo,
                 password=usuario_data.contraseña,
-                display_name=f"{usuario_data.nombres} {usuario_data.apellidos}",
+                display_name=f"{usuario_data.primer_nombre} {usuario_data.segundo_nombre} {usuario_data.primer_apellido} {usuario_data.segundo_apellido}",
                 disabled=False
             )
         except EmailAlreadyExistsError:

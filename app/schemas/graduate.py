@@ -51,8 +51,10 @@ class GraduateCreate(UserCreate, GraduateBase):  # ✅ hereda de UserCreate
             "example": {
                 "tipo_documento": DocumentType.CC,
                 "identificacion": "1002431808",
-                "nombres": "David José",
-                "apellidos": "Rodríguez González",
+                "primer_nombre": "David",
+                "segundo_nombre": "José",
+                "primer_apellido": "Rodríguez",
+                "segundo_apellido": "González",
                 "sexo": Sex.HOMBRE,
                 "identidad_sexual": "Heterosexual",
                 "fecha_nacimiento": "2000-06-03",
