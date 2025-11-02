@@ -53,3 +53,9 @@ class TipoActividadEnum(IntEnum):
     ponencia = 3
     conferencia = 4
     articulo_cientifico = 5
+
+class Sector(IntEnum):
+    EDUCATIVO = 1
+    EMPRESARIAL = 2
+    SOCIAL = 3
+    GOBIERNO = 4
