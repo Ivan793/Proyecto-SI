@@ -63,8 +63,8 @@ async def get_teachers(
     activos: bool = Query(True, description="Filtrar solo profesores activos"),
     params: PaginationParams = Depends(),
     _: Dict[str, Any] = Depends(get_current_admin_user),
-    service: TeacherService = Depends(get_teacher_service)
 ):
+    service = TeacherService()
     teachers, total = await service.get_all_teachers(
         active_only=activos,
         page=params.page,
