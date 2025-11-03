@@ -93,12 +93,39 @@ class GraduateCreateExistingUser(GraduateBase):
     )
 
 
+# ✅ Aquí añadimos los campos del usuario para actualizar
 class GraduateUpdate(BaseModel):
+    # --- Campos de egresado ---
     codigo_programa: Optional[str] = None
     programa_academico: Optional[AcademicProgram] = None
     año_graduacion: Optional[GraduationYear] = None
     titulo_obtenido: Optional[DegreeTitle] = None
     titulado: Optional[bool] = None
+
+    # --- Campos del usuario (solo los que se pueden editar) ---
+    nombre_completo: Optional[str] = None
+    identificacion: Optional[str] = None
+    correo: Optional[str] = None
+    telefono: Optional[str] = None
+    activo: Optional[bool] = None
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "codigo_programa": "ING-SIS-001",
+                "programa_academico": "Ingeniería de Sistemas",
+                "año_graduacion": 2023,
+                "titulo_obtenido": "Ingeniero de Sistemas",
+                "titulado": True,
+                "nombres":"ander",
+                "apellidos": "quintero",
+                "identificacion": "1065122083",
+                "correo": "acbotello@unicesar.edu.co",
+                "telefono": "+573128492382",
+                "activo": True
+            }
+        }
+    )
 
 
 class GraduateResponse(BaseModel):
