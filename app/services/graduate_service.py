@@ -74,7 +74,6 @@ class GraduateService:
             })
             user_dict.update({
                 "rol": "Egresado",
-                "activo": True,
                 "created_at": datetime.utcnow(),
                 "updated_at": datetime.utcnow()
             })
@@ -147,7 +146,7 @@ class GraduateService:
                 user_id = g.get("id_usuario")
                 user = await self.user_repo.get_by_id(user_id)
                 if user and user.get("activo", False) is True:
-                    nombre_completo = f"{user.get('nombres', '')} {user.get('apellidos', '')}".strip()
+                    nombre_completo = f"{user.get('primer_nombre', '')} {user.get('segundo_nombre', '')} {user.get('primer_apellido', '')} {user.get('segundo_apellido', '')}".strip()
                     filtered_user = {
                         "id_usuario": user.get("id_usuario"),
                         "nombre_completo": nombre_completo,
@@ -176,10 +175,10 @@ class GraduateService:
             )
 
     # -------------------------------
-    # Actualizar egresado + usuario
+    # Obtener egresado por ID (con datos del usuario)
     # -------------------------------
-    async def update_graduate(self, graduate_id: str, graduate_data: GraduateUpdate) -> dict:
-        """Actualiza los datos del egresado y también los campos visibles del usuario"""
+    async def get_graduate(self, graduate_id: str) -> dict:
+        """Obtiene un egresado junto con todos los datos del usuario asociado"""
         try:
             graduate = await self.graduate_repo.get_by_id(graduate_id)
             if not graduate:
@@ -192,18 +191,81 @@ class GraduateService:
             if not user:
                 raise UserNotFoundException(user_id)
 
-            # --- Actualizar egresado ---
-            grad_update_data = graduate_data.model_dump(exclude_unset=True)
-            grad_update_data["updated_at"] = datetime.utcnow()
-            await self.graduate_repo.update(graduate_id, grad_update_data)
-
-            # --- Actualizar usuario (solo campos permitidos) ---
-            user_fields_allowed = ["nombre_completo", "identificacion", "correo", "telefono", "activo"]
-            user_update_data = {
-                k: v for k, v in graduate_data.model_dump(exclude_unset=True).items()
-                if k in user_fields_allowed
+            return {
+                "egresado": graduate,
+                "usuario": user
             }
 
+        except GraduateNotFoundException as e:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "status": "error",
+                    "message": f"No se encontró el egresado: {str(e)}",
+                    "code": "NOT_FOUND",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
+        except UserNotFoundException as e:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "status": "error",
+                    "message": f"No se encontró el usuario del egresado: {str(e)}",
+                    "code": "NOT_FOUND",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error al obtener egresado {graduate_id}: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "status": "error",
+                    "message": f"Error interno al obtener egresado: {str(e)}",
+                    "code": "INTERNAL_ERROR",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
+
+    # -------------------------------
+    # ✅ Actualizar egresado + usuario (solo cambio aquí)
+    # -------------------------------
+    async def update_graduate(self, graduate_id: str, graduate_data: GraduateUpdate) -> dict:
+        """Actualiza todos los campos del egresado y del usuario excepto correo e identificación"""
+        try:
+            graduate = await self.graduate_repo.get_by_id(graduate_id)
+            if not graduate:
+                graduate = await self.graduate_repo.get_by_field("id_usuario", graduate_id)
+            if not graduate:
+                raise GraduateNotFoundException(graduate_id)
+
+            user_id = graduate.get("id_usuario")
+            user = await self.user_repo.get_by_id(user_id)
+            if not user:
+                raise UserNotFoundException(user_id)
+
+            # Tomar solo los datos que llegaron en el body
+            input_data = graduate_data.model_dump(exclude_unset=True)
+
+            # --- Campos permitidos para el egresado (solo estos se actualizan en la colección egresados) ---
+            grad_fields_allowed = [
+                "codigo_programa", "programa_academico", "año_graduacion",
+                "titulo_obtenido", "titulado"
+            ]
+            grad_update_data = {k: v for k, v in input_data.items() if k in grad_fields_allowed}
+            if grad_update_data:
+                grad_update_data["updated_at"] = datetime.utcnow()
+                await self.graduate_repo.update(graduate_id, grad_update_data)
+
+            # --- Campos permitidos para el usuario (TODOS menos 'correo' e 'identificacion') ---
+            user_fields_allowed = [
+                "primer_nombre", "segundo_nombre", "primer_apellido", "segundo_apellido",
+                "sexo", "identidad_sexual", "fecha_nacimiento", "nacionalidad",
+                "pais_residencia", "departamento", "municipio", "ciudad_residencia",
+                "direccion_residencia", "telefono", "activo"
+            ]
+            user_update_data = {k: v for k, v in input_data.items() if k in user_fields_allowed}
             if user_update_data:
                 user_update_data["updated_at"] = datetime.utcnow()
                 await self.user_repo.update(user_id, user_update_data)
@@ -212,12 +274,18 @@ class GraduateService:
             updated_grad = await self.graduate_repo.get_by_id(graduate_id)
             updated_user = await self.user_repo.get_by_id(user_id)
 
-            nombre_completo = f"{updated_user.get('nombres', '')} {updated_user.get('apellidos', '')}".strip()
+            # Generar nombre completo con los 4 campos
+            nombre_completo = f"{updated_user.get('primer_nombre', '')} {updated_user.get('segundo_nombre', '')} {updated_user.get('primer_apellido', '')} {updated_user.get('segundo_apellido', '')}".strip()
+
             filtered_user = {
                 "id_usuario": updated_user.get("id_usuario"),
                 "nombre_completo": nombre_completo,
-                "identificacion": updated_user.get("identificacion"),
-                "correo": updated_user.get("correo"),
+                "primer_nombre": updated_user.get("primer_nombre"),
+                "segundo_nombre": updated_user.get("segundo_nombre"),
+                "primer_apellido": updated_user.get("primer_apellido"),
+                "segundo_apellido": updated_user.get("segundo_apellido"),
+                "identificacion": updated_user.get("identificacion"),  # solo lectura
+                "correo": updated_user.get("correo"),                  # solo lectura
                 "telefono": updated_user.get("telefono"),
                 "activo": updated_user.get("activo")
             }
