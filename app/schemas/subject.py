@@ -3,10 +3,11 @@ from typing import List, Optional
 
 from app.schemas.types import *
 
+
 class SubjectBase(BaseModel):
     nombre_materia: SubjectName
     ciclo_semestral: SubjectCycleType
-    
+
     @field_validator("nombre_materia")
     @classmethod
     def validate_name_not_empty(cls, v: str) -> str:
@@ -24,9 +25,10 @@ class SubjectBase(BaseModel):
         }
     )
 
+
 class SubjectCreate(SubjectBase):
     codigo_materia: SubjectCode
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -37,6 +39,7 @@ class SubjectCreate(SubjectBase):
         }
     )
 
+
 class SubjectUpdate(BaseModel):
     nombre_materia: Optional[SubjectName] = None
     ciclo_semestral: Optional[SubjectCycle] = None
@@ -45,11 +48,12 @@ class SubjectUpdate(BaseModel):
         SubjectBase.validate_name_not_empty.__func__
     )
 
+
 class SubjectWithGroupsCreate(BaseModel):
     """Crear materia Y asignar grupos existentes"""
     materia: SubjectCreate
     codigos_grupo: List[GroupCode] = Field(..., min_items=1)
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -63,17 +67,19 @@ class SubjectWithGroupsCreate(BaseModel):
         }
     )
 
+
 class SubjectResponse(SubjectBase):
     codigo_materia: SubjectCode
     grupos_asignados: List[str] = Field(default_factory=list)
-    
+
     model_config = ConfigDict(from_attributes=True)
+
 
 class SubjectSummary(BaseModel):
     codigo_materia: SubjectCode
     nombre_materia: SubjectName
     ciclo_semestral: SubjectCycleType
-    
+
     model_config = ConfigDict(
         from_attributes=True,
         json_schema_extra={
@@ -84,4 +90,3 @@ class SubjectSummary(BaseModel):
             }
         }
     )
-

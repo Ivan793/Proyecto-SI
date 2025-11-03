@@ -3,7 +3,7 @@ from typing import Dict, Any
 import logging
 
 from app.services.academic_service import AcademicService, FacultyService, ProgramService
-from app.dependencies.auth_dependencies import get_authenticated_user
+from app.dependencies.auth_dependencies import get_authenticated_user, optional_authentication
 from app.core.rate_limiter import auth_rate_limit
 from app.utils.responses import success_response, not_found_response, internal_server_error_response
 from app.utils.swagger_docs import ResponseDocumentation
@@ -31,7 +31,7 @@ router = APIRouter(prefix="/public-academico", tags=["Académico"])
 @auth_rate_limit()
 async def get_complete_academic_tree(
     request: Request,
-    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+    current_user: Dict[str, Any] = Depends(optional_authentication)
 ):
     try:
         service = AcademicService()
@@ -58,7 +58,7 @@ async def get_complete_academic_tree(
 @auth_rate_limit()
 async def get_all_faculties(
     request: Request,
-    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+    current_user: Dict[str, Any] = Depends(optional_authentication)
 ):
     try:
         service = FacultyService()
@@ -88,7 +88,7 @@ async def get_all_faculties(
 async def get_faculty_with_details(
     request: Request,
     faculty_id: str = Path(..., description="Código de la facultad"),
-    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+    current_user: Dict[str, Any] = Depends(optional_authentication)
 ):
     try:
         service = AcademicService()
@@ -118,7 +118,7 @@ async def get_faculty_with_details(
 async def get_programs_by_faculty(
     request: Request,
     faculty_id: str = Path(..., description="Código de la facultad"),
-    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+    current_user: Dict[str, Any] = Depends(optional_authentication)
 ):
     try:
         service = ProgramService()
@@ -148,7 +148,7 @@ async def get_program_with_subjects(
     request: Request,
     faculty_id: str = Path(..., description="Código de la facultad"),
     program_code: str = Path(..., description="Código del programa"),
-    current_user: Dict[str, Any] = Depends(get_authenticated_user)
+    current_user: Dict[str, Any] = Depends(optional_authentication)
 ):
     try:
         service = AcademicService()

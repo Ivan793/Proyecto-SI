@@ -71,3 +71,10 @@ class StudentWithBasicUserResponse(BaseModel):
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class StudentWithFullUserResponse(BaseModel):
+    estudiante: StudentResponse
+    usuario: UserResponse
+
+    model_config = ConfigDict(from_attributes=True)

@@ -10,10 +10,11 @@ from app.repositories.user_repository import UserRepository
 from app.schemas.teacher import (
     TeacherCreateWithUser, 
     TeacherUpdate, 
-    TeacherResponse, 
+    TeacherResponse,
+    TeacherWithFullUserResponse, 
     TeacherWithUserResponse
 )
-from app.schemas.user import UserCreate
+from app.schemas.user import UserCreate, UserResponse
 from app.exceptions.teacher_exceptions import (
     TeacherNotFoundException,
     TeacherAlreadyExistsException,
@@ -166,7 +167,7 @@ class TeacherService:
             return firebase_auth.create_user(
                 email=usuario_data.correo,
                 password=usuario_data.contraseña,
-                display_name=f"{usuario_data.nombres} {usuario_data.apellidos}",
+                display_name=f"{usuario_data.primer_nombre} {usuario_data.segundo_nombre} {usuario_data.primer_apellido} {usuario_data.segundo_apellido}",
                 disabled=False
             )
         except EmailAlreadyExistsError:
@@ -263,7 +264,7 @@ class TeacherService:
             logger.error(f"Error obteniendo docente {teacher_id}: {str(e)}")
             raise DatabaseException("Error al obtener docente")
 
-    async def get_teacher_with_user(self, teacher_id: str) -> TeacherWithUserResponse:
+    async def get_teacher_with_user(self, teacher_id: str) -> TeacherWithFullUserResponse:
         try:
             teacher = await self.teacher_repo.get_by_id(teacher_id)
             if not teacher:
@@ -277,10 +278,9 @@ class TeacherService:
             if not user:
                 raise UserNotFoundException(user_id)
 
-            # Usar el método centralizado
-            user_info = UserBasicInfo.from_user_data(user)
+            user_info = UserResponse(**user)
 
-            return TeacherWithUserResponse(
+            return TeacherWithFullUserResponse(
                 docente=TeacherResponse(**teacher),
                 usuario=user_info
             )
@@ -297,12 +297,12 @@ class TeacherService:
         active_only: bool = True,
         page: int = 1,
         limit: int = 20
-    ) -> tuple[List[TeacherResponse], int]:
+    ) -> tuple[List[TeacherWithUserResponse], int]:
         try:
             teachers = await self.teacher_repo.get_all()
             
-            if active_only:
-                teachers = await self._filter_active_teachers(teachers)
+            if active_only is not None:
+                teachers = await self._filter_active_teachers(teachers, active_only)
             
             # Enriquecer con información del usuario
             enriched_teachers = await self._enrich_teachers_with_user_info(teachers)
@@ -351,15 +351,17 @@ class TeacherService:
         
         return enriched_teachers
 
-    async def _filter_active_teachers(self, teachers: List[dict]) -> List[dict]:
+    async def _filter_active_teachers(self, teachers: List[dict], active_only: bool) -> List[dict]:
         """Filtra docentes activos - VERSIÓN MEJORADA"""
         filtered_teachers = []
         for teacher in teachers:
             user_id = teacher.get("id_usuario")
             if user_id:
                 user = await self.user_repo.get_by_id(user_id)
-                if user and user.get("activo", True):
-                    filtered_teachers.append(teacher)
+                if user:
+                    user_active = user.get("activo", True)
+                    if (active_only and user_active) or (not active_only and not user_active):
+                        filtered_teachers.append(teacher)
         return filtered_teachers
 
     async def _paginate_enriched_teachers(

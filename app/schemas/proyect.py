@@ -22,8 +22,8 @@ class ProyectoBase(BaseModel):
     id_grupo: int = Field(..., description="Identificador del grupo académico")
     codigo_area: int = Field(..., description="Identificador del área temática")
     id_evento: str = Field(..., description="Identificador del evento")
-    id_materia: str = Field(..., description="Identificador de la materia asociada")
-    codigo_linea: Union[str, int] = Field(..., description="Código de la línea de investigación")
+    codigo_materia: str = Field(..., description="Identificador de la materia asociada")
+    codigo_linea: int = Field(..., description="Código de la línea de investigación")
     codigo_sublinea: Optional[int] = Field(None, description="Código de la sublínea")
     titulo_proyecto: str = Field(
         ...,

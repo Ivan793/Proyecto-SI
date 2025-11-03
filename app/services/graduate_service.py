@@ -62,7 +62,7 @@ class GraduateService:
             firebase_user = firebase_auth.create_user(
                 email=graduate_data.correo,
                 password=graduate_data.contraseña,
-                display_name=f"{graduate_data.nombres} {graduate_data.apellidos}",
+                display_name=f"{graduate_data.primer_nombre} {graduate_data.segundo_nombre} {graduate_data.primer_apellido} {graduate_data.segundo_apellido}",
                 disabled=False
             )
             uid = firebase_user.uid
