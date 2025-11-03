@@ -10,10 +10,11 @@ from app.repositories.user_repository import UserRepository
 from app.schemas.student import (
     StudentCreateWithUser, 
     StudentUpdate, 
-    StudentResponse, 
+    StudentResponse,
+    StudentWithFullUserResponse, 
     StudentWithUserResponse
 )
-from app.schemas.user import UserCreate,UserBasicInfo
+from app.schemas.user import UserCreate,UserBasicInfo, UserResponse
 from app.exceptions.student_exceptions import (
     StudentNotFoundException,
     StudentAlreadyExistsException
@@ -260,7 +261,7 @@ class StudentService:
             logger.error(f"Error obteniendo estudiante {student_id}: {str(e)}")
             raise DatabaseException("Error al obtener estudiante")
 
-    async def get_student_with_user(self, student_id: str) -> StudentWithUserResponse:
+    async def get_student_with_user(self, student_id: str) -> StudentWithFullUserResponse:
         try:
             student = await self.student_repo.get_by_id(student_id)
             if not student:
@@ -274,9 +275,9 @@ class StudentService:
             if not user:
                 raise UserNotFoundException(user_id)
 
-            user_info = UserBasicInfo.from_user_data(user)
+            user_info = UserResponse(**user)
 
-            return StudentWithUserResponse(
+            return StudentWithFullUserResponse(
                 estudiante=StudentResponse(**student),
                 usuario=user_info
             )

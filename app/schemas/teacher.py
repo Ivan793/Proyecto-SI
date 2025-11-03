@@ -4,7 +4,7 @@ from datetime import datetime
 
 from app.core.validators import TeacherValidatorMixin
 from app.schemas.types import *
-from app.schemas.user import UserBasicInfo, UserCreate
+from app.schemas.user import UserBasicInfo, UserCreate, UserResponse
 from app.core.constants import Defaults
 
 class TeacherBase(BaseModel, TeacherValidatorMixin):
@@ -98,3 +98,10 @@ class TeacherWithUserResponse(BaseModel):
             }
         }
     )
+
+
+class TeacherWithFullUserResponse(BaseModel):
+    docente: TeacherResponse
+    usuario: UserResponse
+
+    model_config = ConfigDict(from_attributes=True)
