@@ -47,7 +47,7 @@ class GuestService:
             firebase_user = firebase_auth.create_user(
                 email=guest_data.correo,
                 password=guest_data.contraseña,
-                display_name=f"{guest_data.nombres} {guest_data.apellidos}",
+                display_name=f"{guest_data.primer_nombre} {guest_data.segundo_nombre} {guest_data.primer_apellido} {guest_data.segundo_apellido}",
                 disabled=False
             )
             user_id = firebase_user.uid
