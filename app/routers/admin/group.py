@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Body, Depends, Query, status, Request, HTTPException
-from typing import Optional, Dict, Any, List
+from fastapi import APIRouter, Body, Depends, Query, status, Request
+from typing import Optional, Dict, Any
 import logging
 
 from app.schemas.types import ReasonText
@@ -8,8 +8,6 @@ from app.schemas.group import GroupCreate, GroupUpdate, GroupResponse, GroupWith
 from app.schemas.common import PaginationParams
 
 from app.dependencies.auth_dependencies import (
-    get_authenticated_user, 
-    get_current_admin_user,
     require_admin,
     require_admin_or_teacher,
     require_any_authenticated
@@ -25,10 +23,11 @@ from app.utils.swagger_docs import ResponseDocumentation
 from app.exceptions.group_exceptions import (
     GroupNotFoundException, 
     GroupAlreadyExistsException,
-    GroupHasDependenciesException,
-    SubjectNotFoundException,
-    TeacherNotFoundException
+    GroupHasDependenciesException
 )
+
+from app.exceptions.subject_exceptions import SubjectNotFoundException
+from app.exceptions.teacher_exceptions import TeacherNotFoundException
 from app.exceptions.base_exceptions import ValidationException
 
 logger = logging.getLogger(__name__)
