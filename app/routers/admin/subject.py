@@ -13,7 +13,7 @@ from app.schemas.subject import (
     SubjectResponse
 )
 from app.schemas.common import PaginationParams
-from app.dependencies.auth_dependencies import get_current_admin_user
+from app.dependencies.auth_dependencies import get_authenticated_user, get_current_admin_user
 from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
     success_response, created_response, paginated_response, 
@@ -118,7 +118,7 @@ async def get_subjects(
     request: Request,
     activos: bool = Query(True, description="Filtrar solo materias activas"),
     params: PaginationParams = Depends(),
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+    _: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     try:
         service = SubjectService()
@@ -152,7 +152,7 @@ async def get_subjects(
 async def get_subject_by_code(
     request: Request,
     subject_code: str,
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+    _: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     try:
         service = SubjectService()
@@ -181,7 +181,7 @@ async def get_subject_by_code(
 async def get_subject_with_groups(
     request: Request,
     subject_code: str,
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+    _: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     try:
         service = SubjectService()
@@ -210,7 +210,7 @@ async def get_subject_with_groups(
 async def get_teachers_for_subject(
     request: Request,
     subject_code: str,
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+    _: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     try:
         service = SubjectService()
