@@ -20,6 +20,10 @@ class Limits:
     # Nombres y apellidos
     NAME_MIN = 2
     NAME_MAX = 15
+
+    # Nombre de linea de investigacion 
+    RESEARCH_LINE_NAME_MIN = 2
+    RESEARCH_LINE_NAME_MAX = 50
     
     # Identificación
     IDENTIFICATION_MIN = 6
