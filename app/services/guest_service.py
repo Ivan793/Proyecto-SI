@@ -1,6 +1,7 @@
 from typing import List, Dict, Any
 import logging
 from datetime import datetime
+from fastapi import HTTPException
 
 from app.repositories.guest_repository import GuestRepository
 from app.repositories.user_repository import UserRepository
@@ -62,7 +63,6 @@ class GuestService:
                     "id_sector"
                 }
             )
-            user_dict["estado"] = "ACTIVO"
             await self.user_repo.create(user_dict, document_id=user_id)
             logger.info(f"Usuario creado en Firestore: {user_id}")
 
@@ -78,7 +78,8 @@ class GuestService:
 
             guest_id = await self.guest_repo.create(guest_dict)
             logger.info(f"Invitado creado y vinculado: {guest_id} -> {user_id}")
-             # 🔹 6. Enviar email de verificación
+
+            # 🔹 6. Enviar email de verificación
             try:
                 from app.services.auth_service import AuthService
                 auth_service = AuthService()
@@ -90,7 +91,7 @@ class GuestService:
                     logger.warning(f"No se pudo enviar email de verificación a: {guest_data.correo}")
             except Exception as e:
                 logger.error(f"Error enviando email de verificación: {str(e)}")
-                
+
             # 🔹 7. Obtener y retornar invitado completo
             guest = await self.guest_repo.get_by_id(guest_id)
             return GuestResponse(**guest)
@@ -111,17 +112,14 @@ class GuestService:
     # Crear invitado con usuario existente
     # ---------------------------
     async def create_guest_with_existing_user(self, guest_data: GuestCreateExistingUser) -> GuestResponse:
-        # 🔹 Verificar que el usuario exista
         user_exists = await self.user_repo.user_exists(guest_data.id_usuario)
         if not user_exists:
             raise UserNotFoundException(f"Usuario con ID {guest_data.id_usuario} no encontrado.")
 
-        # 🔹 Verificar que no exista invitado asociado
         existing_guest = await self.guest_repo.get_by_field("id_usuario", guest_data.id_usuario)
         if existing_guest:
             raise GuestAlreadyExistsException(f"Ya existe un invitado para el usuario {guest_data.id_usuario}.")
 
-        # 🔹 Crear invitado
         guest_dict = guest_data.model_dump()
         guest_dict.update({
             "created_at": datetime.utcnow(),
@@ -132,63 +130,193 @@ class GuestService:
         return GuestResponse(**new_guest)
 
     # ---------------------------
-    # Obtener todos los invitados (solo usuarios activos)
+    # Obtener todos los invitados activos (con datos del usuario)
     # ---------------------------
     async def get_all_guests(self, page: int = 1, limit: int = 20):
+        """Obtiene los invitados cuyo usuario tenga activo=True e incluye los datos básicos del usuario"""
         try:
             guests, total = await self.guest_repo.get_all_paginated(page=page, limit=limit)
             active_guests = []
 
-            # 🔍 Filtrar por usuarios activos
             for g in guests:
                 user_id = g.get("id_usuario")
                 user = await self.user_repo.get_by_id(user_id)
                 if user and user.get("activo", False) is True:
-                    active_guests.append(GuestResponse(**g))
+                    nombre_completo = f"{user.get('primer_nombre', '')} {user.get('segundo_nombre', '')} {user.get('primer_apellido', '')} {user.get('segundo_apellido', '')}".strip()
+                    filtered_user = {
+                        "id_usuario": user.get("id_usuario"),
+                        "nombre_completo": nombre_completo,
+                        "identificacion": user.get("identificacion"),
+                        "correo": user.get("correo"),
+                        "telefono": user.get("telefono"),
+                        "activo": user.get("activo")
+                    }
+                    active_guests.append({
+                        "invitado": g,
+                        "usuario": filtered_user
+                    })
 
             return active_guests, len(active_guests)
+
         except Exception as e:
-            logger.error(f"Error al listar invitados activos: {e}")
-            raise ValueError(f"Error al obtener invitados: {str(e)}")
+            logger.error(f"Error al obtener invitados activos: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "status": "error",
+                    "message": f"Error interno al listar invitados activos: {str(e)}",
+                    "code": "INTERNAL_ERROR",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
 
     # ---------------------------
-    # Obtener invitado por ID
+    # Obtener invitado por ID (con datos del usuario)
     # ---------------------------
-    async def get_guest(self, guest_id: str) -> GuestResponse:
-        guest = await self.guest_repo.get_by_id(guest_id)
-        if not guest:
-            guest = await self.guest_repo.get_by_field("id_usuario", guest_id)
+    async def get_guest(self, guest_id: str) -> dict:
+        """Obtiene un invitado junto con todos los datos del usuario asociado"""
+        try:
+            guest = await self.guest_repo.get_by_id(guest_id)
+            if not guest:
+                guest = await self.guest_repo.get_by_field("id_usuario", guest_id)
+            if not guest:
+                raise GuestNotFoundException(guest_id)
 
-        if not guest:
-            raise GuestNotFoundException(guest_id)
+            user_id = guest.get("id_usuario")
+            user = await self.user_repo.get_by_id(user_id)
+            if not user:
+                raise UserNotFoundException(user_id)
 
-        return GuestResponse(**guest)
+            return {
+                "invitado": guest,
+                "usuario": user
+            }
+
+        except GuestNotFoundException as e:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "status": "error",
+                    "message": f"No se encontró el invitado: {str(e)}",
+                    "code": "NOT_FOUND",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
+        except UserNotFoundException as e:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "status": "error",
+                    "message": f"No se encontró el usuario del invitado: {str(e)}",
+                    "code": "NOT_FOUND",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error al obtener invitado {guest_id}: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "status": "error",
+                    "message": f"Error interno al obtener invitado: {str(e)}",
+                    "code": "INTERNAL_ERROR",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
 
     # ---------------------------
-    # Actualizar invitado
+    # ✅ Actualizar invitado + usuario
     # ---------------------------
-    async def update_guest(self, guest_id: str, guest_data: GuestUpdate) -> GuestResponse:
-        guest = await self.guest_repo.get_by_id(guest_id)
-        if not guest:
-            guest = await self.guest_repo.get_by_field("id_usuario", guest_id)
+    async def update_guest(self, guest_id: str, guest_data: GuestUpdate) -> dict:
+        """Actualiza todos los campos del invitado y del usuario excepto correo e identificación"""
+        try:
+            guest = await self.guest_repo.get_by_id(guest_id)
+            if not guest:
+                guest = await self.guest_repo.get_by_field("id_usuario", guest_id)
+            if not guest:
+                raise GuestNotFoundException(guest_id)
 
-        if not guest:
-            raise GuestNotFoundException(guest_id)
+            user_id = guest.get("id_usuario")
+            user = await self.user_repo.get_by_id(user_id)
+            if not user:
+                raise UserNotFoundException(user_id)
 
-        real_id = guest.get("id_invitado") or guest.get("id")
+            input_data = guest_data.model_dump(exclude_unset=True)
 
-        updated_data = guest_data.model_dump(exclude_unset=True)
-        updated_data["updated_at"] = datetime.utcnow()
+            # --- Actualizar invitado ---
+            guest_fields_allowed = ["institucion_origen", "nombre_empresa", "id_sector"]
+            guest_update_data = {k: v for k, v in input_data.items() if k in guest_fields_allowed}
+            if guest_update_data:
+                guest_update_data["updated_at"] = datetime.utcnow()
+                await self.guest_repo.update(guest_id, guest_update_data)
 
-        success = await self.guest_repo.update(real_id, updated_data)  # ← Devuelve True/False
+            # --- Actualizar usuario (excepto correo e identificación) ---
+            user_fields_allowed = [
+                "primer_nombre", "segundo_nombre", "primer_apellido", "segundo_apellido",
+                "sexo", "identidad_sexual", "fecha_nacimiento", "nacionalidad",
+                "pais_residencia", "departamento", "municipio", "ciudad_residencia",
+                "direccion_residencia", "telefono", "activo"
+            ]
+            user_update_data = {k: v for k, v in input_data.items() if k in user_fields_allowed}
+            if user_update_data:
+                user_update_data["updated_at"] = datetime.utcnow()
+                await self.user_repo.update(user_id, user_update_data)
 
-        if not success:
-            raise ValueError("No se pudo actualizar")
+            updated_guest = await self.guest_repo.get_by_id(guest_id)
+            updated_user = await self.user_repo.get_by_id(user_id)
 
-        # Obtener el documento ACTUALIZADO
-        updated_guest = await self.guest_repo.get_by_id(real_id)  # ← Esto devuelve el dict
+            nombre_completo = f"{updated_user.get('primer_nombre', '')} {updated_user.get('segundo_nombre', '')} {updated_user.get('primer_apellido', '')} {updated_user.get('segundo_apellido', '')}".strip()
 
-        return GuestResponse(**updated_guest)
+            filtered_user = {
+                "id_usuario": updated_user.get("id_usuario"),
+                "nombre_completo": nombre_completo,
+                "primer_nombre": updated_user.get("primer_nombre"),
+                "segundo_nombre": updated_user.get("segundo_nombre"),
+                "primer_apellido": updated_user.get("primer_apellido"),
+                "segundo_apellido": updated_user.get("segundo_apellido"),
+                "identificacion": updated_user.get("identificacion"),  # solo lectura
+                "correo": updated_user.get("correo"),                  # solo lectura
+                "telefono": updated_user.get("telefono"),
+                "activo": updated_user.get("activo")
+            }
+
+            logger.info(f"Invitado {guest_id} y usuario {user_id} actualizados correctamente.")
+            return {
+                "invitado": updated_guest,
+                "usuario": filtered_user
+            }
+
+        except GuestNotFoundException as e:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "status": "error",
+                    "message": f"No se encontró el invitado: {str(e)}",
+                    "code": "NOT_FOUND",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
+        except UserNotFoundException as e:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "status": "error",
+                    "message": f"No se encontró el usuario del invitado: {str(e)}",
+                    "code": "NOT_FOUND",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error al actualizar invitado {guest_id}: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "status": "error",
+                    "message": f"Error interno al actualizar invitado: {str(e)}",
+                    "code": "INTERNAL_ERROR",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
 
     # ---------------------------
     # Desactivar invitado (actualiza usuario)
@@ -197,7 +325,6 @@ class GuestService:
         guest = await self.guest_repo.get_by_id(guest_id)
         if not guest:
             guest = await self.guest_repo.get_by_field("id_usuario", guest_id)
-
         if not guest:
             raise GuestNotFoundException(guest_id)
 
@@ -205,7 +332,6 @@ class GuestService:
         if not user_id:
             raise GuestNotFoundException(f"No se encontró usuario asociado al invitado {guest_id}")
 
-        # 🔹 Actualizar usuario, no invitado
         await self.user_repo.update(
             user_id,
             {

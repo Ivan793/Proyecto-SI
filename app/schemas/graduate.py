@@ -105,11 +105,23 @@ class GraduateUpdate(BaseModel):
     titulado: Optional[bool] = None
 
     # --- Campos del usuario (solo los que se pueden editar) ---
-    nombre_completo: Optional[str] = None
-    identificacion: Optional[str] = None
-    correo: Optional[str] = None
-    telefono: Optional[str] = None
-    activo: Optional[bool] = None
+    primer_nombre: Optional[UserName] = None
+    segundo_nombre: Optional[UserName] = None
+    primer_apellido: Optional[UserName] = None
+    segundo_apellido: Optional[UserName] = None
+    sexo: Optional[UserSex] = None
+    identidad_sexual: Optional[UserSexualIdentity] = None
+    fecha_nacimiento: Optional[datetime] = None
+    nacionalidad: Optional[UserNationality] = None
+    pais_residencia: Optional[UserCountry] = None
+    departamento: Optional[UserDepartment] = None
+    municipio: Optional[UserMunicipality] = None
+    ciudad_residencia: Optional[UserCity] = None
+    direccion_residencia: Optional[UserAddress] = None
+    telefono: Optional[UserPhone] = None
+    contraseña: Optional[UserPassword] = None
+    activo: Optional[StatusActive] = None
+    razon_desactivacion: Optional[ReasonText] = None
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -118,11 +130,11 @@ class GraduateUpdate(BaseModel):
                 "programa_academico": "Ingeniería de Sistemas",
                 "año_graduacion": 2023,
                 "titulo_obtenido": "Ingeniero de Sistemas",
-                "titulado": True,
-                "nombres":"ander",
-                "apellidos": "quintero",
-                "identificacion": "1065122083",
-                "correo": "acbotello@unicesar.edu.co",
+                "titulado": False,
+                "primer_nombre": "juancho",
+                "segundo_nombre": "juan",
+                "primer_apellido": "quintero",
+                "segundo_apellido": "quintero",
                 "telefono": "+573128492382",
                 "activo": True
             }
