@@ -10,10 +10,11 @@ from app.repositories.user_repository import UserRepository
 from app.schemas.teacher import (
     TeacherCreateWithUser, 
     TeacherUpdate, 
-    TeacherResponse, 
+    TeacherResponse,
+    TeacherWithFullUserResponse, 
     TeacherWithUserResponse
 )
-from app.schemas.user import UserCreate
+from app.schemas.user import UserCreate, UserResponse
 from app.exceptions.teacher_exceptions import (
     TeacherNotFoundException,
     TeacherAlreadyExistsException,
@@ -263,7 +264,7 @@ class TeacherService:
             logger.error(f"Error obteniendo docente {teacher_id}: {str(e)}")
             raise DatabaseException("Error al obtener docente")
 
-    async def get_teacher_with_user(self, teacher_id: str) -> TeacherWithUserResponse:
+    async def get_teacher_with_user(self, teacher_id: str) -> TeacherWithFullUserResponse:
         try:
             teacher = await self.teacher_repo.get_by_id(teacher_id)
             if not teacher:
@@ -277,10 +278,9 @@ class TeacherService:
             if not user:
                 raise UserNotFoundException(user_id)
 
-            # Usar el método centralizado
-            user_info = UserBasicInfo.from_user_data(user)
+            user_info = UserResponse(**user)
 
-            return TeacherWithUserResponse(
+            return TeacherWithFullUserResponse(
                 docente=TeacherResponse(**teacher),
                 usuario=user_info
             )
