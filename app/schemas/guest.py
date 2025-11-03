@@ -44,8 +44,10 @@ class GuestCreate(UserCreate, GuestBase):  # ✅ hereda de UserCreate
             "example": {
                 "tipo_documento": DocumentType.CC,
                 "identificacion": "1234567890",
-                "nombres": "Laura",
-                "apellidos": "Castillo Ríos",
+                "primer_nombre": "Laura",
+                "segundo_nombre": "",
+                "primer_apellido": "Castillo",
+                "segundo_apellido": "Ríos",
                 "sexo": Sex.MUJER,
                 "identidad_sexual": "Heterosexual",
                 "fecha_nacimiento": "1998-05-17",
