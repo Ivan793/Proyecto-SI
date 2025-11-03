@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from app.repositories.group_repository import GroupRepository
 from app.repositories.subject_repository import SubjectRepository
 from app.repositories.teacher_repository import TeacherRepository
+from app.repositories.user_repository import UserRepository
 from app.schemas.group import GroupCreate, GroupUpdate, GroupResponse, GroupWithDetailsResponse
 from app.exceptions.group_exceptions import (
     GroupNotFoundException,
@@ -13,7 +14,8 @@ from app.exceptions.group_exceptions import (
 )
 from app.exceptions.subject_exceptions import SubjectNotFoundException
 from app.exceptions.teacher_exceptions import TeacherNotFoundException
-from app.exceptions.base_exceptions import ValidationException
+from app.exceptions.base_exceptions import DatabaseException, ValidationException
+from app.schemas.user import UserBasicInfo
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,7 @@ class GroupService:
         self.group_repo = GroupRepository()
         self.subject_repo = SubjectRepository()
         self.teacher_repo = TeacherRepository()
+        self.user_repo = UserRepository()
 
     async def create_group(
         self, 
@@ -71,20 +74,62 @@ class GroupService:
         if not group:
             raise GroupNotFoundException(group_code)
         return GroupResponse(**group)
-
-    async def get_group_with_details(self, group_code: str) -> GroupWithDetailsResponse:
-        """Obtener grupo con información completa de materia y docente"""
+    
+    async def _get_teacher_basic_info(self, teacher_id: str) -> Optional[UserBasicInfo]:
+        """Obtiene información básica del docente - CENTRALIZADO EN SERVICIO"""
         try:
-            group_with_details = await self.group_repo.get_group_with_details(group_code)
+            # Obtener docente
+            teacher = await self.teacher_repo.get_by_id(teacher_id)
+            if not teacher:
+                logger.warning(f"Docente no encontrado: {teacher_id}")
+                return None
             
-            if not group_with_details:
-                raise GroupNotFoundException(group_code)
+            # Obtener usuario asociado
+            user_id = teacher.get("id_usuario")
+            if not user_id:
+                logger.warning(f"Docente {teacher_id} no tiene usuario asociado")
+                return None
             
-            return GroupWithDetailsResponse(**group_with_details)
+            # Obtener información del usuario
+            user = await self.user_repo.get_by_id(user_id)
+            if not user:
+                logger.warning(f"Usuario no encontrado para docente {teacher_id}: {user_id}")
+                return None
+            
+            # Crear UserBasicInfo estandarizado
+            return UserBasicInfo.from_user_data(user)
             
         except Exception as e:
-            logger.error(f"Error en get_group_with_details para grupo {group_code}: {str(e)}")
+            logger.error(f"Error obteniendo información del docente {teacher_id}: {str(e)}")
+            return None
+
+    async def get_group_with_details(self, group_code: str) -> GroupWithDetailsResponse:
+        """Obtener grupo con información completa - LÓGICA DE NEGOCIO AQUÍ"""
+        try:
+            # Obtener datos básicos del grupo
+            group_data = await self.group_repo.get_group_with_details(group_code)
+            if not group_data:
+                raise GroupNotFoundException(group_code)
+            
+            # Enriquecer con información del docente
+            teacher_id = group_data.get("id_docente")
+            if teacher_id:
+                docente_info = await self._get_teacher_basic_info(teacher_id)
+                group_data["docente_info"] = docente_info
+                # También mantener compatibilidad con nombre_docente
+                if docente_info:
+                    group_data["nombre_docente"] = docente_info.nombre_completo
+            
+            # Calcular total de estudiantes (si aplica)
+            # group_data["total_estudiantes"] = await self._calculate_student_count(group_code)
+            
+            return GroupWithDetailsResponse(**group_data)
+            
+        except GroupNotFoundException:
             raise
+        except Exception as e:
+            logger.error(f"Error en get_group_with_details para grupo {group_code}: {str(e)}")
+            raise DatabaseException("Error al obtener detalles del grupo")
 
     async def get_all_groups(
         self, 

@@ -13,7 +13,8 @@ from app.schemas.student import (
 from app.schemas.common import PaginationParams
 from app.dependencies.auth_dependencies import (
     get_current_admin_user, 
-    require_admin_or_teacher
+    require_admin_or_teacher, 
+    require_admin_teacher_or_student
 )
 from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
@@ -43,7 +44,7 @@ async def get_students(
     request: Request,
     activos: bool = Query(True, description="Filtrar solo estudiantes activos"),
     params: PaginationParams = Depends(),
-    current_user: Dict[str, Any] = Depends(require_admin_or_teacher)
+    current_user: Dict[str, Any] = Depends(require_admin_teacher_or_student)
 ):
     try:
         service = StudentService()
