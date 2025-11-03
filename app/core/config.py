@@ -32,6 +32,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://localhost:3001",
         "http://localhost:8000",
+        "https://z6gasdnp5zp6v6egg4kg3jsitu0ffcqu.lambda-url.us-east-1.on.aws",
     ]
     
     # ==================== RATE LIMITING ====================

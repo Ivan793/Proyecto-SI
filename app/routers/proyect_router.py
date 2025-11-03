@@ -5,11 +5,11 @@ from app.exceptions.base_exceptions import AppException
 from app.services.proyect_service import _validar_existencia_ids
 import json
 
-router = APIRouter(prefix="/api/v1/proyectos", tags=["Proyectos"])
+router = APIRouter(prefix="/proyectos", tags=["Proyectos"])
 repository = ProyectoRepository()
 
 
-@router.post("/", response_model=ProyectoResponse)
+@router.post("", response_model=ProyectoResponse)
 async def create_proyecto(
         proyecto_data: str = Form(...),
         archivo: UploadFile = File(...),
@@ -37,7 +37,7 @@ async def create_proyecto(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/", response_model=list[ProyectoResponse])
+@router.get("", response_model=list[ProyectoResponse])
 async def list_proyectos():
     proyectos = await repository.get_all()
     return [ProyectoResponse(**p) for p in proyectos]
