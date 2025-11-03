@@ -12,7 +12,7 @@ from app.schemas.event import (
     EventStateChange
 )
 from app.schemas.common import PaginationParams
-from app.dependencies.auth_dependencies import get_current_admin_user
+from app.dependencies.auth_dependencies import get_current_admin_user, optional_authentication
 from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
     success_response, created_response, paginated_response, 
@@ -76,7 +76,7 @@ async def get_events(
     fecha_hasta: Optional[date] = Query(None, description="Filtrar hasta fecha"),
     ano: Optional[int] = Query(None, description="Filtrar por año específico"),
     params: PaginationParams = Depends(),
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+    _: Dict[str, Any] = Depends(optional_authentication)
 ):
     try:
         service = EventService()
@@ -113,7 +113,7 @@ async def get_events(
 async def get_event_by_id(
     request: Request,
     id: str,
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+    _: Dict[str, Any] = Depends(optional_authentication)
 ):
     try:
         service = EventService()
@@ -252,7 +252,7 @@ async def check_event_capacity(
 async def get_upcoming_events(
     request: Request,
     limit: int = Query(5, ge=1, le=20, description="Límite de eventos a obtener"),
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+    _: Dict[str, Any] = Depends(optional_authentication)
 ):
     try:
         service = EventService()
