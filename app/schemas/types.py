@@ -467,8 +467,8 @@ ResearchLineCode = Annotated[
 ResearchLineName = Annotated[
     str,
     Field(
-        min_length=Limits.NAME_MIN,
-        max_length=Limits.NAME_MAX,
+        min_length=Limits.RESEARCH_LINE_NAME_MIN,
+        max_length=Limits.RESEARCH_LINE_NAME_MAX,
         description="Nombre de la línea de investigación"
     )
 ]
@@ -486,8 +486,8 @@ SubResearchLineCode = Annotated[
 SubResearchLineName = Annotated[
     str,
     Field(
-        min_length=Limits.NAME_MIN,
-        max_length=Limits.NAME_MAX,
+        min_length=Limits.RESEARCH_LINE_NAME_MIN,
+        max_length=Limits.RESEARCH_LINE_NAME_MAX,
         description="Nombre de la sublínea de investigación"
     )
 ]
@@ -505,8 +505,8 @@ ThematicAreaCode = Annotated[
 ThematicAreaName = Annotated[
     str,
     Field(
-        min_length=Limits.NAME_MIN,
-        max_length=Limits.NAME_MAX,
+        min_length=Limits.RESEARCH_LINE_NAME_MIN,
+        max_length=Limits.RESEARCH_LINE_NAME_MAX,
         description="Nombre del área temática"
     )
 ]

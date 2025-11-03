@@ -4,8 +4,9 @@ from datetime import datetime
 
 from app.core.validators import TeacherValidatorMixin
 from app.schemas.types import *
-from app.schemas.user import UserBasicInfo, UserCreate
+from app.schemas.user import UserBasicInfo, UserCreate, UserResponse
 from app.core.constants import Defaults
+
 
 class TeacherBase(BaseModel, TeacherValidatorMixin):
     categoria_docente: TeacherCategoryType
@@ -25,15 +26,17 @@ class TeacherBase(BaseModel, TeacherValidatorMixin):
 # Crear profesor CON usuario en cascada
 class TeacherCreateWithUser(TeacherBase):
     usuario: UserCreate  # Datos completos del usuario a crear
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "usuario": {
                     "tipo_documento": "CC",
                     "identificacion": "1231271982",
-                    "nombres": "Camila Andrea",
-                    "apellidos": "Torres Palomino",
+                    "primer_nombre": "Camila",
+                    "segundo_nombre": "Andrea",
+                    "primer_apellido": "Torres",
+                    "segundo_apellido": "Palomino",
                     "sexo": "Mujer",
                     "identidad_sexual": "Heterosexual",
                     "fecha_nacimiento": "1980-05-15",
@@ -54,12 +57,15 @@ class TeacherCreateWithUser(TeacherBase):
         }
     )
 
+
 # Alias para mantener compatibilidad (usar la opción que prefieras como default)
 TeacherCreate = TeacherCreateWithUser
+
 
 class TeacherUpdate(BaseModel):
     categoria_docente: Optional[TeacherCategoryType] = None
     codigo_programa: Optional[ProgramCode] = None
+
 
 class TeacherResponse(BaseModel):
     id_docente: TeacherId
@@ -68,8 +74,9 @@ class TeacherResponse(BaseModel):
     codigo_programa: ProgramCode
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
+
 
 class TeacherWithUserResponse(BaseModel):
     docente: TeacherResponse
@@ -96,3 +103,10 @@ class TeacherWithUserResponse(BaseModel):
             }
         }
     )
+
+
+class TeacherWithFullUserResponse(BaseModel):
+    docente: TeacherResponse
+    usuario: UserResponse
+
+    model_config = ConfigDict(from_attributes=True)

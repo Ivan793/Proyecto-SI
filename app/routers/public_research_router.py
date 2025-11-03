@@ -221,12 +221,12 @@ async def get_thematic_area(
 async def get_complete_research_tree(
     request: Request,
     role_ctx = Depends(get_role_context),
-    current_user: Dict[str, Any] = Depends(require_admin_or_teacher)
+    current_user: Dict[str, Any] = Depends(get_authenticated_user)
 ):
     try:
         service = ResearchService()
         # Siempre información completa para admin/teachers
-        complete_tree = await service.get_all_lines_with_hierarchy(is_admin=True)
+        complete_tree = await service.get_all_lines_with_hierarchy()
         
         return success_response(
             data=[line.model_dump() for line in complete_tree],

@@ -72,7 +72,7 @@ class BaseValidators:
         return date
     
     @staticmethod
-    def transform_text_fields(value: str) -> str:
+    def transform_text_fields(value: Optional[str]) -> Optional[str]:
         """Transformación de formato (no validación) - Pydantic no hace esto."""
         return value.strip().title()
     
@@ -87,6 +87,14 @@ class UserValidatorMixin:
     Mixin que usa validadores SOLO para lógica compleja.
     Pydantic ya maneja las validaciones básicas de los tipos Annotated.
     """
+
+    @field_validator('segundo_nombre', 'segundo_apellido', mode='before')
+    @classmethod
+    def empty_to_none(cls, v: Any) -> Optional[str]:
+        """Convierte cadenas vacías o espacios en None para campos opcionales."""
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
     
     @field_validator('correo')
     @classmethod
@@ -95,10 +103,11 @@ class UserValidatorMixin:
         rol = info.data.get('rol')
         return BaseValidators.validate_email_domain(v, rol)
     
-    @field_validator('nombres', 'apellidos')
+    @field_validator('primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido')
     @classmethod
-    def transform_names(cls, v: str) -> str:
-        """Transforma formato de nombres - Pydantic ya validó contenido."""
+    def transform_names(cls, v: Any) -> Optional[str]:
+        if not isinstance(v, str):
+            return v
         return BaseValidators.transform_text_fields(v)
     
     @field_validator('identificacion')

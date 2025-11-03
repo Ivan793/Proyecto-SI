@@ -5,11 +5,11 @@ from app.exceptions.base_exceptions import AppException
 from app.services.proyect_service import _validar_existencia_ids
 import json
 
-router = APIRouter(prefix="/api/v1/proyectos", tags=["Proyectos"])
+router = APIRouter(prefix="/proyectos", tags=["Proyectos"])
 repository = ProyectoRepository()
 
 
-@router.post("/", response_model=ProyectoResponse)
+@router.post("", response_model=ProyectoResponse)
 async def create_proyecto(
         proyecto_data: str = Form(...),
         archivo: UploadFile = File(...),
@@ -17,18 +17,18 @@ async def create_proyecto(
 ):
     """
     Crea un nuevo proyecto con archivo PDF obligatorio.
-    El campo `proyecto_data` debe ser un JSON string con la estructura de ProyectoCreate.
+    El campo proyecto_data debe ser un JSON string con la estructura de ProyectoCreate.
     """
 
     try:
 
         proyecto_dict = json.loads(proyecto_data)
-        print("objeto id_docente", proyecto_dict["id_docente"])
+
         Validacion = _validar_existencia_ids(proyecto_dict)
-        print("esta es la validacion", Validacion)
-    # new_id = await repository.create_with_pdf(proyecto_dict, archivo)
-    # created = await repository.get_by_id(new_id)
-    # return ProyectoResponse(**created)
+
+        new_id = await repository.create_with_pdf(proyecto_dict, archivo)
+        created = await repository.get_by_id(new_id)
+        return ProyectoResponse(**created)
     except AppException as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
     except json.JSONDecodeError:
@@ -37,7 +37,7 @@ async def create_proyecto(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/", response_model=list[ProyectoResponse])
+@router.get("", response_model=list[ProyectoResponse])
 async def list_proyectos():
     proyectos = await repository.get_all()
     return [ProyectoResponse(**p) for p in proyectos]
