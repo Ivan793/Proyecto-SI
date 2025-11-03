@@ -11,7 +11,7 @@ from app.schemas.teacher import (
     TeacherResponse
 )
 from app.schemas.common import PaginationParams
-from app.dependencies.auth_dependencies import get_current_admin_user
+from app.dependencies.auth_dependencies import get_current_admin_user, require_admin_or_teacher
 from app.dependencies.service_dependencies import get_teacher_service
 from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
@@ -111,7 +111,7 @@ async def get_teacher_by_id(
 async def get_teacher_with_user(
     request: Request,
     teacher_id: str,
-    _: Dict[str, Any] = Depends(get_current_admin_user),
+    _: Dict[str, Any] = Depends(require_admin_or_teacher),
     service: TeacherService = Depends(get_teacher_service)
 ):
     teacher_with_user = await service.get_teacher_with_user(teacher_id)

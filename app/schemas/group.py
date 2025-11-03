@@ -4,6 +4,7 @@ from datetime import datetime
 
 from app.schemas.types import GroupCode, StatusActive, SubjectCode, TeacherId
 from app.core.constants import Defaults
+from app.schemas.user import UserBasicInfo
 
 
 class GroupBase(BaseModel):
@@ -72,7 +73,7 @@ class GroupWithDetailsResponse(GroupResponse):
     """Grupo con información extendida"""
     nombre_materia: Optional[str] = None
     nombre_docente: Optional[str] = None
-    total_estudiantes: int = Field(default=0, ge=0)
+    # total_estudiantes: int = Field(default=0, ge=0)
 
     model_config = ConfigDict(from_attributes=True)
 

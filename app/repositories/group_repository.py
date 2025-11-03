@@ -2,6 +2,8 @@ from typing import Optional, List, Dict, Any
 import logging
 from google.cloud.firestore import FieldFilter
 
+from app.schemas.user import UserBasicInfo
+
 from .base_repository import BaseRepository
 from app.core.firebase import Collections
 
@@ -64,51 +66,18 @@ class GroupRepository(BaseRepository):
             if "codigo_grupo" not in group:
                 group["codigo_grupo"] = group_code
 
-            # Obtener información de la materia (si está asignada)
+            # Solo obtener información DIRECTA de la materia
             subject_code = group.get("codigo_materia")
             if subject_code:
                 from app.repositories.subject_repository import SubjectRepository
                 subject_repo = SubjectRepository()
                 subject_info = await subject_repo.get_by_id(subject_code)
-                
-                group["materia_info"] = subject_info
                 group["nombre_materia"] = subject_info.get("nombre_materia") if subject_info else None
             else:
-                group["materia_info"] = None
                 group["nombre_materia"] = None
 
-            # Obtener información del docente asignado
-            teacher_id = group.get("id_docente")
-            if teacher_id:
-                from app.repositories.teacher_repository import TeacherRepository
-                from app.repositories.user_repository import UserRepository
-                
-                teacher_repo = TeacherRepository()
-                user_repo = UserRepository()
-                
-                teacher_info = await teacher_repo.get_by_id(teacher_id)
-                
-                if teacher_info:
-                    user_id = teacher_info.get("id_usuario")
-                    if user_id:
-                        user_info = await user_repo.get_by_id(user_id)
-                        if user_info:
-                            group["docente_info"] = {
-                                "id_docente": teacher_id,
-                                "nombre_completo": f"{user_info.get('nombres', '')} {user_info.get('apellidos', '')}",
-                                "correo": user_info.get("correo"),
-                                "categoria": teacher_info.get("categoria_docente")
-                            }
-                        else:
-                            group["docente_info"] = None
-                    else:
-                        group["docente_info"] = None
-                else:
-                    group["docente_info"] = None
-            else:
-                group["docente_info"] = None
-            
-            logger.info(f"Grupo {group_code} obtenido con detalles completos")
+            # NO obtener info del docente aquí - eso es responsabilidad del servicio
+            logger.info(f"Grupo {group_code} obtenido con detalles básicos")
             return group
             
         except Exception as e:
