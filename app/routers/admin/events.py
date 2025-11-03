@@ -3,8 +3,7 @@ from typing import Optional, Dict, Any
 from datetime import date, datetime
 import logging
 
-from app.exceptions.event_exceptions import EventAlreadyExistsException, EventFullException, EventNotActiveException, \
-    EventNotFoundException, InvalidEventDatesException, InvalidEventStateTransitionException
+from app.exceptions.event_exceptions import EventAlreadyExistsException, EventFullException, EventNotActiveException, EventNotFoundException, InvalidEventDatesException, InvalidEventStateTransitionException
 from app.services.event_service import EventService
 from app.schemas.event import (
     EventCreate,
@@ -13,10 +12,10 @@ from app.schemas.event import (
     EventStateChange
 )
 from app.schemas.common import PaginationParams
-from app.dependencies.auth_dependencies import get_current_admin_user
+from app.dependencies.auth_dependencies import get_current_admin_user, optional_authentication
 from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
-    success_response, created_response, paginated_response,
+    success_response, created_response, paginated_response, 
     updated_response, not_found_response, conflict_response,
     bad_request_response, internal_server_error_response,
     message_response
@@ -38,21 +37,21 @@ router = APIRouter(tags=["Eventos - Admin"])
 )
 @admin_rate_limit()
 async def create_event(
-        request: Request,
-        event_data: EventCreate,
-        current_admin: Dict[str, Any] = Depends(get_current_admin_user)
+    request: Request,  
+    event_data: EventCreate,
+    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = EventService()
         event = await service.create_event(event_data, current_admin["user_id"])
-
+        
         logger.info(f"Evento creado: {event.id_evento} por {current_admin['nombre_completo']}")
-
+        
         return created_response(
             data=event.model_dump(),
             message="Evento creado exitosamente"
         )
-
+        
     except EventAlreadyExistsException as e:
         return conflict_response(message=str(e))
     except InvalidEventDatesException as e:
@@ -71,13 +70,13 @@ async def create_event(
 )
 @admin_rate_limit()
 async def get_events(
-        request: Request,
-        estado: Optional[EventState] = Query(None, description="Filtrar por estado"),
-        fecha_desde: Optional[date] = Query(None, description="Filtrar desde fecha"),
-        fecha_hasta: Optional[date] = Query(None, description="Filtrar hasta fecha"),
-        ano: Optional[int] = Query(None, description="Filtrar por año específico"),
-        params: PaginationParams = Depends(),
-        _: Dict[str, Any] = Depends(get_current_admin_user)
+    request: Request,
+    estado: Optional[EventState] = Query(None, description="Filtrar por estado"),
+    fecha_desde: Optional[date] = Query(None, description="Filtrar desde fecha"),
+    fecha_hasta: Optional[date] = Query(None, description="Filtrar hasta fecha"),
+    ano: Optional[int] = Query(None, description="Filtrar por año específico"),
+    params: PaginationParams = Depends(),
+    _: Dict[str, Any] = Depends(optional_authentication)
 ):
     try:
         service = EventService()
@@ -97,7 +96,7 @@ async def get_events(
             total_items=total,
             message="Eventos obtenidos exitosamente"
         )
-
+        
     except Exception as e:
         logger.error(f"Error obteniendo eventos: {str(e)}")
         return internal_server_error_response()
@@ -112,19 +111,19 @@ async def get_events(
 )
 @admin_rate_limit()
 async def get_event_by_id(
-        request: Request,
-        id: str,
-        _: Dict[str, Any] = Depends(get_current_admin_user)
+    request: Request,
+    id: str,
+    _: Dict[str, Any] = Depends(optional_authentication)
 ):
     try:
         service = EventService()
         event = await service.get_event_by_id(id)
-
+        
         return success_response(
             data=event.model_dump(),
             message="Evento obtenido correctamente"
         )
-
+        
     except EventNotFoundException as e:
         return not_found_response("Evento", id)
     except Exception as e:
@@ -141,22 +140,22 @@ async def get_event_by_id(
 )
 @admin_rate_limit()
 async def update_event(
-        request: Request,
-        id: str,
-        event_data: EventUpdate,
-        current_admin: Dict[str, Any] = Depends(get_current_admin_user)
+    request: Request,
+    id: str,
+    event_data: EventUpdate,
+    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = EventService()
         event = await service.update_event(id, event_data, current_admin["user_id"])
-
+        
         logger.info(f"Evento actualizado: {id} por {current_admin['nombre_completo']}")
-
+        
         return updated_response(
             data=event.model_dump(),
             message="Evento actualizado exitosamente"
         )
-
+        
     except EventNotFoundException as e:
         return not_found_response("Evento", id)
     except InvalidEventDatesException as e:
@@ -175,10 +174,10 @@ async def update_event(
 )
 @admin_rate_limit()
 async def change_event_state(
-        request: Request,
-        id: str,
-        state_change: EventStateChange,
-        current_admin: Dict[str, Any] = Depends(get_current_admin_user)
+    request: Request,
+    id: str,
+    state_change: EventStateChange,
+    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = EventService()
@@ -203,7 +202,7 @@ async def change_event_state(
             },
             message=f"Estado del evento cambiado a {state_change.estado.value}"
         )
-
+        
     except EventNotFoundException as e:
         return not_found_response("Evento", id)
     except InvalidEventStateTransitionException as e:
@@ -222,9 +221,9 @@ async def change_event_state(
 )
 @admin_rate_limit()
 async def check_event_capacity(
-        request: Request,
-        id: str,
-        _: Dict[str, Any] = Depends(get_current_admin_user)
+    request: Request,
+    id: str,
+    _: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = EventService()
@@ -234,13 +233,13 @@ async def check_event_capacity(
             data=capacity_info,
             message="Información de capacidad obtenida correctamente"
         )
-
+        
     except EventNotFoundException as e:
         return not_found_response("Evento", id)
     except Exception as e:
         logger.error(f"Error verificando capacidad del evento {id}: {str(e)}")
         return internal_server_error_response()
-
+    
 
 @router.get(
     "/proximos/listado",
@@ -251,23 +250,23 @@ async def check_event_capacity(
 )
 @admin_rate_limit()
 async def get_upcoming_events(
-        request: Request,
-        limit: int = Query(5, ge=1, le=20, description="Límite de eventos a obtener"),
-        _: Dict[str, Any] = Depends(get_current_admin_user)
+    request: Request,
+    limit: int = Query(5, ge=1, le=20, description="Límite de eventos a obtener"),
+    _: Dict[str, Any] = Depends(optional_authentication)
 ):
     try:
         service = EventService()
         events = await service.get_upcoming_events(limit=limit)
-
+        
         return success_response(
             data=[event.model_dump() for event in events],
             message="Próximos eventos obtenidos exitosamente"
         )
-
+        
     except Exception as e:
         logger.error(f"Error obteniendo próximos eventos: {str(e)}")
         return internal_server_error_response()
-
+    
 
 @router.get(
     "/estadisticas/generales",
@@ -278,28 +277,28 @@ async def get_upcoming_events(
 )
 @admin_rate_limit()
 async def get_events_statistics(
-        request: Request,
-        _: Dict[str, Any] = Depends(get_current_admin_user)
+    request: Request,
+    _: Dict[str, Any] = Depends(get_current_admin_user)
 ):
     try:
         service = EventService()
-
+        
         events, total = await service.get_all_events(page=1, limit=1000)
-
+        
         total_eventos = total
         eventos_activos = len([e for e in events if e.estado == EventState.ACTIVO])
         eventos_inactivos = len([e for e in events if e.estado == EventState.INACTIVO])
         eventos_finalizados = len([e for e in events if e.estado == EventState.FINALIZADO])
-
+        
         total_inscritos = sum(event.total_inscritos for event in events)
         total_proyectos = sum(event.total_proyectos for event in events)
-
+        
         hoy = datetime.now().date()
         proximos_eventos = len([
-            e for e in events
+            e for e in events 
             if e.estado == EventState.ACTIVO and e.fecha_inicio.date() >= hoy
         ])
-
+        
         statistics = {
             "total_eventos": total_eventos,
             "eventos_activos": eventos_activos,
@@ -311,16 +310,15 @@ async def get_events_statistics(
             "promedio_inscritos_por_evento": round(total_inscritos / total_eventos, 2) if total_eventos > 0 else 0,
             "promedio_proyectos_por_evento": round(total_proyectos / total_eventos, 2) if total_eventos > 0 else 0
         }
-
+        
         return success_response(
             data=statistics,
             message="Estadísticas obtenidas exitosamente"
         )
-
+        
     except Exception as e:
         logger.error(f"Error obteniendo estadísticas de eventos: {str(e)}")
         return internal_server_error_response()
-
 
 # (HACER PARA REGISTRATIONSERVICE ALGO ASI)
 """
@@ -339,7 +337,7 @@ async def increment_registrations(
     try:
         service = EventService()
         result = await service.increment_registrations(id)
-
+        
         if result:
             return success_response(
                 data={"incrementado": True},
@@ -349,7 +347,7 @@ async def increment_registrations(
             return bad_request_response(
                 message="No se pudo incrementar el contador de inscritos"
             )
-
+            
     except EventNotFoundException as e:
         return not_found_response("Evento", id)
     except EventNotActiveException as e:
@@ -378,7 +376,7 @@ async def increment_projects(
     try:
         service = EventService()
         result = await service.increment_projects(id)
-
+        
         if result:
             return success_response(
                 data={"incrementado": True},
@@ -388,7 +386,7 @@ async def increment_projects(
             return bad_request_response(
                 message="No se pudo incrementar el contador de proyectos"
             )
-
+            
     except EventNotFoundException as e:
         return not_found_response("Evento", id)
     except EventNotActiveException as e:
