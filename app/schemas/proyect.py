@@ -37,8 +37,8 @@ class ProyectoBase(BaseModel):
     )
     tipo_actividad: TipoActividadEnum = Field(...,
                                               description="Tipo de actividad académica que se toma con enum: exposoftware = 1, taller = 2, ponencia = 3, conferencia = 4, articulo_cientifico = 5")
-    estado_calificacion: str = Field(..., description="estado de la nota: pendiente, reprobado, aprobado")
-    calificacion: Optional[float] = Field(None, ge=0, le=5, description="Calificación del proyecto")
+    estado_calificacion: Optional[str] = Field(default="pendiente")
+    calificacion: Optional[float] = Field(default=None, ge=0, le=5)
 
 
 class ProyectoCreate(ProyectoBase):
@@ -47,12 +47,22 @@ class ProyectoCreate(ProyectoBase):
 
 
 class ProyectoUpdate(BaseModel):
-    """Campos opcionales al actualizar un proyecto"""
     titulo_proyecto: Optional[str] = None
     tipo_actividad: Optional[str] = None
-    calificacion: Optional[float] = None
+    calificacion: Optional[float] = Field(None, ge=0, le=5)
     id_evento: Optional[str] = None
     codigo_area: Optional[str] = None
+
+    @field_validator("calificacion")
+    @classmethod
+    def validar_estado_calificacion(cls, value, values):
+        if value is None:
+            values["estado_calificacion"] = "pendiente"
+        elif value >= 3:
+            values["estado_calificacion"] = "aprobado"
+        else:
+            values["estado_calificacion"] = "reprobado"
+        return value
 
 
 class ProyectoResponse(ProyectoBase):
