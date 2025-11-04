@@ -45,26 +45,16 @@ class CertificateService:
         self.user_repo = UserRepository()
         self.event_repo = EventRepository()
         
-        # ✅ CORRECCIÓN: Usar ruta relativa correcta
-        self.directorio_certificados = os.path.join(
-            os.getcwd(),  # Directorio actual del proyecto
-            'storage',
-            'certificados_temp'
-        )
+        # ✅ CORRECCIÓN: Usar /tmp para Lambda
+        self.directorio_certificados = "/tmp/certificados_temp"
         self._asegurar_directorio()
     
     def _asegurar_directorio(self):
         """Crea el directorio de certificados si no existe"""
-        # ✅ CORRECCIÓN: Asegurar que se cree la carpeta storage también
-        storage_dir = os.path.join(os.getcwd(), 'storage')
-        if not os.path.exists(storage_dir):
-            os.makedirs(storage_dir)
-            logger.info(f"📁 Carpeta 'storage' creada")
-        
-        # Crear carpeta certificados_temp
+        # ✅ CORRECCIÓN: Crear directorio en /tmp
         if not os.path.exists(self.directorio_certificados):
             os.makedirs(self.directorio_certificados)
-            logger.info(f"📁 Carpeta 'certificados_temp' creada")
+            logger.info(f"📁 Directorio creado: {self.directorio_certificados}")
         
         logger.info(f"📂 Directorio de certificados: {self.directorio_certificados}")
     
@@ -78,6 +68,22 @@ class CertificateService:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         unique_id = str(uuid.uuid4())[:8]
         return f"CERT_IND_{timestamp}_{unique_id}"
+    
+    def _obtener_base_url(self) -> str:
+        """Obtiene la URL base de la API según el entorno"""
+        # Intentar obtener de variable de entorno primero
+        base_url = os.getenv('API_BASE_URL')
+        
+        if base_url:
+            return base_url.rstrip('/')
+        
+        # Si estamos en Lambda, usar la URL de Lambda
+        if os.getenv('AWS_LAMBDA_FUNCTION_NAME'):
+            # ⚠️ IMPORTANTE: Cambia esto por tu URL real o configúrala como variable de entorno
+            return "https://z6gasdnp5zp6v6egg4kg3jsitu0ffcqu.lambda-url.us-east-1.on.aws"
+        
+        # Fallback para desarrollo local
+        return "http://localhost:8000"
     
     async def _obtener_datos_estudiante(
         self,
@@ -323,8 +329,8 @@ class CertificateService:
         
         logger.info(f"💾 Archivo guardado: {ruta_archivo} ({tamano_bytes} bytes)")
         
-        # Generar URL de descarga
-        base_url = os.getenv('API_BASE_URL', 'http://localhost:8000')
+        # ✅ CORRECCIÓN: Generar URL de descarga con URL dinámica
+        base_url = self._obtener_base_url()
         url_descarga = f"{base_url}/admin/reportes/certificados/descargar/{id_lote}"
         
         # ✅ CORRECCIÓN: Guardar metadata con timezone
@@ -450,8 +456,8 @@ class CertificateService:
         
         tamano_bytes = os.path.getsize(ruta_archivo)
         
-        # URL de descarga
-        base_url = os.getenv('API_BASE_URL', 'http://localhost:8000')
+        # ✅ CORRECCIÓN: URL de descarga con URL dinámica
+        base_url = self._obtener_base_url()
         url_descarga = f"{base_url}/admin/reportes/certificados/descargar/{id_certificado}"
         
         # ✅ CORRECCIÓN: Guardar metadata con timezone
@@ -546,8 +552,8 @@ class CertificateService:
         
         tamano_bytes = os.path.getsize(ruta_archivo)
         
-        # URL descarga
-        base_url = os.getenv('API_BASE_URL', 'http://localhost:8000')
+        # ✅ CORRECCIÓN: URL descarga con URL dinámica
+        base_url = self._obtener_base_url()
         url_descarga = f"{base_url}/estudiante/certificados/descargar/{id_certificado}"
         
         # ✅ CORRECCIÓN: Guardar metadata con timezone
