@@ -3,9 +3,39 @@ from app.exceptions.base_exceptions import DatabaseException, NotFoundException
 from app.services.cloudinary_service import upload_pdf_to_cloudinary
 from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
+from app.core.firebase import firebase_client, Collections
+
 
 logger = logging.getLogger(__name__)
 
+db = firebase_client.get_db()
+
+class ProyectoRepository(BaseRepository):
+    def __init__(self):
+        super().__init__(Collections.PROYECTOS)
+        self.collection = db.collection(Collections.PROYECTOS)
+
+    async def soft_delete_proyect(self, document_id: str) -> bool:
+        """
+        Desactiva un proyecto cambiando el campo 'activo' a False.
+        """
+        try:
+            doc_ref = self.collection.document(document_id)
+            doc = doc_ref.get()
+
+            if not doc.exists:
+                return False
+
+            doc_ref.update({
+                "activo": False,
+                "updated_at": datetime.now(timezone.utc)
+            })
+            return True
+
+        except Exception as e:
+            print(f"Error al desactivar proyecto {document_id}: {e}")
+            return False
 
 class ProyectoRepository(BaseRepository):
     def __init__(self):
