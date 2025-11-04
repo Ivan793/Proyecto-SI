@@ -71,7 +71,8 @@ class AssistenceService:
 
     async def registrar_asistencia(self, id_evento: str, correo: str):
         """
-        Registra la asistencia de un usuario a un evento, validando existencia del evento y del usuario.
+        Registra la asistencia de un usuario a un evento, validando existencia del evento,
+        estado del evento y tipo de usuario según el dominio del correo.
         """
         try:
             # Verificar que el evento existe
@@ -112,7 +113,15 @@ class AssistenceService:
                     }
                 logger.info(f"Usuario activo confirmado: {correo}")
             else:
-                logger.info(f"Usuario no encontrado, procediendo como invitado: {correo}")
+                # Si el usuario no existe
+                if correo.endswith("@unicesar.edu.co"):
+                    logger.warning(f"Correo institucional no registrado: {correo}")
+                    return {
+                        "error": "El correo institucional no está registrado en el sistema.",
+                        "status": 403
+                    }
+                else:
+                    logger.info(f"Correo externo permitido como invitado: {correo}")
 
             # Si el usuario no existe y el evento no permite invitados
             if not user and not event.get("permite_invitados", True):
@@ -121,6 +130,9 @@ class AssistenceService:
                     "error": "Solo usuarios registrados pueden asistir a este evento",
                     "status": 403
                 }
+
+            # Determinar tipo de usuario
+            tipo_usuario = "Interno" if correo.endswith("@unicesar.edu.co") else "Invitado"
 
             # Preparar datos de asistencia
             datos = {
@@ -132,7 +144,8 @@ class AssistenceService:
                 ),
                 "rol": user.get("rol") if user else "Invitado",
                 "verificado": user is not None,  # True si es usuario registrado
-                "metodo_registro": "QR"
+                "metodo_registro": "QR",
+                "tipo_usuario": tipo_usuario
             }
 
             # Registrar asistencia en subcolección
