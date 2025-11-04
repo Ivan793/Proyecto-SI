@@ -22,15 +22,17 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 1
     
     # ==================== FIREBASE ====================
-    FIREBASE_CREDENTIALS_PATH: str = "serviceAccountKey.json"
+    FIREBASE_CREDENTIALS_PATH: str = "firebase_credentials.json"
     FIREBASE_DATABASE_URL: Optional[str] = None
     FIREBASE_API_KEY: str = "AIzaSyCbEN3vnK6AtsLNbaKPPMT4Iz0hrP5vSuk"
     
     # ==================== CORS ====================
     ALLOWED_ORIGINS: list[str] = [
         "http://localhost:3000",
+        "http://127.0.0.1:3000",
         "http://localhost:3001",
         "http://localhost:8000",
+        "https://z6gasdnp5zp6v6egg4kg3jsitu0ffcqu.lambda-url.us-east-1.on.aws",
     ]
     
     # ==================== RATE LIMITING ====================

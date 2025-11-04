@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 import logging
 from .base_repository import BaseRepository
@@ -18,6 +19,20 @@ class UserRepository(BaseRepository):
 
     async def get_active_users(self) -> List[Dict[str, Any]]:
         return await self.get_all(filters={"activo": True})
+    
+    async def deactivate_user(self, user_id: str, reason: str) -> bool:
+        return await self.update(user_id, {
+            "activo": False,
+            "razon_desactivacion": reason,
+            "updated_at": datetime.now(timezone.utc)
+        })
+
+    async def activate_user(self, user_id: str) -> bool:
+        return await self.update(user_id, {
+            "activo": True,
+            "razon_desactivacion": None,
+            "updated_at": datetime.now(timezone.utc)
+        })
 
     async def user_exists(self, user_id: str) -> bool:
         user = await self.get_by_id(user_id)

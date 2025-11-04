@@ -13,16 +13,15 @@ from app.schemas.student import (
 from app.schemas.common import PaginationParams
 from app.dependencies.auth_dependencies import (
     get_current_admin_user, 
-    require_admin_or_teacher
+    require_admin_or_teacher, 
+    require_admin_teacher_or_student
 )
 from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
     success_response, created_response, paginated_response, 
     updated_response, not_found_response, conflict_response,
-    bad_request_response, internal_server_error_response,
-    message_response
+    bad_request_response, internal_server_error_response
 )
-from app.utils.swagger_docs import ResponseDocumentation
 from app.exceptions.student_exceptions import (
     StudentNotFoundException, 
     StudentAlreadyExistsException
@@ -31,19 +30,59 @@ from app.exceptions.user_exceptions import UserNotFoundException, UserAlreadyExi
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter( tags=["Estudiantes - Administración"])
+router = APIRouter(tags=["Estudiantes - Administración"])
 
+
+# Crear estudiante con usuario existente
+@router.post(
+    "/asignar-existente",
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear estudiante con usuario EXISTENTE",
+    description="""Asigna un usuario que **ya existe en el sistema** como estudiante.  
+    Este endpoint es de uso exclusivo para administradores."""
+)
+@admin_rate_limit()
+async def create_student_with_existing_user(
+    request: Request,
+    student_data: StudentCreateWithExistingUser,
+    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
+):
+    """
+    Solo administradores pueden asignar usuarios existentes como estudiantes.
+    """
+    try:
+        service = StudentService()
+        student = await service.create_student_with_existing_user(student_data)
+        
+        logger.info(f"✅ Estudiante creado: {student.id_estudiante} por {current_admin['nombre_completo']}")
+        
+        return created_response(
+            data=student.model_dump(),
+            message="Estudiante asignado a usuario existente correctamente"
+        )
+        
+    except StudentAlreadyExistsException as e:
+        return conflict_response(message=str(e))
+    except UserNotFoundException as e:
+        return not_found_response("Usuario", student_data.id_usuario)
+    except Exception as e:
+        logger.error(f"❌ Error creando estudiante: {str(e)}")
+        return internal_server_error_response()
+
+
+
+# Listar estudiantes
 @router.get(
     "",
     status_code=status.HTTP_200_OK,
     summary="Listar todos los estudiantes",
-    responses=ResponseDocumentation.get_paginated_response()
+    description="Obtiene una lista paginada de estudiantes. Solo visible para administradores y profesores."
 )
 async def get_students(
     request: Request,
     activos: bool = Query(True, description="Filtrar solo estudiantes activos"),
     params: PaginationParams = Depends(),
-    current_user: Dict[str, Any] = Depends(require_admin_or_teacher)
+    current_user: Dict[str, Any] = Depends(require_admin_teacher_or_student)
 ):
     try:
         service = StudentService()
@@ -57,19 +96,21 @@ async def get_students(
             data=[student.model_dump() for student in students],
             page=params.page,
             limit=params.limit,
-            total_items=total,
-            message="Estudiantes obtenidos exitosamente"
+            total_items=total
         )
         
     except Exception as e:
-        logger.error(f"Error obteniendo estudiantes: {str(e)}")
+        logger.error(f"❌ Error obteniendo estudiantes: {str(e)}")
         return internal_server_error_response()
 
+
+
+# Obtener estudiante por ID
 @router.get(
     "/{student_id}",
     status_code=status.HTTP_200_OK,
     summary="Obtener estudiante por ID",
-    responses=ResponseDocumentation.get_standard_responses()
+    description="Devuelve la información básica de un estudiante según su ID."
 )
 async def get_student_by_id(
     request: Request,
@@ -88,14 +129,16 @@ async def get_student_by_id(
     except StudentNotFoundException:
         return not_found_response("Estudiante", student_id)
     except Exception as e:
-        logger.error(f"Error obteniendo estudiante {student_id}: {str(e)}")
+        logger.error(f"❌ Error obteniendo estudiante {student_id}: {str(e)}")
         return internal_server_error_response()
 
+
+# Obtener estudiante con datos del usuario
 @router.get(
     "/{student_id}/completo",
     status_code=status.HTTP_200_OK,
     summary="Obtener estudiante con información de usuario",
-    responses=ResponseDocumentation.get_standard_responses()
+    description="Solo administradores pueden ver la información completa del estudiante y su usuario asociado."
 )
 @admin_rate_limit()
 async def get_student_with_user(
@@ -117,14 +160,17 @@ async def get_student_with_user(
     except UserNotFoundException:
         return not_found_response("Usuario", "asociado al estudiante")
     except Exception as e:
-        logger.error(f"Error: {str(e)}")
+        logger.error(f"❌ Error: {str(e)}")
         return internal_server_error_response()
 
+
+
+# Actualizar estudiante
 @router.put(
     "/{student_id}",
     status_code=status.HTTP_200_OK,
     summary="Actualizar estudiante",
-    responses=ResponseDocumentation.get_standard_responses()
+    description="Permite a los administradores modificar los datos académicos o el estado de un estudiante."
 )
 @admin_rate_limit()
 async def update_student(
@@ -137,7 +183,7 @@ async def update_student(
         service = StudentService()
         student = await service.update_student(student_id, student_data)
         
-        logger.info(f"Estudiante actualizado: {student_id} por {current_user['nombre_completo']}")
+        logger.info(f"🛠️ Estudiante actualizado: {student_id} por {current_user['nombre_completo']}")
         
         return updated_response(
             data=student.model_dump(),
@@ -147,14 +193,17 @@ async def update_student(
     except StudentNotFoundException:
         return not_found_response("Estudiante", student_id)
     except Exception as e:
-        logger.error(f"Error actualizando estudiante {student_id}: {str(e)}")
+        logger.error(f"❌ Error actualizando estudiante {student_id}: {str(e)}")
         return internal_server_error_response()
 
+
+
+# Desactivar estudiante
 @router.patch(
     "/{student_id}/desactivar",
     status_code=status.HTTP_200_OK,
     summary="Desactivar estudiante",
-    responses=ResponseDocumentation.get_standard_responses()
+    description="Desactiva un estudiante del sistema. Solo administradores pueden realizar esta acción."
 )
 @admin_rate_limit()
 async def deactivate_student(
@@ -168,21 +217,26 @@ async def deactivate_student(
         success = await service.deactivate_student(student_id, razon)
         
         if success:
-            logger.info(f"Estudiante desactivado: {student_id}")
-            return message_response("Estudiante desactivado exitosamente")
+            logger.info(f"🧩 Estudiante desactivado: {student_id}")
+            return success_response(
+                data={"desactivado": True},
+                message="Estudiante desactivado exitosamente"
+            )
         return bad_request_response(message="No se pudo desactivar")
             
     except StudentNotFoundException:
         return not_found_response("Estudiante", student_id)
     except Exception as e:
-        logger.error(f"Error: {str(e)}")
+        logger.error(f"❌ Error: {str(e)}")
         return internal_server_error_response()
 
+
+# Activar estudiante
 @router.patch(
     "/{student_id}/activar",
     status_code=status.HTTP_200_OK,
     summary="Activar estudiante",
-    responses=ResponseDocumentation.get_standard_responses()
+    description="Activa nuevamente un estudiante previamente desactivado."
 )
 @admin_rate_limit()
 async def activate_student(
@@ -195,21 +249,26 @@ async def activate_student(
         success = await service.activate_student(student_id)
         
         if success:
-            logger.info(f"Estudiante activado: {student_id}")
-            return message_response("Estudiante activado exitosamente")
+            logger.info(f"✅ Estudiante activado: {student_id}")
+            return success_response(
+                data={"activado": True},
+                message="Estudiante activado exitosamente"
+            )
         return bad_request_response(message="No se pudo activar")
             
     except StudentNotFoundException:
         return not_found_response("Estudiante", student_id)
     except Exception as e:
-        logger.error(f"Error: {str(e)}")
+        logger.error(f" Error: {str(e)}")
         return internal_server_error_response()
 
+
+# Obtener estudiantes por programa
 @router.get(
     "/programa/{program_code}",
     status_code=status.HTTP_200_OK,
     summary="Obtener estudiantes por programa",
-    responses=ResponseDocumentation.get_standard_responses()
+    description="Filtra y devuelve todos los estudiantes asociados a un programa académico específico."
 )
 async def get_students_by_program(
     request: Request,
@@ -226,5 +285,5 @@ async def get_students_by_program(
         )
         
     except Exception as e:
-        logger.error(f"Error obteniendo estudiantes por programa: {str(e)}")
+        logger.error(f"❌ Error obteniendo estudiantes por programa: {str(e)}")
         return internal_server_error_response()

@@ -2,14 +2,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 
+from app.core.validators import TeacherValidatorMixin
 from app.schemas.types import *
-from app.schemas.user import UserCreate
+from app.schemas.user import UserBasicInfo, UserCreate, UserResponse
 from app.core.constants import Defaults
 
-class TeacherBase(BaseModel):
+
+class TeacherBase(BaseModel, TeacherValidatorMixin):
     categoria_docente: TeacherCategoryType
     codigo_programa: ProgramCode
-    activo: bool = Field(default=Defaults.ACTIVE_STATUS)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -21,33 +22,22 @@ class TeacherBase(BaseModel):
         }
     )
 
-# Crear profesor con usuario existente
-class TeacherCreateWithExistingUser(TeacherBase):
-    id_usuario: UserId
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "id_usuario": "L7Tz5A23fWx19oK9jK1a",
-                "categoria_docente": TeacherCategory.INTERNO,
-                "codigo_programa": "ING01"
-            }
-        }
-    )
 
 # Crear profesor CON usuario en cascada
 class TeacherCreateWithUser(TeacherBase):
     usuario: UserCreate  # Datos completos del usuario a crear
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "usuario": {
                     "tipo_documento": "CC",
                     "identificacion": "1231271982",
-                    "nombres": "Camila Andrea",
-                    "apellidos": "Torres Palomino",
-                    "genero": "Mujer",
+                    "primer_nombre": "Camila",
+                    "segundo_nombre": "Andrea",
+                    "primer_apellido": "Torres",
+                    "segundo_apellido": "Palomino",
+                    "sexo": "Mujer",
                     "identidad_sexual": "Heterosexual",
                     "fecha_nacimiento": "1980-05-15",
                     "nacionalidad": "Colombiana",
@@ -67,25 +57,56 @@ class TeacherCreateWithUser(TeacherBase):
         }
     )
 
+
 # Alias para mantener compatibilidad (usar la opción que prefieras como default)
 TeacherCreate = TeacherCreateWithUser
+
 
 class TeacherUpdate(BaseModel):
     categoria_docente: Optional[TeacherCategoryType] = None
     codigo_programa: Optional[ProgramCode] = None
-    activo: Optional[bool] = None
+
 
 class TeacherResponse(BaseModel):
     id_docente: TeacherId
     id_usuario: UserId
     categoria_docente: TeacherCategoryType
     codigo_programa: ProgramCode
-    activo: bool = Field(default=Defaults.ACTIVE_STATUS)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
+
 
 class TeacherWithUserResponse(BaseModel):
     docente: TeacherResponse
-    usuario: dict  # Cambiado a dict para evitar importación circular
+    usuario: UserBasicInfo  # ← Usar el esquema centralizado
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "docente": {
+                    "id_docente": "doc_123abc",
+                    "id_usuario": "user_456def",
+                    "categoria_docente": "Interno",
+                    "codigo_programa": "ING02",
+                    "created_at": "2024-01-15T10:30:00",
+                    "updated_at": "2024-01-15T10:30:00"
+                },
+                "usuario": {
+                    "nombre_completo": "Camila Andrea Torres Palomino",
+                    "identificacion": "1231271982",
+                    "correo": "camila.torres@unicesar.edu.co",
+                    "telefono": "+573112345678",
+                    "activo": True
+                }
+            }
+        }
+    )
+
+
+class TeacherWithFullUserResponse(BaseModel):
+    docente: TeacherResponse
+    usuario: UserResponse
+
+    model_config = ConfigDict(from_attributes=True)

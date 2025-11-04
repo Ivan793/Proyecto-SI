@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Query, Request
 import logging
 
 from app.services.guest_service import GuestService
-from app.schemas.guest import GuestCreate, GuestResponse, GuestUpdate
+from app.schemas.guest import GuestCreate, GuestUpdate
 from app.utils.responses import (
     success_response, created_response, updated_response,
     not_found_response, bad_request_response, internal_server_error_response,
@@ -20,6 +20,9 @@ router = APIRouter(
 guest_service = GuestService()
 
 
+# -------------------------------
+# Crear invitado con usuario (CASCADA)
+# -------------------------------
 @router.post(
     "",
     response_model=None,
@@ -44,6 +47,9 @@ async def create_guest_with_user(
         return internal_server_error_response()
 
 
+# -------------------------------
+# Listar todos los invitados activos
+# -------------------------------
 @router.get(
     "",
     response_model=None,
@@ -56,7 +62,7 @@ async def get_all_guests(
     try:
         guests, _ = await guest_service.get_all_guests()
         return success_response(
-            data=[guest.model_dump() for guest in guests],
+            data=guests,  # ✅ ahora es lista de dicts {"invitado": {...}, "usuario": {...}}
             message="Invitados obtenidos exitosamente"
         )
     except Exception as e:
@@ -64,6 +70,9 @@ async def get_all_guests(
         return internal_server_error_response()
 
 
+# -------------------------------
+# Obtener invitado por ID
+# -------------------------------
 @router.get(
     "/{guest_id}",
     response_model=None,
@@ -77,13 +86,19 @@ async def get_guest(
     try:
         result = await guest_service.get_guest(guest_id)
         return success_response(
-            data=result.model_dump(),
+            data=result,  # ✅ ya es {"invitado": {...}, "usuario": {...}}
             message="Invitado obtenido exitosamente"
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
+        logger.error(f"Error al obtener invitado {guest_id}: {str(e)}")
         return not_found_response("Invitado", guest_id)
 
 
+# -------------------------------
+# Actualizar invitado
+# -------------------------------
 @router.put(
     "/{guest_id}",
     response_model=None,
@@ -92,19 +107,25 @@ async def get_guest(
 )
 async def update_guest(
     request: Request,
-    guest_id: str, 
+    guest_id: str,
     guest_data: GuestUpdate
 ):
     try:
         result = await guest_service.update_guest(guest_id, guest_data)
         return updated_response(
-            data=result.model_dump(),
+            data=result,  # ✅ devuelve dict con invitado + usuario actualizado
             message="Invitado actualizado exitosamente"
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
+        logger.error(f"Error al actualizar invitado {guest_id}: {str(e)}")
         return bad_request_response(message=str(e))
 
 
+# -------------------------------
+# Desactivar invitado
+# -------------------------------
 @router.delete(
     "/{guest_id}",
     summary="Desactivar invitado",
@@ -119,4 +140,5 @@ async def deactivate_guest(
         await guest_service.deactivate_guest(guest_id, reason)
         return message_response(f"Invitado {guest_id} desactivado correctamente")
     except Exception as e:
+        logger.error(f"Error al desactivar invitado {guest_id}: {str(e)}")
         return bad_request_response(message=str(e))

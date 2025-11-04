@@ -31,8 +31,8 @@ Thumbs.db
 # Archivos de construcción y distribución
 # =========================================
 build/
-dist/
 develop-eggs/
+dist/
 downloads/
 eggs/
 .eggs/
@@ -58,8 +58,6 @@ wheels/
 .env
 .env.local
 .env.*.local
-credentials/serviceAccountKey.json
-firebase_credentials.json
 serviceAccountKey.json
 *-firebase-adminsdk-*.json
 *.firebase.json
@@ -97,5 +95,3 @@ htmlcov/
 tmp/
 temp/
 *.tmp
-.__pycache__/
-*.pyc
