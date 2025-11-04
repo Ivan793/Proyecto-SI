@@ -95,12 +95,51 @@ class GraduateCreateExistingUser(GraduateBase):
     )
 
 
+# ✅ Aquí añadimos los campos del usuario para actualizar
 class GraduateUpdate(BaseModel):
+    # --- Campos de egresado ---
     codigo_programa: Optional[str] = None
     programa_academico: Optional[AcademicProgram] = None
     año_graduacion: Optional[GraduationYear] = None
     titulo_obtenido: Optional[DegreeTitle] = None
     titulado: Optional[bool] = None
+
+    # --- Campos del usuario (solo los que se pueden editar) ---
+    primer_nombre: Optional[UserName] = None
+    segundo_nombre: Optional[UserName] = None
+    primer_apellido: Optional[UserName] = None
+    segundo_apellido: Optional[UserName] = None
+    sexo: Optional[UserSex] = None
+    identidad_sexual: Optional[UserSexualIdentity] = None
+    fecha_nacimiento: Optional[datetime] = None
+    nacionalidad: Optional[UserNationality] = None
+    pais_residencia: Optional[UserCountry] = None
+    departamento: Optional[UserDepartment] = None
+    municipio: Optional[UserMunicipality] = None
+    ciudad_residencia: Optional[UserCity] = None
+    direccion_residencia: Optional[UserAddress] = None
+    telefono: Optional[UserPhone] = None
+    contraseña: Optional[UserPassword] = None
+    activo: Optional[StatusActive] = None
+    razon_desactivacion: Optional[ReasonText] = None
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "codigo_programa": "ING-SIS-001",
+                "programa_academico": "Ingeniería de Sistemas",
+                "año_graduacion": 2023,
+                "titulo_obtenido": "Ingeniero de Sistemas",
+                "titulado": False,
+                "primer_nombre": "juancho",
+                "segundo_nombre": "juan",
+                "primer_apellido": "quintero",
+                "segundo_apellido": "quintero",
+                "telefono": "+573128492382",
+                "activo": True
+            }
+        }
+    )
 
 
 class GraduateResponse(BaseModel):
