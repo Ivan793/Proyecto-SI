@@ -81,47 +81,73 @@ class CertificateService:
     
     async def _obtener_datos_estudiante(
         self,
-        uid_estudiante: str
+        id_estudiante: str
     ) -> DatosEstudianteCertificado:
         """
-        Obtiene los datos del estudiante para el certificado usando el UID.
+        Obtiene los datos del estudiante para el certificado usando el ID del documento estudiante.
         
         Args:
-            uid_estudiante: UID de Firebase Auth del estudiante
+            id_estudiante: ID del documento del estudiante en Firestore
         
         Returns:
             DatosEstudianteCertificado con toda la información necesaria
         """
         
-        logger.info(f"🔍 Obteniendo datos del estudiante con UID: {uid_estudiante}")
+        logger.info(f"🔍 Obteniendo datos del estudiante con ID documento: {id_estudiante}")
         
-        # 1. Obtener el documento de estudiante usando id_usuario (que contiene el UID)
-        estudiante = await self.student_repo.get_student_by_user_id(uid_estudiante)
+        # 1. Obtener el documento de estudiante directamente por su ID de documento
+        estudiante = await self.student_repo.get_by_id(id_estudiante)
         if not estudiante:
-            logger.error(f"❌ Estudiante con UID {uid_estudiante} no encontrado en colección estudiantes")
-            raise ValueError(f"Estudiante con UID {uid_estudiante} no encontrado en colección estudiantes")
+            logger.error(f"❌ Estudiante con ID {id_estudiante} no encontrado en colección estudiantes")
+            raise ValueError(f"Estudiante con ID {id_estudiante} no encontrado en colección estudiantes")
         
         logger.info(f"✅ Estudiante encontrado. Código programa: {estudiante.get('codigo_programa')}")
         
-        # 2. Obtener el usuario directamente usando el UID como ID de documento
-        usuario = await self.user_repo.get_by_id(uid_estudiante)
+        # 2. Obtener el UID del usuario desde el campo id_usuario del estudiante
+        uid_usuario = estudiante.get('id_usuario')
+        if not uid_usuario:
+            logger.error(f"❌ Estudiante {id_estudiante} no tiene id_usuario asociado")
+            raise ValueError(f"El estudiante no tiene un usuario asociado en el sistema")
+        
+        logger.info(f"🔗 UID de usuario encontrado: {uid_usuario}")
+        
+        # 3. Obtener el documento de usuario usando el UID
+        usuario = await self.user_repo.get_by_id(uid_usuario)
         if not usuario:
-            logger.error(f"❌ Usuario con UID {uid_estudiante} no encontrado en colección usuarios")
-            raise ValueError(f"Usuario con UID {uid_estudiante} no encontrado en colección usuarios")
+            logger.error(f"❌ Usuario con UID {uid_usuario} no encontrado en colección usuarios")
+            raise ValueError(f"Usuario con UID {uid_usuario} no encontrado en colección usuarios")
         
-        logger.info(f"✅ Usuario encontrado: {usuario.get('nombres')} {usuario.get('apellidos')}")
+        # 4. Construir nombre completo desde los campos individuales
+        primer_nombre = usuario.get('primer_nombre', '')
+        segundo_nombre = usuario.get('segundo_nombre', '')
+        primer_apellido = usuario.get('primer_apellido', '')
+        segundo_apellido = usuario.get('segundo_apellido', '')
         
-        # 3. Obtener nombre del programa académico (opcional)
-        nombre_programa = estudiante.get('codigo_programa')
+        # Concatenar nombres completos
+        nombres = f"{primer_nombre} {segundo_nombre}".strip()
+        apellidos = f"{primer_apellido} {segundo_apellido}".strip()
+        
+        # Validar que tengamos los datos mínimos necesarios
+        if not primer_nombre or not primer_apellido:
+            logger.error(f"❌ Usuario {uid_usuario} no tiene nombres/apellidos completos")
+            logger.error(f"📋 Datos del usuario: primer_nombre={primer_nombre}, primer_apellido={primer_apellido}")
+            raise ValueError(f"El usuario no tiene datos completos (primer nombre o primer apellido faltantes)")
+        
+        logger.info(f"✅ Usuario encontrado: {nombres} {apellidos}")
+        
+        # 5. Obtener otros datos necesarios
+        identificacion = usuario.get('identificacion', '')
+        correo = usuario.get('correo', '')
+        nombre_programa = estudiante.get('codigo_programa', '')
         
         return DatosEstudianteCertificado(
-            id_estudiante=uid_estudiante,
-            nombres=usuario['nombres'],
-            apellidos=usuario['apellidos'],
-            identificacion=usuario['identificacion'],
-            codigo_programa=estudiante['codigo_programa'],
+            id_estudiante=id_estudiante,
+            nombres=nombres,
+            apellidos=apellidos,
+            identificacion=identificacion,
+            codigo_programa=estudiante.get('codigo_programa', ''),
             nombre_programa=nombre_programa,
-            correo=usuario['correo']
+            correo=correo
         )
     
     async def _obtener_datos_proyecto(
