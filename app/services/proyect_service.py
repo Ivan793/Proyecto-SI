@@ -107,7 +107,7 @@ def _validar_existencia_ids(proyecto: any):
 
         id_estudiante = estudiante["id_estudiante"]
 
-        # 1 Validar que el estudiante exista
+        # 1️ Validar que el estudiante exista
         estudiante_ref = db.collection(Collections.ESTUDIANTES).document(id_estudiante)
         estudiante_doc = estudiante_ref.get()
 
@@ -116,12 +116,12 @@ def _validar_existencia_ids(proyecto: any):
 
         estudiante_data = estudiante_doc.to_dict()
 
-        # 2 Obtener el id_usuario del estudiante
+        # 2️ Obtener el id_usuario del estudiante
         id_usuario = estudiante_data.get("id_usuario")
         if not id_usuario:
             raise ValueError(f"El estudiante '{id_estudiante}' no tiene asociado un id_usuario.")
 
-        # 3 Buscar el usuario para obtener el nombre completo
+        # 3️ Buscar el usuario para obtener el nombre completo
         usuario_ref = db.collection(Collections.USUARIOS).document(id_usuario)
         usuario_doc = usuario_ref.get()
 
@@ -177,7 +177,7 @@ def _validar_existencia_ids(proyecto: any):
 
     #  Validar materia
     if not _existe_en_coleccion(Collections.MATERIAS, "codigo_materia", proyecto["codigo_materia"]):
-        raise ValueError(f'No existe ninguna materia con ID "{proyecto["codigo_materia"]}".')
+        raise ValueError(f"No existe ninguna materia con ID '{proyecto['codigo_materia']}'.")
 
     evento_ref = db.collection(Collections.EVENTOS).document(proyecto["id_evento"])
     evento_doc = evento_ref.get()
@@ -201,59 +201,107 @@ async def create_proyecto(proyecto: ProyectoCreate, archivo) -> ProyectoResponse
     if not archivo.filename.lower().endswith(".pdf"):
         raise ValueError("El archivo debe tener formato PDF (.pdf).")
 
-    #  Convertir cadena JSON de estudiantes si es necesario
+    #  Convertir cadena JSON de estudiantes si viene como string
     if isinstance(proyecto.id_estudiantes, str):
         try:
             proyecto.id_estudiantes = json.loads(proyecto.id_estudiantes)
         except json.JSONDecodeError:
-            raise ValueError("El campo 'id_estudiantes' debe ser un JSON válido (por ejemplo: ['EST001','EST002']).")
+            raise ValueError("El campo 'id_estudiantes' debe ser un JSON válido.")
 
     if not isinstance(proyecto.id_estudiantes, list) or not proyecto.id_estudiantes:
         raise ValueError("Debe incluirse al menos un estudiante en la lista 'id_estudiantes'.")
 
-    #  Validaciones básicas de formato
-    for eid in proyecto.id_estudiantes:
-        if not isinstance(eid, str) or len(eid.strip()) < 5:
-            raise ValueError(f"El ID del estudiante '{eid}' no es válido (mínimo 5 caracteres).")
-    if len(proyecto.id_docente.strip()) < 3:
-        raise ValueError("El ID del docente no cumple el tamaño mínimo de 3 caracteres.")
-    if not proyecto.titulo_proyecto or len(proyecto.titulo_proyecto.strip()) < 3:
-        raise ValueError("El título del proyecto debe tener al menos 3 caracteres.")
-    for field in ["id_grupo", "codigo_area", "id_evento", "id_materia"]:
-        valor = getattr(proyecto, field, None)
-        if not valor or len(valor.strip()) < 3:
-            raise ValueError(f"El campo '{field}' es obligatorio y debe tener al menos 3 caracteres.")
-    if not proyecto.tipo_actividad or len(proyecto.tipo_actividad.strip()) < 3:
-        raise ValueError("El tipo de actividad debe tener al menos 3 caracteres.")
+    #  Validar estructura de cada estudiante
+    for estudiante in proyecto.id_estudiantes:
+        if not isinstance(estudiante, dict) or "id_estudiante" not in estudiante:
+            raise ValueError("Cada estudiante debe tener la clave 'id_estudiante'.")
 
-    # Validar las demás referencias (como diccionario)
-    _validar_existencia_ids(proyecto.dict())
+    #  Validar y obtener nombre de cada estudiante
+    estudiantes_validados = []
+    for estudiante in proyecto.id_estudiantes:
+        id_estudiante = estudiante["id_estudiante"]
 
-    #  Generar ID y subir PDF
+        estudiante_ref = db.collection(Collections.ESTUDIANTES).document(id_estudiante)
+        estudiante_doc = estudiante_ref.get()
+        if not estudiante_doc.exists:
+            raise ValueError(f"No existe ningún estudiante con UID '{id_estudiante}'.")
+
+        estudiante_data = estudiante_doc.to_dict()
+        id_usuario = estudiante_data.get("id_usuario")
+        if not id_usuario:
+            raise ValueError(f"El estudiante '{id_estudiante}' no tiene asociado un id_usuario.")
+
+        usuario_ref = db.collection(Collections.USUARIOS).document(id_usuario)
+        usuario_doc = usuario_ref.get()
+        if not usuario_doc.exists:
+            raise ValueError(f"No existe el usuario con UID '{id_usuario}' asociado al estudiante '{id_estudiante}'.")
+
+        usuario_data = usuario_doc.to_dict()
+        nombre_completo = " ".join(
+            filter(None, [
+                usuario_data.get("primer_nombre"),
+                usuario_data.get("segundo_nombre"),
+                usuario_data.get("primer_apellido"),
+                usuario_data.get("segundo_apellido"),
+            ])
+        )
+
+        estudiantes_validados.append({
+            "id_estudiante": id_estudiante,
+            "nombre": nombre_completo.strip()
+        })
+
+    #  Validar docente (análogo)
+    docente_id = proyecto.id_docente.uid_docente
+    docente_ref = db.collection(Collections.DOCENTES).document(docente_id)
+    docente_doc = docente_ref.get()
+    if not docente_doc.exists:
+        raise ValueError(f"No existe ningún docente con UID '{docente_id}'.")
+
+    docente_data = docente_doc.to_dict()
+    id_usuario_docente = docente_data.get("id_usuario")
+    usuario_docente = db.collection(Collections.USUARIOS).document(id_usuario_docente).get().to_dict()
+    nombre_docente = " ".join(
+        filter(None, [
+            usuario_docente.get("primer_nombre"),
+            usuario_docente.get("segundo_nombre"),
+            usuario_docente.get("primer_apellido"),
+            usuario_docente.get("segundo_apellido"),
+        ])
+    )
+
+    docente_info = {
+        "uid_docente": docente_id,
+        "nombre": nombre_docente.strip()
+    }
+
+    #  Subir archivo PDF
     id_proyecto = _generar_id_proyecto()
     pdf_url = await upload_pdf_to_cloudinary(archivo)
 
-    #  Crear documento en Firebase
-    nuevo_doc = proyectos_ref.document()
+    #  Datos del proyecto
     data = {
         "id_proyecto": id_proyecto,
-        "id_docente": proyecto.id_docente,
-        "id_estudiantes": proyecto.id_estudiantes,
+        "id_docente": docente_info,
+        "id_estudiantes": estudiantes_validados,
         "id_grupo": proyecto.id_grupo,
         "codigo_area": proyecto.codigo_area,
         "id_evento": proyecto.id_evento,
-        "id_materia": proyecto.codigo_materia,
+        "codigo_materia": proyecto.codigo_materia,
         "codigo_linea": proyecto.codigo_linea,
         "codigo_sublinea": proyecto.codigo_sublinea,
         "titulo_proyecto": proyecto.titulo_proyecto.strip(),
-        "tipo_actividad": proyecto.tipo_actividad.strip(),
+        "tipo_actividad": proyecto.tipo_actividad,
         "archivo_pdf": pdf_url,
         "fecha_subida": datetime.utcnow().isoformat(),
-        "calificacion": proyecto.calificacion,
         "activo": True,
+
+        #  Aquí establecemos los valores por defecto
+        "calificacion": None,
+        "estado_calificacion": "pendiente",
     }
 
-    nuevo_doc.set(data)
+    proyectos_ref.document(id_proyecto).set(data)
     return ProyectoResponse(**data)
 
 
