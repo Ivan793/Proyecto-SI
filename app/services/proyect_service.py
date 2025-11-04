@@ -211,7 +211,7 @@ async def create_proyecto(proyecto: ProyectoCreate, archivo) -> ProyectoResponse
     if not archivo.filename.lower().endswith(".pdf"):
         raise ValueError("El archivo debe tener formato PDF (.pdf).")
 
-    # 🧩 Convertir cadena JSON de estudiantes si viene como string
+    #  Convertir cadena JSON de estudiantes si viene como string
     if isinstance(proyecto.id_estudiantes, str):
         try:
             proyecto.id_estudiantes = json.loads(proyecto.id_estudiantes)
@@ -221,12 +221,12 @@ async def create_proyecto(proyecto: ProyectoCreate, archivo) -> ProyectoResponse
     if not isinstance(proyecto.id_estudiantes, list) or not proyecto.id_estudiantes:
         raise ValueError("Debe incluirse al menos un estudiante en la lista 'id_estudiantes'.")
 
-    # 🧩 Validar estructura de cada estudiante
+    #  Validar estructura de cada estudiante
     for estudiante in proyecto.id_estudiantes:
         if not isinstance(estudiante, dict) or "id_estudiante" not in estudiante:
             raise ValueError("Cada estudiante debe tener la clave 'id_estudiante'.")
 
-    # 🧩 Validar y obtener nombre de cada estudiante
+    #  Validar y obtener nombre de cada estudiante
     estudiantes_validados = []
     for estudiante in proyecto.id_estudiantes:
         id_estudiante = estudiante["id_estudiante"]
@@ -261,7 +261,7 @@ async def create_proyecto(proyecto: ProyectoCreate, archivo) -> ProyectoResponse
             "nombre": nombre_completo.strip()
         })
 
-    # 🧩 Validar docente (análogo)
+    #  Validar docente (análogo)
     docente_id = proyecto.id_docente.uid_docente
     docente_ref = db.collection(Collections.DOCENTES).document(docente_id)
     docente_doc = docente_ref.get()
@@ -285,11 +285,11 @@ async def create_proyecto(proyecto: ProyectoCreate, archivo) -> ProyectoResponse
         "nombre": nombre_docente.strip()
     }
 
-    # 📎 Subir archivo PDF
+    #  Subir archivo PDF
     id_proyecto = _generar_id_proyecto()
     pdf_url = await upload_pdf_to_cloudinary(archivo)
 
-    # 🧾 Datos del proyecto
+    #  Datos del proyecto
     data = {
         "id_proyecto": id_proyecto,
         "id_docente": docente_info,
@@ -306,7 +306,7 @@ async def create_proyecto(proyecto: ProyectoCreate, archivo) -> ProyectoResponse
         "fecha_subida": datetime.utcnow().isoformat(),
         "activo": True,
 
-        # 👇 Aquí establecemos los valores por defecto
+        #  Aquí establecemos los valores por defecto
         "calificacion": None,
         "estado_calificacion": "pendiente",
     }
