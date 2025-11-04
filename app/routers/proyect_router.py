@@ -1,131 +1,146 @@
-from fastapi import APIRouter, HTTPException, Request
-from typing import List
-import logging
-
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from app.schemas.proyect import ProyectoCreate, ProyectoResponse, ProyectoUpdate
-from app.services import proyect_service
-from app.utils.responses import (
-    success_response, created_response, updated_response,
-    not_found_response, internal_server_error_response,
-    message_response
-)
-from app.utils.swagger_docs import ResponseDocumentation
-
-logger = logging.getLogger(__name__)
+from app.repositories.proyect_repository import ProyectoRepository
+from app.exceptions.base_exceptions import AppException
+from app.services.proyect_service import _validar_existencia_ids
+import json
 
 router = APIRouter(prefix="/proyectos", tags=["Proyectos"])
+repository = ProyectoRepository()
 
 
-@router.post(
-    "/", 
-    response_model=None,
-    summary="Crear proyecto",
-    description="Crea un nuevo proyecto en el sistema.",
-    responses=ResponseDocumentation.get_standard_responses()
-)
-def create_proyecto(
-    request: Request,
-    proyecto: ProyectoCreate
+# ==========================================================
+# Crear proyecto (PDF obligatorio)
+# ==========================================================
+@router.post("", response_model=ProyectoResponse)
+async def create_proyecto(
+    proyecto_data: str = Form(...),
+    archivo: UploadFile = File(...),
 ):
+    """
+    Crea un nuevo proyecto con archivo PDF obligatorio.
+    - El campo 'proyecto_data' debe ser un JSON string válido con la estructura de ProyectoCreate.
+    - 'calificacion' siempre será null.
+    - 'estado_calificacion' se guarda automáticamente como 'pendiente'.
+    """
     try:
-        result = proyect_service.create_proyecto(proyecto)
-        return created_response(
-            data=result.model_dump(),
-            message="Proyecto creado exitosamente"
-        )
+        proyecto_dict = json.loads(proyecto_data)
+
+        # Validar estructura básica de IDs y referencias
+        _validar_existencia_ids(proyecto_dict)
+
+        # Forzar valores iniciales
+        proyecto_dict["calificacion"] = None
+        proyecto_dict["estado_calificacion"] = "pendiente"
+
+        # Crear proyecto
+        new_id = await repository.create_with_pdf(proyecto_dict, archivo)
+        created = await repository.get_by_id(new_id)
+
+        return ProyectoResponse(**created)
+
+    except AppException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="El campo 'proyecto_data' debe ser JSON válido.")
     except Exception as e:
-        logger.error(f"Error creando proyecto: {str(e)}")
-        return internal_server_error_response()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get(
-    "/", 
-    response_model=None,
-    summary="Listar proyectos",
-    description="Lista todos los proyectos registrados.",
-    responses=ResponseDocumentation.get_standard_responses()
-)
-def list_proyectos(
-    request: Request
+# ==========================================================
+#  Listar proyectos
+# ==========================================================
+@router.get("", response_model=list[ProyectoResponse])
+async def list_proyectos():
+    """
+    Obtiene todos los proyectos activos.
+    """
+    proyectos = await repository.get_all()
+    return [ProyectoResponse(**p) for p in proyectos]
+
+
+# ==========================================================
+#  Actualizar información general (NO calificación)
+# ==========================================================
+@router.put("/{proyect_id}", response_model=ProyectoResponse)
+async def update_proyecto(
+    proyect_id: str,
+    proyecto_data: str = Form(...),
+    archivo: UploadFile = File(None)
 ):
+    """
+    Actualiza un proyecto. El PDF es opcional.
+    No permite modificar la calificación ni el estado_calificacion.
+    """
     try:
-        result = proyect_service.list_proyectos()
-        return success_response(
-            data=[proj.model_dump() for proj in result],
-            message="Proyectos obtenidos exitosamente"
-        )
+        proyecto_dict = json.loads(proyecto_data)
+
+        # Proteger campos que no deben modificarse aquí
+        proyecto_dict.pop("calificacion", None)
+        proyecto_dict.pop("estado_calificacion", None)
+
+        await repository.update_with_pdf(proyect_id, proyecto_dict, archivo)
+        updated = await repository.get_by_id(proyect_id)
+        return ProyectoResponse(**updated)
+
+    except AppException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="El campo 'proyecto_data' debe ser JSON válido.")
     except Exception as e:
-        logger.error(f"Error listando proyectos: {str(e)}")
-        return internal_server_error_response()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get(
-    "/{proyecto_id}", 
-    response_model=None,
-    summary="Obtener proyecto por ID",
-    description="Obtiene un proyecto específico por su ID.",
-    responses=ResponseDocumentation.get_standard_responses()
-)
-def get_proyecto(
-    request: Request,
-    proyecto_id: str
+# ==========================================================
+#  Actualizar calificación y estado_calificacion
+# ==========================================================
+@router.put("/{proyect_id}/calificacion", response_model=ProyectoResponse)
+async def actualizar_calificacion(
+    proyect_id: str,
+    calificacion: float = Form(...)
 ):
+    """
+    Actualiza la calificación de un proyecto.
+    - Si la nota >= 3 → estado_calificacion = 'aprobado'
+    - Si la nota < 3 → estado_calificacion = 'reprobado'
+    - Si la nota es null → estado_calificacion = 'pendiente'
+    """
     try:
-        proyecto = proyect_service.get_proyecto(proyecto_id)
-        if not proyecto:
-            return not_found_response("Proyecto", proyecto_id)
-        
-        return success_response(
-            data=proyecto.model_dump(),
-            message="Proyecto obtenido exitosamente"
-        )
+        if calificacion is not None:
+            if calificacion < 0 or calificacion > 5:
+                raise HTTPException(status_code=400, detail="La calificación debe estar entre 0 y 5.")
+
+            estado = "aprobado" if calificacion >= 3 else "reprobado"
+        else:
+            calificacion = None
+            estado = "pendiente"
+
+        update_data = {"calificacion": calificacion, "estado_calificacion": estado}
+        await repository.update_with_pdf(proyect_id, update_data, archivo=None)
+
+        updated = await repository.get_by_id(proyect_id)
+        return ProyectoResponse(**updated)
+
+    except AppException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
-        logger.error(f"Error obteniendo proyecto: {str(e)}")
-        return internal_server_error_response()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put(
-    "/{proyecto_id}", 
-    response_model=None,
-    summary="Actualizar proyecto",
-    description="Actualiza los datos de un proyecto existente.",
-    responses=ResponseDocumentation.get_standard_responses()
-)
-def update_proyecto(
-    request: Request,
-    proyecto_id: str, 
-    proyecto: ProyectoUpdate
-):
+# ==========================================================
+#  Eliminado lógico
+# ==========================================================
+@router.delete("/{proyect_id}")
+async def delete_proyecto(proyect_id: str):
+    """
+    Elimina lógicamente un proyecto (marca como inactivo).
+    """
     try:
-        updated = proyect_service.update_proyecto(proyecto_id, proyecto)
-        if not updated:
-            return not_found_response("Proyecto", proyecto_id)
-        
-        return updated_response(
-            data=updated.model_dump(),
-            message="Proyecto actualizado exitosamente"
-        )
-    except Exception as e:
-        logger.error(f"Error actualizando proyecto: {str(e)}")
-        return internal_server_error_response()
-
-
-@router.delete(
-    "/{proyecto_id}",
-    summary="Eliminar proyecto",
-    description="Elimina un proyecto por su ID.",
-    responses=ResponseDocumentation.get_standard_responses()
-)
-def delete_proyecto(
-    request: Request,
-    proyecto_id: str
-):
-    try:
-        success = proyect_service.delete_proyecto(proyecto_id)
+        success = await repository.soft_delete_proyect(proyect_id)
         if not success:
-            return not_found_response("Proyecto", proyecto_id)
-        
-        return message_response("Proyecto eliminado correctamente")
+            raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+        return {"message": "Proyecto desactivado correctamente"}
+    except AppException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
-        logger.error(f"Error eliminando proyecto: {str(e)}")
-        return internal_server_error_response()
+        raise HTTPException(status_code=500, detail=str(e))

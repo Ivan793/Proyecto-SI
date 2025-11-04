@@ -1,4 +1,13 @@
 from enum import Enum, IntEnum
+from enum import IntEnum
+
+class TipoActividadEnum(IntEnum):
+    exposoftware = 1
+    taller = 2
+    ponencia = 3
+    conferencia = 4
+    articulo_cientifico = 5
+
 
 class Role(str, Enum):
     DOCENTE = "Docente"
@@ -27,7 +36,7 @@ class DocumentType(str, Enum):
     PAS = "PAS"  # Pasaporte
 
 
-class Gender(str, Enum):
+class Sex(str, Enum):
     HOMBRE = "Hombre"
     MUJER = "Mujer"
     HERMAFRODITA = "Hermafrodita"
@@ -44,3 +53,9 @@ class TipoActividadEnum(IntEnum):
     ponencia = 3
     conferencia = 4
     articulo_cientifico = 5
+
+class Sector(IntEnum):
+    EDUCATIVO = 1
+    EMPRESARIAL = 2
+    SOCIAL = 3
+    GOBIERNO = 4

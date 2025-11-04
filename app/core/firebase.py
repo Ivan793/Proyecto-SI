@@ -44,20 +44,31 @@ class FirebaseClient:
                     'databaseURL': settings.FIREBASE_DATABASE_URL
                 } if settings.FIREBASE_DATABASE_URL else {})
                 
-                print("INFO:app.core.firebase:Firebase inicializado correctamente.")
+                # 3. Inicializar el cliente de Firestore
+                self._db = firestore.client()
+                
+                logger.info("Firebase inicializado correctamente.")
                 
             except Exception as e:
-                print(f"ERROR:app.core.firebase:Error al inicializar Firebase: {e}")
+                logger.error(f"Error al inicializar Firebase: {e}")
                 raise
         else:
             self._app = firebase_admin.get_app()
-            print("INFO:app.core.firebase:Firebase ya estaba inicializado.")
+            # Asegurar que _db esté inicializado
+            if self._db is None:
+                self._db = firestore.client()
+            logger.info("Firebase ya estaba inicializado.")
     
     def get_db(self) -> firestore.Client:
+        """Obtiene el cliente de Firestore, inicializándolo si es necesario"""
         if self._db is None:
             self.initialize()
         return self._db
-    
+
+    @property
+    def db(self) -> firestore.Client:
+        return self.get_db()
+
     def close(self):
         """Cierra la conexión con Firebase"""
         if self._app is not None:
@@ -100,7 +111,6 @@ class Collections:
     FACULTADES = "facultades"
     MATERIAS = "materias"
     GRUPOS = "grupos"
-    DOCENTE_MATERIAS = "docente_materias"
     ESTUDIANTE_MATERIAS = "estudiante_materias"
     
     # Investigación
@@ -115,7 +125,9 @@ class Collections:
     # Otros
     SECTORES = "sectores"
     ASISTENCIAS = "asistencias"
-    
+
+firebase_client.initialize()
+
 # ==================== AUTH (Firebase Authentication) ====================
 from firebase_admin import auth
 firebase_auth = auth

@@ -1,76 +1,67 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional
-
-class Grupo(BaseModel):
-    id_grupo: str
-    nombre: Optional[str]
-    semestre: Optional[str]
-    capacidad: Optional[int]
-"""
-Esquemas Pydantic para Grupos Académicos con validación de docente
-"""
-from pydantic import BaseModel, ConfigDict, Field, field_validator, ValidationInfo
-from typing import Any, Dict, List, Optional
 from datetime import datetime
 
+from app.schemas.types import GroupCode, StatusActive, SubjectCode, TeacherId
 from app.core.constants import Defaults
-from app.schemas.types import GroupCode, StatusActive, SubjectCode, UserId
+from app.schemas.user import UserBasicInfo
 
 
 class GroupBase(BaseModel):
     codigo_grupo: GroupCode
-    
+    id_docente: TeacherId  # Docente es obligatorio en el grupo
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "codigo_grupo": 1
+                "codigo_grupo": "101",
+                "id_docente": "L7Tz5A23fWx19oK9jK1a"
             }
         }
     )
 
+
 class GroupCreate(BaseModel):
     codigo_grupo: GroupCode
-    codigo_materia: SubjectCode
+    id_docente: TeacherId
 
     @field_validator("codigo_grupo")
     @classmethod
-    def validate_group_code(cls, v: int) -> int:
-        """Valida que el código de grupo sea positivo"""
-        if v <= 0:
-            raise ValueError("El código de grupo debe ser un número positivo")
+    def validate_group_code(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not v:
+            raise ValueError("El código de grupo no puede estar vacío")
         return v
 
-    model_config = {
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
-                "codigo_grupo": 101,
+                "codigo_grupo": "101",
                 "id_docente": "L7Tz5A23fWx19oK9jK1a"
             }
         }
-    }
+    )
 
 
 class GroupUpdate(BaseModel):
-    codigo_materia: Optional[SubjectCode] = None
+    id_docente: Optional[TeacherId] = None
     codigo_grupo: Optional[GroupCode] = None
-    activo: StatusActive = Field(default=Defaults.ACTIVE_STATUS)
+    activo: Optional[StatusActive] = None
 
     model_config = ConfigDict(
-    from_attributes=True,
-    json_schema_extra={
-        "example": {
-            "codigo_materia": "MAT101",
-            "activo": True
+        json_schema_extra={
+            "example": {
+                "codigo_materia": "MAT101",
+                "id_docente": "NEW_TEACHER_ID",
+                "activo": True
+            }
         }
-    }
-)
-
+    )
 
 
 class GroupResponse(BaseModel):
     codigo_grupo: GroupCode
-    codigo_materia: Optional[SubjectCode] = None
+    id_docente: TeacherId
     activo: StatusActive = Field(default=Defaults.ACTIVE_STATUS)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -78,14 +69,12 @@ class GroupResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class GroupWithSubjectResponse(GroupResponse):
-    codigo_materia: Optional[SubjectCode] = None
+class GroupWithDetailsResponse(GroupResponse):
+    """Grupo con información extendida"""
     nombre_materia: Optional[str] = None
-    total_estudiantes: int = Field(default=0, ge=0)
-    
-    # Información del docente desde TeacherSubject
-    docentes_asignados: List[Dict[str, Any]] = Field(default_factory=list)
-    
+    nombre_docente: Optional[str] = None
+    # total_estudiantes: int = Field(default=0, ge=0)
+
     model_config = ConfigDict(from_attributes=True)
 
 

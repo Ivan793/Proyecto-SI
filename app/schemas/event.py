@@ -14,7 +14,6 @@ from app.core.constants import Defaults, ValidationMessages
 # - lugar: Ubicación del evento (Esperar Confirmacion de la lider)
 # - fotos: URLs o referencias a fotos (mencionado en TAREA)
 # - cupo_maximo: Límite de participantes (Esperar Confirmacion de la lider)
-# - permite_invitados: Si acepta invitados externos (mencionado en swagger)
 # - estado: Estado del evento (ACTIVO, INACTIVO, FINALIZADO)
 # - created_at/updated_at: Para auditorías (requerido en TAREA)
 
@@ -26,7 +25,6 @@ class EventBase(BaseModel):
     fecha_fin: datetime
     lugar: Optional[EventLocation] = None
     cupo_maximo: Optional[EventCapacity] = None
-    permite_invitados: bool = Field(default=Defaults.EVENT_ALLOWS_GUESTS)
 
     @field_validator("nombre_evento", "descripcion", "lugar")
     @classmethod
@@ -44,7 +42,6 @@ class EventBase(BaseModel):
                 "fecha_fin": "2025-11-01",
                 "lugar": "Auditorio Principal UPC",
                 "cupo_maximo": 1,
-                "permite_invitados": True
             }
         }
     )
@@ -79,7 +76,6 @@ class EventUpdate(BaseModel):
     lugar: Optional[EventLocation] = None
     cupo_maximo: Optional[EventCapacity] = None
     estado: Optional[EventState] = None
-    permite_invitados: Optional[bool] = None
 
     
 

@@ -2,29 +2,29 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, Dict
 from datetime import datetime
 from app.schemas.types import *
-from app.schemas.user import UserBase
-from app.core.constants import Defaults, ValidationMessages, Limits
+from app.schemas.user import UserCreate  
+from app.core.constants import ValidationMessages, Limits
 from app.core.patterns import Patterns
 import re
+from app.core.enums import Sector
+
 
 class GuestBase(BaseModel):
     institucion_origen: Optional[Institution] = None
-    motivo_visita: Optional[VisitReason] = None
-    activo: StatusActive = Defaults.ACTIVE_STATUS
+    nombre_empresa: Optional[str] = None  
+    id_sector: Optional[Sector] = None       
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "institucion_origen": "Universidad Nacional",
-                "motivo_visita": "Conferencia académica",
-                "activo": True
+                "nombre_empresa": "Tech Solutions S.A.S",
+                "id_sector": "SEC12345"
             }
         }
     )
 
-class GuestCreate(UserBase, GuestBase):
-    contraseña: UserPassword
-
+class GuestCreate(UserCreate, GuestBase):  # ✅ hereda de UserCreate
     @field_validator("correo")
     def validate_guest_email(cls, v):
         if not re.match(r"^[\w\.-]+@[\w\.-]+\.\w+$", v):
@@ -42,11 +42,13 @@ class GuestCreate(UserBase, GuestBase):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "tipo_documento": "CC",
+                "tipo_documento": DocumentType.CC,
                 "identificacion": "1234567890",
-                "nombres": "Laura",
-                "apellidos": "Castillo Ríos",
-                "genero": "Mujer",
+                "primer_nombre": "Laura",
+                "segundo_nombre": "",
+                "primer_apellido": "Castillo",
+                "segundo_apellido": "Ríos",
+                "sexo": Sex.MUJER,
                 "identidad_sexual": "Heterosexual",
                 "fecha_nacimiento": "1998-05-17",
                 "nacionalidad": "Colombiana",
@@ -58,10 +60,10 @@ class GuestCreate(UserBase, GuestBase):
                 "telefono": "+573002223334",
                 "correo": "laura.castillo@gmail.com",
                 "contraseña": "Invitado123#",
-                "rol": "Invitado",
+                "rol": Role.INVITADO,
                 "institucion_origen": "Universidad del Norte",
-                "motivo_visita": "Foro de Tecnología",
-                "activo": True
+                "nombre_empresa": "Tech Solutions S.A.S",
+                "id_sector": Sector.EMPRESARIAL
             }
         }
     )
@@ -74,23 +76,66 @@ class GuestCreateExistingUser(GuestBase):
             "example": {
                 "id_usuario": "abc12345",
                 "institucion_origen": "SENA",
-                "motivo_visita": "Capacitación docente",
+                "nombre_empresa": None,
+                "id_sector": None
+            }
+        }
+    )
+
+# ✅ Aquí añadimos los campos del usuario para actualizar
+class GuestUpdate(BaseModel):
+    institucion_origen: Optional[Institution] = None
+    nombre_empresa: Optional[str] = None
+    id_sector: Optional[Sector] = None
+    primer_nombre: Optional[UserName] = None
+    segundo_nombre: Optional[UserName] = None
+    primer_apellido: Optional[UserName] = None
+    segundo_apellido: Optional[UserName] = None
+    sexo: Optional[UserSex] = None
+    identidad_sexual: Optional[UserSexualIdentity] = None
+    fecha_nacimiento: Optional[datetime] = None
+    nacionalidad: Optional[UserNationality] = None
+    pais_residencia: Optional[UserCountry] = None
+    departamento: Optional[UserDepartment] = None
+    municipio: Optional[UserMunicipality] = None
+    ciudad_residencia: Optional[UserCity] = None
+    direccion_residencia: Optional[UserAddress] = None
+    telefono: Optional[UserPhone] = None
+    contraseña: Optional[UserPassword] = None
+    activo: Optional[StatusActive] = None
+    razon_desactivacion: Optional[ReasonText] = None
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "institucion_origen": "Universidad del Norte",
+                "nombre_empresa": "Tech Solutions S.A.S",
+                "id_sector": Sector.SOCIAL,
+                "primer_nombre": "Laura",
+                "segundo_nombre": "María",
+                "primer_apellido": "Castillo",
+                "segundo_apellido": "Ríos",
+                "sexo": "Mujer",
+                "identidad_sexual": "Heterosexual",
+                "fecha_nacimiento": "1998-05-17",
+                "nacionalidad": "Colombiana",
+                "pais_residencia": "Colombia",
+                "departamento": "Atlántico",
+                "municipio": "Barranquilla",
+                "ciudad_residencia": "Barranquilla",
+                "direccion_residencia": "Carrera 45 #32-15",
+                "telefono": "+573002223334",
                 "activo": True
             }
         }
     )
 
-class GuestUpdate(BaseModel):
-    institucion_origen: Optional[Institution] = None
-    motivo_visita: Optional[VisitReason] = None
-    activo: Optional[StatusActive] = None
-
 class GuestResponse(BaseModel):
     id_invitado: GuestId
     id_usuario: UserId
     institucion_origen: Optional[Institution] = None
-    motivo_visita: Optional[VisitReason] = None
-    activo: StatusActive = Defaults.ACTIVE_STATUS
+    nombre_empresa: Optional[str] = None
+    id_sector: Optional[Sector] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

@@ -3,7 +3,7 @@ from pydantic import Field, EmailStr
 from datetime import date, datetime
 
 from app.core.constants import Limits, Defaults
-from app.core.enums import Role, DocumentType, Gender, TeacherCategory, EventState, SubjectCycle
+from app.core.enums import Role, DocumentType, Sex, TeacherCategory, EventState, SubjectCycle
 from app.core.patterns import Patterns
 
 # ==================== TIPOS BASE ====================
@@ -42,9 +42,9 @@ UserName = Annotated[
     )
 ]
 
-UserGender = Annotated[
-    Gender, 
-    Field(description="Género del usuario")
+UserSex = Annotated[
+    Sex, 
+    Field(description="Sexo del usuario")
 ]
 
 UserSexualIdentity = Annotated[
@@ -388,10 +388,12 @@ SubjectCode = Annotated[
 # ==================== TIPOS DE GRUPO ====================
 
 GroupCode = Annotated[
-    int,
+    str,
     Field(
-        gt=0,
-        description="Código único del grupo"
+        min_length=1,
+        max_length=10,
+        pattern=r"^[0-9]+$",
+        description="Código único del grupo (números)"
     )
 ]
 
@@ -458,8 +460,6 @@ AttendanceDateTime = Annotated[
 ResearchLineCode = Annotated[
     int,
     Field(
-        ge=1,
-        le=2,
         description="Código de la línea de investigación (1 o 2)"
     )
 ]
@@ -467,8 +467,8 @@ ResearchLineCode = Annotated[
 ResearchLineName = Annotated[
     str,
     Field(
-        min_length=Limits.NAME_MIN,
-        max_length=Limits.NAME_MAX,
+        min_length=Limits.RESEARCH_LINE_NAME_MIN,
+        max_length=Limits.RESEARCH_LINE_NAME_MAX,
         description="Nombre de la línea de investigación"
     )
 ]
@@ -486,8 +486,8 @@ SubResearchLineCode = Annotated[
 SubResearchLineName = Annotated[
     str,
     Field(
-        min_length=Limits.NAME_MIN,
-        max_length=Limits.NAME_MAX,
+        min_length=Limits.RESEARCH_LINE_NAME_MIN,
+        max_length=Limits.RESEARCH_LINE_NAME_MAX,
         description="Nombre de la sublínea de investigación"
     )
 ]
@@ -505,8 +505,8 @@ ThematicAreaCode = Annotated[
 ThematicAreaName = Annotated[
     str,
     Field(
-        min_length=Limits.NAME_MIN,
-        max_length=Limits.NAME_MAX,
+        min_length=Limits.RESEARCH_LINE_NAME_MIN,
+        max_length=Limits.RESEARCH_LINE_NAME_MAX,
         description="Nombre del área temática"
     )
 ]
@@ -535,3 +535,26 @@ StatusActive = Annotated[
     bool,
     Field(description="Estado activo/inactivo del registro")
 ]
+
+# ==================== TIPOS DE FACULTAD ====================
+
+FacultyId = Annotated[
+    str,
+    Field(
+        min_length=Limits.FACULTY_ID_MIN,
+        max_length=Limits.FACULTY_ID_MAX,
+        pattern=Patterns.FACULTY_ID,
+        description="Código único de la facultad (Ej: FAC_ING, FAC_EDU)"
+    )
+]
+
+FacultyName = Annotated[
+    str,
+    Field(
+        min_length=Limits.NAME_MIN,
+        max_length=100,
+        pattern=Patterns.NAME,
+        description="Nombre completo de la facultad"
+    )
+]
+
