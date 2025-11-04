@@ -536,3 +536,109 @@ class TeacherService:
         except Exception as e:
             logger.error(f"Error obteniendo docente por usuario {user_id}: {str(e)}")
             return None
+        
+
+
+
+
+    
+    #MÉTODOS PÚBLICOS (acceso sin autenticación de administrador)
+
+
+    async def get_teacher_public_info(self, teacher_id: str) -> dict:
+        """
+        Obtiene información pública del docente (solo datos básicos).
+        """
+        try:
+            teacher = await self.teacher_repo.get_by_id(teacher_id)
+            if not teacher:
+                raise TeacherNotFoundException(teacher_id)
+            
+            user = await self.user_repo.get_by_id(teacher["id_usuario"])
+            if not user:
+                raise UserNotFoundException(teacher["id_usuario"])
+
+            # Solo datos públicos
+            public_info = {
+                "id_docente": teacher_id,
+                "nombre_completo": f"{user.get('primer_nombre', '')} {user.get('segundo_nombre', '')} "
+                                   f"{user.get('primer_apellido', '')} {user.get('segundo_apellido', '')}".strip(),
+                "correo_institucional": user.get("correo"),
+                "categoria_docente": teacher.get("categoria_docente"),
+                "codigo_programa": teacher.get("codigo_programa"),
+            }
+            return public_info
+
+        except (TeacherNotFoundException, UserNotFoundException):
+            raise
+        except Exception as e:
+            logger.error(f"Error obteniendo información pública del docente {teacher_id}: {str(e)}")
+            raise DatabaseException("Error al obtener información pública del docente")
+
+    async def list_teacher_subjects(self, teacher_id: str) -> list:
+        """
+        Lista las materias que dicta un docente.
+        """
+        try:
+            from app.repositories.teacher_repository import TeacherSubjectRepository
+            ts_repo = TeacherSubjectRepository()
+            subjects = await ts_repo.get_subjects_by_teacher(teacher_id)
+            return subjects
+        except Exception as e:
+            logger.error(f"Error listando materias del docente {teacher_id}: {str(e)}")
+            raise DatabaseException("Error al listar materias del docente")
+
+    async def list_subject_groups(self, subject_code: str) -> list:
+        """
+        Lista los grupos asociados a una materia específica.
+        """
+        try:
+            from app.repositories.group_repository import GroupRepository
+            group_repo = GroupRepository()
+            groups = await group_repo.get_groups_by_subject(subject_code)
+            return groups
+        except Exception as e:
+            logger.error(f"Error listando grupos de la materia {subject_code}: {str(e)}")
+            raise DatabaseException("Error al listar grupos de la materia")
+
+    async def list_teacher_projects(self, teacher_id: str) -> list:
+        """
+        Lista los proyectos en los que participa un docente.
+        """
+        try:
+            from app.repositories.teacher_repository import TeacherRepository
+            projects = await self.teacher_repo.get_projects_by_teacher(teacher_id)
+            return projects
+        except Exception as e:
+            logger.error(f"Error listando proyectos del docente {teacher_id}: {str(e)}")
+            raise DatabaseException("Error al listar proyectos del docente")
+
+    async def get_project_info(self, project_id: str) -> dict:
+        """
+        Obtiene la información detallada de un proyecto.
+        """
+        try:
+            from app.repositories.proyect_repository import ProjectRepository
+            project_repo = ProjectRepository()
+            project = await project_repo.get_project_detail(project_id)
+            if not project:
+                raise ValidationException("Proyecto no encontrado")
+            return project
+        except ValidationException:
+            raise
+        except Exception as e:
+            logger.error(f"Error obteniendo detalle del proyecto {project_id}: {str(e)}")
+            raise DatabaseException("Error al obtener detalle del proyecto")
+
+    async def list_all_projects(self) -> list:
+        """
+        Lista todos los proyectos disponibles públicamente.
+        """
+        try:
+            from app.repositories.proyect_repository import ProjectRepository
+            project_repo = ProjectRepository()
+            projects = await project_repo.get_all_projects()
+            return projects
+        except Exception as e:
+            logger.error(f"Error listando todos los proyectos públicos: {str(e)}")
+            raise DatabaseException("Error al listar los proyectos públicos")
