@@ -2,6 +2,8 @@ from typing import Optional, List, Dict, Any
 import logging
 from google.cloud.firestore import FieldFilter
 
+from app.schemas.user import UserBasicInfo
+
 from .base_repository import BaseRepository
 from app.core.firebase import Collections
 
@@ -9,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class GroupRepository(BaseRepository):
-
+    
     def __init__(self):
         super().__init__(Collections.GRUPOS, "codigo_grupo")
 
@@ -17,7 +19,7 @@ class GroupRepository(BaseRepository):
         """Obtener todos los grupos con filtros opcionales"""
         try:
             collection_ref = self.db.collection(self.collection_name)
-
+            
             # Aplicar filtros si existen
             if filters:
                 query = collection_ref
@@ -26,7 +28,7 @@ class GroupRepository(BaseRepository):
                 docs = query.stream()
             else:
                 docs = collection_ref.stream()
-
+            
             result = []
             for doc in docs:
                 data = doc.to_dict()
@@ -35,10 +37,10 @@ class GroupRepository(BaseRepository):
                 if "codigo_grupo" not in data:
                     data["codigo_grupo"] = doc.id
                 result.append(data)
-
+            
             logger.info(f"Grupos recuperados: {len(result)}")
             return result
-
+            
         except Exception as e:
             logger.error(f"Error en get_all: {str(e)}")
             return []
@@ -64,53 +66,20 @@ class GroupRepository(BaseRepository):
             if "codigo_grupo" not in group:
                 group["codigo_grupo"] = group_code
 
-            # Obtener información de la materia (si está asignada)
+            # Solo obtener información DIRECTA de la materia
             subject_code = group.get("codigo_materia")
             if subject_code:
                 from app.repositories.subject_repository import SubjectRepository
                 subject_repo = SubjectRepository()
                 subject_info = await subject_repo.get_by_id(subject_code)
-
-                group["materia_info"] = subject_info
                 group["nombre_materia"] = subject_info.get("nombre_materia") if subject_info else None
             else:
-                group["materia_info"] = None
                 group["nombre_materia"] = None
 
-            # Obtener información del docente asignado
-            teacher_id = group.get("id_docente")
-            if teacher_id:
-                from app.repositories.teacher_repository import TeacherRepository
-                from app.repositories.user_repository import UserRepository
-
-                teacher_repo = TeacherRepository()
-                user_repo = UserRepository()
-
-                teacher_info = await teacher_repo.get_by_id(teacher_id)
-
-                if teacher_info:
-                    user_id = teacher_info.get("id_usuario")
-                    if user_id:
-                        user_info = await user_repo.get_by_id(user_id)
-                        if user_info:
-                            group["docente_info"] = {
-                                "id_docente": teacher_id,
-                                "nombre_completo": f"{user_info.get('nombres', '')} {user_info.get('apellidos', '')}",
-                                "correo": user_info.get("correo"),
-                                "categoria": teacher_info.get("categoria_docente")
-                            }
-                        else:
-                            group["docente_info"] = None
-                    else:
-                        group["docente_info"] = None
-                else:
-                    group["docente_info"] = None
-            else:
-                group["docente_info"] = None
-
-            logger.info(f"Grupo {group_code} obtenido con detalles completos")
+            # NO obtener info del docente aquí - eso es responsabilidad del servicio
+            logger.info(f"Grupo {group_code} obtenido con detalles básicos")
             return group
-
+            
         except Exception as e:
             logger.error(f"Error en get_group_with_details: {str(e)}")
             return None
@@ -119,13 +88,13 @@ class GroupRepository(BaseRepository):
         """Obtener grupos que no tienen materia asignada"""
         try:
             collection_ref = self.db.collection(self.collection_name)
-
+            
             # Buscar grupos donde codigo_materia no existe o es None
             query = collection_ref.where(
                 filter=FieldFilter("codigo_materia", "==", None)
             )
             docs = query.stream()
-
+            
             result = []
             for doc in docs:
                 data = doc.to_dict()
@@ -133,10 +102,10 @@ class GroupRepository(BaseRepository):
                 if "codigo_grupo" not in data:
                     data["codigo_grupo"] = doc.id
                 result.append(data)
-
+            
             logger.info(f"Grupos sin materia encontrados: {len(result)}")
             return result
-
+            
         except Exception as e:
             logger.error(f"Error obteniendo grupos sin materia: {str(e)}")
             return []

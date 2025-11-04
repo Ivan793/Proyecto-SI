@@ -6,7 +6,7 @@ from app.core.response_codes import ResponseCode
 class GroupNotFoundException(NotFoundException):
     """Grupo no encontrado"""
     
-    def __init__(self, group_code: int):
+    def __init__(self, group_code: str):
         super().__init__(
             resource="Grupo", 
             identifier=str(group_code),
@@ -17,7 +17,7 @@ class GroupNotFoundException(NotFoundException):
 class GroupAlreadyExistsException(ConflictException):
     """Grupo ya existe"""
     
-    def __init__(self, group_code: int):
+    def __init__(self, group_code: str):
         super().__init__(
             message=f"Ya existe un grupo con código {group_code}",
             conflict_field="codigo_grupo",
@@ -28,39 +28,17 @@ class GroupAlreadyExistsException(ConflictException):
 class GroupHasStudentsException(DependencyException):
     """Grupo tiene estudiantes inscritos"""
     
-    def __init__(self, group_code: int):
+    def __init__(self, group_code: str):
         super().__init__(
             message=f"No se puede desactivar el grupo {group_code} porque tiene estudiantes inscritos",
             code=ResponseCode.DEPENDENCY_ERROR
         )
 
 
-class SubjectNotFoundException(NotFoundException):
-    """Materia no encontrada (versión específica para grupos)"""
-    
-    def __init__(self, subject_code: str):
-        super().__init__(
-            resource="Materia", 
-            identifier=subject_code,
-            code=ResponseCode.NOT_FOUND
-        )
-
-
-class TeacherNotFoundException(NotFoundException):
-    """Profesor no encontrado (versión específica para grupos)"""
-    
-    def __init__(self, teacher_id: str):
-        super().__init__(
-            resource="Profesor", 
-            identifier=teacher_id,
-            code=ResponseCode.NOT_FOUND
-        )
-
-
 class GroupHasNoTeacherException(ValidationException):
     """Grupo sin profesor asignado"""
     
-    def __init__(self, group_code: int):
+    def __init__(self, group_code: str):
         super().__init__(
             message=f"El grupo '{group_code}' no tiene un profesor asignado",
             code=ResponseCode.VALIDATION_ERROR
@@ -70,7 +48,7 @@ class GroupHasNoTeacherException(ValidationException):
 class GroupHasNoSubjectException(ValidationException):
     """Grupo sin materia asignada"""
     
-    def __init__(self, group_code: int):
+    def __init__(self, group_code: str):
         super().__init__(
             message=f"El grupo '{group_code}' no tiene una materia asignada",
             code=ResponseCode.VALIDATION_ERROR
@@ -82,7 +60,7 @@ class GroupHasDependenciesException(DependencyException):
     
     def __init__(
         self,
-        group_code: int,
+        group_code: str,
         dependencies: Optional[Dict[str, Any]] = None
     ):
         message = f"No se puede eliminar el grupo '{group_code}' porque tiene dependencias activas"
