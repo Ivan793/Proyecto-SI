@@ -24,7 +24,7 @@ async def create_proyecto(
 
         proyecto_dict = json.loads(proyecto_data)
 
-        Validacion = _validar_existencia_ids(proyecto_dict)
+        _validar_existencia_ids(proyecto_dict)
 
         new_id = await repository.create_with_pdf(proyecto_dict, archivo)
         created = await repository.get_by_id(new_id)
@@ -68,7 +68,7 @@ async def delete_proyecto(proyect_id: str):
     """
     Elimina lógicamente un proyecto (marca como inactivo).
     """
-    success = await repository.soft_delete(proyect_id)
+    success = await repository.soft_delete_proyect(proyect_id)
     if not success:
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
     return {"message": "Proyecto desactivado correctamente"}
