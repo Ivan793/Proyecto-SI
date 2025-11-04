@@ -1,7 +1,6 @@
 from typing import List, Optional
 from datetime import datetime
 import json
-from fastapi import HTTPException
 from app.repositories.event_repository import EventRepository
 from app.schemas.proyect import ProyectoCreate, ProyectoResponse, ProyectoUpdate
 from app.services.cloudinary_service import upload_pdf_to_cloudinary
@@ -55,46 +54,131 @@ def _existe_en_coleccion(coleccion: str, campo_id: str, valor_id: str, valor_are
     return False
 
 
+def _obtener_documento(coleccion, campo, valor):
+    docs = db.collection(coleccion).where(campo, "==", valor).limit(1).get()
+    return docs[0] if docs else None
+
+
 def _validar_existencia_ids(proyecto: any):
     """
     Verifica que todos los IDs y códigos referenciados existan en Firestore.
     Si alguno no existe, lanza ValueError.
     """
+    # Validar docente en colección DOCENTES
 
-    #  Validar docente
-    if not _existe_en_coleccion(Collections.DOCENTES, "id_usuario", proyecto["id_docente"]):
-        raise ValueError(f"No existe ningún docente con ID '{proyecto['id_docente']}'.")
+    docente_uid = proyecto["id_docente"]["uid_docente"]
+
+    # Traer el docente
+    docente_ref = db.collection(Collections.DOCENTES).document(docente_uid)
+    docente_doc = docente_ref.get()
+
+    if not docente_doc.exists:
+        raise ValueError(f"No existe ningún docente con UID '{docente_uid}' en la base de datos.")
+
+    docente_data = docente_doc.to_dict()
+
+    # Aquí está el usuario real del docente
+    usuario_uid = docente_data.get("id_usuario")
+
+    if not usuario_uid:
+        raise ValueError(f"El docente '{docente_uid}' no tiene un id_usuario asociado.")
+
+    # Buscar al usuario en la colección usuarios
+    usuario_ref = db.collection(Collections.USUARIOS).document(usuario_uid)
+    usuario_doc = usuario_ref.get()
+
+    if not usuario_doc.exists:
+        raise ValueError(f"No existe usuario asociado al docente con UID '{docente_uid}'.")
+
+    usuario_data = usuario_doc.to_dict()
+
+    primer_nombre = usuario_data.get("primer_nombre", "")
+    segundo_nombre = usuario_data.get("segundo_nombre", "")
+    primer_apellido = usuario_data.get("primer_apellido", "")
+    segundo_apellido = usuario_data.get("segundo_apellido", "")
+
+    nombre_completo = f"{primer_nombre} {segundo_nombre} {primer_apellido} {segundo_apellido}".strip()
+
+    # Guardar el nombre dentro del proyecto
+    proyecto["id_docente"]["nombre"] = nombre_completo
 
     #  Validar estudiantes
-    for eid in proyecto["id_estudiantes"]:
-        print("este es el eid", eid)
-        if not _existe_en_coleccion(Collections.ESTUDIANTES, "id_usuario", eid["id_estudiante"]):
-            raise ValueError(f"No existe ningún estudiante con ID '{eid['id_estudiante']}'.")
+    for estudiante in proyecto["id_estudiantes"]:
+        id_estudiante = estudiante["id_estudiante"]
+
+    # 1️ Validar que el estudiante exista
+    estudiante_ref = db.collection(Collections.ESTUDIANTES).document(id_estudiante)
+    estudiante_doc = estudiante_ref.get()
+
+    if not estudiante_doc.exists:
+        raise ValueError(f"No existe ningún estudiante con UID '{id_estudiante}' en la base de datos.")
+
+    estudiante_data = estudiante_doc.to_dict()
+
+    # 2️ Obtener el id_usuario del estudiante
+    id_usuario = estudiante_data.get("id_usuario")
+    if not id_usuario:
+        raise ValueError(
+            f"El estudiante '{id_estudiante}' no tiene asociado un id_usuario en la colección ESTUDIANTES.")
+
+    # 3️ Buscar el usuario para obtener el nombre completo
+    usuario_ref = db.collection(Collections.USUARIOS).document(id_usuario)
+    usuario_doc = usuario_ref.get()
+
+    if not usuario_doc.exists:
+        raise ValueError(f"No existe el usuario con UID '{id_usuario}' asociado al estudiante '{id_estudiante}'.")
+
+    usuario_data = usuario_doc.to_dict()
+
+    # Construir el nombre completo
+    primer_nombre = usuario_data.get("primer_nombre", "")
+    segundo_nombre = usuario_data.get("segundo_nombre", "")
+    primer_apellido = usuario_data.get("primer_apellido", "")
+    segundo_apellido = usuario_data.get("segundo_apellido", "")
+
+    nombre_completo = " ".join(
+        [primer_nombre, segundo_nombre, primer_apellido, segundo_apellido]
+    ).strip()
+
+    # Guardar dentro del proyecto
+    estudiante["nombre"] = nombre_completo
+
+    print(f" Estudiante validado: {id_estudiante} - {nombre_completo}")
 
     #  Validar grupo
     if not _existe_en_coleccion(Collections.GRUPOS, "codigo_grupo", proyecto["id_grupo"]):
         raise ValueError(f"No existe ningún grupo con ID '{proyecto['id_grupo']}'.")
 
-    # Validar Linea de Investigacion
-    if proyecto["codigo_linea"] and not _existe_en_coleccion(Collections.LINEAS_INVESTIGACION, "codigo_linea",
-                                                             proyecto["codigo_linea"]):
+    # ----- Validar Línea de Investigación -----
+    linea_doc = _obtener_documento(Collections.LINEAS_INVESTIGACION, "codigo_linea", proyecto["codigo_linea"])
+    if not linea_doc:
         raise ValueError(f"No existe ninguna línea de investigación con código '{proyecto['codigo_linea']}'.")
 
-    # Validar Sub_linea de investigacion
-    if proyecto["codigo_sublinea"] and not _existe_en_coleccion(
-            Collections.LINEAS_INVESTIGACION + "/" + str(proyecto["codigo_linea"]) + "/sublineas", "codigo_sublinea",
-            proyecto["codigo_sublinea"]):
-        raise ValueError(f"No existe ninguna sublínea de investigación con código '{proyecto['codigo_sublinea']}'.")
+    linea_data = linea_doc.to_dict()
+    proyecto["nombre_linea"] = linea_data.get("nombre_linea")
 
-    # Validar Area Tematica
-    if proyecto["codigo_sublinea"] and not _existe_en_coleccion(
-            Collections.LINEAS_INVESTIGACION + "/" + str(proyecto["codigo_linea"]) + "/sublineas", "codigo_sublinea",
-            proyecto["codigo_sublinea"], proyecto["codigo_area"]):
-        raise ValueError(f"No existe ninguna area tematica con código '{proyecto['codigo_area']}'.")
+    # ----- Validar Sublinea -----
+    sublinea_path = f"{Collections.LINEAS_INVESTIGACION}/{proyecto['codigo_linea']}/sublineas"
+    sublinea_doc = _obtener_documento(sublinea_path, "codigo_sublinea", proyecto.get("codigo_sublinea"))
+
+    if not sublinea_doc:
+        raise ValueError(f"No existe ninguna sublínea con código '{proyecto.get('codigo_sublinea')}'.")
+
+    sublinea_data = sublinea_doc.to_dict()
+    proyecto["nombre_sublinea"] = sublinea_data.get("nombre_sublinea")
+
+    # ----- Validar Área Temática -----
+    areas = sublinea_data.get("areas_tematicas", [])
+
+    area_match = next((a for a in areas if a.get("codigo_area") == proyecto["codigo_area"]), None)
+    if not area_match:
+        raise ValueError(f"No existe ninguna área temática con código '{proyecto['codigo_area']}'.")
+
+    proyecto["nombre_area"] = area_match.get("nombre_area")
 
     #  Validar materia
     if not _existe_en_coleccion(Collections.MATERIAS, "codigo_materia", proyecto["codigo_materia"]):
-        raise ValueError(f"No existe ninguna materia con ID '{proyecto['codigo_materia']}'.")
+        raise ValueError(f'No existe ninguna materia con ID "{proyecto["codigo_materia"]}".')
 
     evento_ref = db.collection(Collections.EVENTOS).document(proyecto["id_evento"])
     evento_doc = evento_ref.get()
@@ -248,17 +332,27 @@ async def update_proyecto(proyecto_id: str, proyecto: ProyectoUpdate, archivo=No
 
 # ELIMINAR (DESACTIVAR) PROYECTO
 
+
 def delete_proyecto(id_proyecto: str) -> bool:
+    """
+    Desactiva un proyecto cambiando el campo 'activo' a False.
+    """
+    # Buscar el documento cuyo campo 'id_proyecto' coincide
     query = proyectos_ref.where("id_proyecto", "==", id_proyecto).limit(1).stream()
     doc_ref = None
+
     for doc in query:
         doc_ref = proyectos_ref.document(doc.id)
         break
+
+    # Si no se encuentra, retorna False
     if not doc_ref:
         return False
 
+    # Actualizar el campo 'activo' a False
     doc_ref.update({
         "activo": False,
         "updated_at": datetime.utcnow().isoformat()
     })
+
     return True
