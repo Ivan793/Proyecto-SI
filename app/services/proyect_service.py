@@ -102,48 +102,47 @@ def _validar_existencia_ids(proyecto: any):
     # Guardar el nombre dentro del proyecto
     proyecto["id_docente"]["nombre"] = nombre_completo
 
-    #  Validar estudiantes
+    # Validar estudiantes
     for estudiante in proyecto["id_estudiantes"]:
+
         id_estudiante = estudiante["id_estudiante"]
 
-    # 1️ Validar que el estudiante exista
-    estudiante_ref = db.collection(Collections.ESTUDIANTES).document(id_estudiante)
-    estudiante_doc = estudiante_ref.get()
+        # 1 Validar que el estudiante exista
+        estudiante_ref = db.collection(Collections.ESTUDIANTES).document(id_estudiante)
+        estudiante_doc = estudiante_ref.get()
 
-    if not estudiante_doc.exists:
-        raise ValueError(f"No existe ningún estudiante con UID '{id_estudiante}' en la base de datos.")
+        if not estudiante_doc.exists:
+            raise ValueError(f"No existe ningún estudiante con UID '{id_estudiante}' en la base de datos.")
 
-    estudiante_data = estudiante_doc.to_dict()
+        estudiante_data = estudiante_doc.to_dict()
 
-    # 2️ Obtener el id_usuario del estudiante
-    id_usuario = estudiante_data.get("id_usuario")
-    if not id_usuario:
-        raise ValueError(
-            f"El estudiante '{id_estudiante}' no tiene asociado un id_usuario en la colección ESTUDIANTES.")
+        # 2 Obtener el id_usuario del estudiante
+        id_usuario = estudiante_data.get("id_usuario")
+        if not id_usuario:
+            raise ValueError(f"El estudiante '{id_estudiante}' no tiene asociado un id_usuario.")
 
-    # 3️ Buscar el usuario para obtener el nombre completo
-    usuario_ref = db.collection(Collections.USUARIOS).document(id_usuario)
-    usuario_doc = usuario_ref.get()
+        # 3 Buscar el usuario para obtener el nombre completo
+        usuario_ref = db.collection(Collections.USUARIOS).document(id_usuario)
+        usuario_doc = usuario_ref.get()
 
-    if not usuario_doc.exists:
-        raise ValueError(f"No existe el usuario con UID '{id_usuario}' asociado al estudiante '{id_estudiante}'.")
+        if not usuario_doc.exists:
+            raise ValueError(f"No existe el usuario '{id_usuario}' asociado al estudiante '{id_estudiante}'.")
 
-    usuario_data = usuario_doc.to_dict()
+        usuario_data = usuario_doc.to_dict()
 
-    # Construir el nombre completo
-    primer_nombre = usuario_data.get("primer_nombre", "")
-    segundo_nombre = usuario_data.get("segundo_nombre", "")
-    primer_apellido = usuario_data.get("primer_apellido", "")
-    segundo_apellido = usuario_data.get("segundo_apellido", "")
+        primer_nombre = usuario_data.get("primer_nombre", "")
+        segundo_nombre = usuario_data.get("segundo_nombre", "")
+        primer_apellido = usuario_data.get("primer_apellido", "")
+        segundo_apellido = usuario_data.get("segundo_apellido", "")
 
-    nombre_completo = " ".join(
-        [primer_nombre, segundo_nombre, primer_apellido, segundo_apellido]
-    ).strip()
+        nombre_completo = " ".join([
+            primer_nombre, segundo_nombre, primer_apellido, segundo_apellido
+        ]).strip()
 
-    # Guardar dentro del proyecto
-    estudiante["nombre"] = nombre_completo
+        # Guardar el nombre en el objeto proyecto
+        estudiante["nombre"] = nombre_completo
 
-    print(f" Estudiante validado: {id_estudiante} - {nombre_completo}")
+        print(f" Estudiante validado: {id_estudiante} - {nombre_completo}")
 
     #  Validar grupo
     if not _existe_en_coleccion(Collections.GRUPOS, "codigo_grupo", proyecto["id_grupo"]):
