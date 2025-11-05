@@ -993,3 +993,113 @@ class CertificateService:
             'proyectos': proyectos_disponibles,
             'total': len(proyectos_disponibles)
         }
+    
+    async def obtener_lotes_certificados(
+        self,
+        pagina: int = 1,
+        limite: int = 20
+    ) -> Dict[str, Any]:
+        """
+        Obtiene un listado paginado de lotes de certificados con información completa.
+        
+        Args:
+            pagina: Número de página
+            limite: Cantidad de resultados por página
+            
+        Returns:
+            Dict con listado de lotes y información de paginación
+        """
+        try:
+            logger.info(f"📋 Obteniendo lotes de certificados - Página: {pagina}, Límite: {limite}")
+            
+            # Obtener lotes desde el repositorio
+            lotes, total = await self.certificate_repo.obtener_lotes_paginados(
+                pagina=pagina,
+                limite=limite
+            )
+            
+            logger.info(f"✅ {len(lotes)} lotes encontrados")
+            
+            # Enriquecer información de cada lote
+            lotes_enriquecidos = []
+            
+            for lote in lotes:
+                try:
+                    # Obtener información del proyecto
+                    proyecto_info = {}
+                    if lote.get('id_proyecto'):
+                        proyecto = await self.project_repo.get_by_id(lote['id_proyecto'])
+                        if proyecto:
+                            proyecto_info = {
+                                'nombre_proyecto': proyecto.get('titulo_proyecto', 'Proyecto no encontrado'),
+                                'tipo_actividad': proyecto.get('tipo_actividad'),
+                                'calificacion': proyecto.get('calificacion')
+                            }
+                    
+                    # Obtener información del evento
+                    evento_info = {}
+                    if lote.get('id_evento'):
+                        evento = await self.event_repo.get_by_id(lote['id_evento'])
+                        if evento:
+                            evento_info = {
+                                'nombre_evento': evento.get('nombre_evento', 'Evento no encontrado'),
+                                'fecha_inicio': evento.get('fecha_inicio'),
+                                'fecha_fin': evento.get('fecha_fin'),
+                                'lugar': evento.get('lugar')
+                            }
+                    
+                    # Construir lote enriquecido
+                    lote_enriquecido = {
+                        'id_lote': lote.get('id_lote') or lote.get('id_certificado'),
+                        'id_proyecto': lote.get('id_proyecto'),
+                        'proyecto': proyecto_info,
+                        'evento': evento_info,
+                        'cantidad_certificados': lote.get('cantidad_certificados', 0),
+                        'nombre_archivo': lote.get('nombre_archivo'),
+                        'fecha_generacion': lote.get('fecha_generacion'),
+                        'fecha_expiracion': lote.get('fecha_expiracion'),
+                        'estado': lote.get('estado', 'desconocido'),
+                        'cloudinary_subido': lote.get('cloudinary', {}).get('subido', False),
+                        'url_descarga': lote.get('cloudinary', {}).get('url') or f"{self._obtener_base_url()}/admin/reportes/certificados/descargar/{lote.get('id_lote') or lote.get('id_certificado')}",
+                        'estudiantes': lote.get('id_estudiante', [])  # Array de IDs de estudiantes
+                    }
+                    
+                    lotes_enriquecidos.append(lote_enriquecido)
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error enriqueciendo información del lote {lote.get('id_lote')}: {str(e)}")
+                    # Agregar lote básico si hay error
+                    lote_basico = {
+                        'id_lote': lote.get('id_lote') or lote.get('id_certificado'),
+                        'id_proyecto': lote.get('id_proyecto'),
+                        'proyecto': {'nombre_proyecto': 'Error al cargar información'},
+                        'evento': {'nombre_evento': 'Error al cargar información'},
+                        'cantidad_certificados': lote.get('cantidad_certificados', 0),
+                        'nombre_archivo': lote.get('nombre_archivo'),
+                        'fecha_generacion': lote.get('fecha_generacion'),
+                        'estado': lote.get('estado', 'desconocido'),
+                        'cloudinary_subido': False,
+                        'url_descarga': f"{self._obtener_base_url()}/admin/reportes/certificados/descargar/{lote.get('id_lote') or lote.get('id_certificado')}",
+                        'estudiantes': lote.get('id_estudiante', [])
+                    }
+                    lotes_enriquecidos.append(lote_basico)
+                    continue
+            
+            # Calcular paginación
+            total_paginas = (total + limite - 1) // limite if total > 0 else 1
+            
+            return {
+                'lotes': lotes_enriquecidos,
+                'paginacion': {
+                    'total': total,
+                    'pagina_actual': pagina,
+                    'total_paginas': total_paginas,
+                    'limite': limite,
+                    'siguiente_pagina': pagina + 1 if pagina < total_paginas else None,
+                    'pagina_anterior': pagina - 1 if pagina > 1 else None
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo lotes de certificados: {str(e)}")
+            raise
