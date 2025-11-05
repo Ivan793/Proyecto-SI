@@ -4,7 +4,7 @@ import logging
 from firebase_admin import auth as firebase_auth
 from firebase_admin.exceptions import FirebaseError
 
-from app.exceptions.base_exceptions import ValidationException, DatabaseException
+from app.exceptions.base_exceptions import NotFoundException, ValidationException, DatabaseException
 from app.repositories.teacher_repository import TeacherRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.teacher import (
@@ -648,26 +648,24 @@ class TeacherService:
         try:
             teacher = await self.teacher_repo.get_by_id(teacher_id)
             if not teacher:
-                raise TeacherNotFoundException(teacher_id)
+                raise NotFoundException("Docente no encontrado")
 
+            # Aquí obtienes el id del usuario asociado al docente
             user_id = teacher.get("id_usuario")
             if not user_id:
-                raise ValidationException("Docente no tiene usuario asociado")
+                raise NotFoundException("El docente no tiene usuario asociado")
 
+            # 🔹 Buscar el usuario en Firestore
             user = await self.user_repo.get_by_id(user_id)
             if not user:
-                raise UserNotFoundException(user_id)
+                raise NotFoundException("Usuario asociado no encontrado")
 
-            teacher_info = TeacherResponse(**teacher)
-
+            # 🔹 Construir respuesta con ambos modelos
             return TeacherWithFullUserResponse(
                 docente=TeacherResponse(**teacher),
-                usuario=teacher_info
+                usuario=UserResponse(**user)  # <--- este debe ser el modelo correcto
             )
 
-        except (TeacherNotFoundException, UserNotFoundException, ValidationException) as e:
-            logger.warning(f"Error obteniendo docente con usuario {teacher_id}: {str(e)}")
-            raise
         except Exception as e:
             logger.error(f"Error inesperado obteniendo docente con usuario {teacher_id}: {str(e)}")
             raise DatabaseException("Error al obtener información completa del docente")
