@@ -242,8 +242,9 @@ class CertificateService:
         
         logger.info(f"🎓 Generando certificados para {len(uids_estudiantes)} estudiante(s)")
         
-        # Generar ID del lote
+        # ✅ 1. GENERAR ID DEL LOTE PRIMERO
         id_lote = self._generar_id_lote()
+        logger.info(f"🆔 ID Lote generado: {id_lote}")
         
         # Lista para almacenar certificados generados
         certificados_generados = []
@@ -293,14 +294,14 @@ class CertificateService:
         
         logger.info(f"📦 Empaquetando {len(certificados_generados)} certificado(s)")
         
-        # Empaquetar según formato de salida
+        # ✅ 2. EMPAQUETAR CERTIFICADOS
         nombre_archivo_final, buffer_final = await self._empaquetar_certificados(
             certificados_generados,
             request.formato_salida,
             datos_proyecto.titulo_proyecto
         )
         
-        # ✅ GUARDAR LOCALMENTE (FALLBACK)
+        # ✅ 3. GUARDAR LOCALMENTE (FALLBACK)
         ruta_archivo_local = os.path.join(self.directorio_certificados, nombre_archivo_final)
         with open(ruta_archivo_local, 'wb') as f:
             buffer_final.seek(0)
@@ -309,12 +310,14 @@ class CertificateService:
         tamano_bytes = os.path.getsize(ruta_archivo_local)
         logger.info(f"💾 Archivo guardado localmente: {ruta_archivo_local} ({tamano_bytes} bytes)")
         
-        # ✅ SUBIR ZIP A CLOUDINARY
+        # ✅ 4. SUBIR ZIP A CLOUDINARY (AHORA id_lote YA EXISTE)
         cloudinary_info = None
+        url_descarga_cloudinary = None
+        
         try:
             # Preparar metadata para Cloudinary
             metadata_cloudinary = {
-                'id_lote': id_lote,
+                'id_lote': id_lote,  # ✅ AHORA SÍ EXISTE
                 'id_proyecto': request.id_proyecto,
                 'id_evento': id_evento,
                 'cantidad_certificados': len(certificados_generados),
@@ -335,48 +338,63 @@ class CertificateService:
                 metadata_comun=metadata_cloudinary
             )
             
+            # Verificar resultado y extraer URL
             if resultado_cloudinary and resultado_cloudinary.get('tipo') == 'cloudinary':
                 cloudinary_info = resultado_cloudinary
-                logger.info(f"☁️ Lote subido a Cloudinary exitosamente")
+                
+                # Extraer URL correctamente
+                if cloudinary_info.get('certificados') and len(cloudinary_info['certificados']) > 0:
+                    url_descarga_cloudinary = cloudinary_info['certificados'][0].get('url')
+                    logger.info(f"☁️ Lote subido a Cloudinary: {url_descarga_cloudinary}")
+                else:
+                    logger.warning(f"⚠️ Respuesta de Cloudinary sin URL de certificado")
             else:
                 logger.warning(f"⚠️ Cloudinary no configurado - usando almacenamiento local")
                 
         except Exception as e:
             logger.error(f"❌ Error subiendo a Cloudinary: {str(e)}")
+            logger.exception(e)
             logger.warning(f"⚠️ Continuando con almacenamiento local solamente")
         
-        # Generar URL de descarga
+        # ✅ 5. GENERAR URL DE DESCARGA
         base_url = self._obtener_base_url()
         
-        # ✅ Usar URL de Cloudinary si está disponible, sino usar URL local
-        if cloudinary_info and cloudinary_info.get('certificados'):
-            url_descarga = cloudinary_info['certificados'][0].get('url', f"{base_url}/admin/reportes/certificados/descargar/{id_lote}")
+        # Prioridad: URL de Cloudinary > URL local
+        if url_descarga_cloudinary:
+            url_descarga = url_descarga_cloudinary
+            logger.info(f"🔗 Usando URL de Cloudinary")
         else:
-            url_descarga = f"{base_url}/admin/reportes/certificados/descargar/{id_lote}"
+            url_descarga = f"{base_url}/api/v1/admin/reportes/certificados/descargar/{id_lote}"
+            logger.info(f"🔗 Usando URL local: {url_descarga}")
         
-        # Guardar metadata con timezone
+        # ✅ 6. GUARDAR METADATA CON TIMEZONE
         fecha_generacion = datetime.now(timezone.utc)
         fecha_expiracion = fecha_generacion + timedelta(days=7)
         
-        # ✅ GUARDAR EN FIREBASE SEGÚN ESPECIFICACIÓN
+        # ✅ 7. GUARDAR EN FIREBASE
         metadata_certificado = {
             'id_certificado': id_lote,
             'id_lote': id_lote,
-            'id_estudiante': uids_estudiantes,  # ✅ ARRAY con todos los IDs de estudiantes
+            'id_estudiante': uids_estudiantes,
             'id_proyecto': request.id_proyecto,
             'id_evento': id_evento,
             'nombre_archivo': nombre_archivo_final,
-            'ruta_archivo': cloudinary_info['certificados'][0].get('url') if cloudinary_info and cloudinary_info.get('certificados') else ruta_archivo_local,
+            'ruta_archivo': url_descarga_cloudinary if url_descarga_cloudinary else ruta_archivo_local,
             'fecha_generacion': fecha_generacion,
             'fecha_expiracion': fecha_expiracion,
-            'estado': EstadoCertificadoEnum.DISPONIBLE
+            'estado': EstadoCertificadoEnum.DISPONIBLE,
+            'cloudinary': {
+                'subido': cloudinary_info is not None and cloudinary_info.get('tipo') == 'cloudinary',
+                'url': url_descarga_cloudinary,
+                'tipo': cloudinary_info.get('tipo', 'local') if cloudinary_info else 'local'
+            }
         }
         
         await self.certificate_repo.guardar_lote_certificados(metadata_certificado)
         
         logger.info(f"🎉 Certificados generados exitosamente. Lote: {id_lote}")
         
-        # Preparar respuesta
+        # ✅ 8. PREPARAR RESPUESTA
         return {
             'id_lote': id_lote,
             'nombre_archivo': nombre_archivo_final,
@@ -391,7 +409,8 @@ class CertificateService:
                 evento=datos_evento.nombre_evento,
                 calificacion=datos_proyecto.calificacion if request.incluir_calificacion else None
             ),
-            'cloudinary_subido': cloudinary_info is not None and cloudinary_info.get('tipo') == 'cloudinary'
+            'cloudinary_subido': cloudinary_info is not None and cloudinary_info.get('tipo') == 'cloudinary',
+            'tipo_descarga': 'cloudinary' if url_descarga_cloudinary else 'local'
         }
 
     async def generar_certificado_individual(
@@ -405,6 +424,10 @@ class CertificateService:
         
         logger.info(f"📄 Generando certificado individual para estudiante: {request.id_estudiante}")
         
+        # ✅ 1. GENERAR ID DEL CERTIFICADO PRIMERO
+        id_certificado = self._generar_id_certificado_individual()
+        logger.info(f"🆔 ID Certificado generado: {id_certificado}")
+        
         # Obtener ID del evento desde el proyecto
         id_evento = await self._obtener_id_evento_desde_proyecto(request.id_proyecto)
         
@@ -413,7 +436,10 @@ class CertificateService:
         datos_proyecto = await self._obtener_datos_proyecto(request.id_proyecto)
         datos_evento = await self._obtener_datos_evento(id_evento)
         
-        # Generar PDF
+        logger.info(f"👤 Estudiante: {datos_estudiante.nombres} {datos_estudiante.apellidos}")
+        logger.info(f"📄 Proyecto: {datos_proyecto.titulo_proyecto}")
+        
+        # ✅ 2. GENERAR PDF
         pdf_buffer = self.generator.generar_certificado(
             estudiante=datos_estudiante,
             proyecto=datos_proyecto,
@@ -423,20 +449,26 @@ class CertificateService:
             coordinador_general=request.coordinador_general
         )
         
-        # Generar ID y nombre de archivo
-        id_certificado = self._generar_id_certificado_individual()
         nombre_archivo = self.generator.obtener_nombre_archivo(datos_estudiante)
+        logger.info(f"📝 Nombre archivo: {nombre_archivo}")
         
-        # ✅ GUARDAR LOCALMENTE (FALLBACK)
-        ruta_archivo = os.path.join(self.directorio_certificados, nombre_archivo)
-        with open(ruta_archivo, 'wb') as f:
-            pdf_buffer.seek(0)
-            f.write(pdf_buffer.read())
+        # ✅ 3. LEER EL CONTENIDO DEL PDF UNA SOLA VEZ
+        pdf_buffer.seek(0)
+        pdf_content = pdf_buffer.read()
+        logger.info(f"📦 PDF generado: {len(pdf_content)} bytes")
         
-        tamano_bytes = os.path.getsize(ruta_archivo)
+        # ✅ 4. GUARDAR LOCALMENTE (FALLBACK)
+        ruta_archivo_local = os.path.join(self.directorio_certificados, nombre_archivo)
+        with open(ruta_archivo_local, 'wb') as f:
+            f.write(pdf_content)
         
-        # ✅ SUBIR A CLOUDINARY
+        tamano_bytes = len(pdf_content)
+        logger.info(f"💾 Archivo guardado localmente: {ruta_archivo_local} ({tamano_bytes} bytes)")
+        
+        # ✅ 5. SUBIR A CLOUDINARY (CON BUFFER NUEVO)
         cloudinary_info = None
+        url_descarga_cloudinary = None
+        
         try:
             # Preparar metadata
             metadata_cloudinary = {
@@ -444,59 +476,84 @@ class CertificateService:
                 'id_estudiante': request.id_estudiante,
                 'id_proyecto': request.id_proyecto,
                 'id_evento': id_evento,
+                'fecha_generacion': datetime.now(timezone.utc).isoformat(),
                 'estudiante': f"{datos_estudiante.nombres} {datos_estudiante.apellidos}",
-                'identificacion': datos_estudiante.identificacion
+                'identificacion': datos_estudiante.identificacion,
+                'proyecto': datos_proyecto.titulo_proyecto,
+                'evento': datos_evento.nombre_evento
             }
             
-            # Subir certificado individual
-            pdf_buffer.seek(0)
-            resultado_cloudinary = await self.pdf_service.subir_certificado(
-                pdf_buffer=pdf_buffer,
-                nombre_archivo=nombre_archivo,
-                metadata=metadata_cloudinary
+            # ✅ CREAR UN NUEVO BUFFER CON EL CONTENIDO
+            pdf_buffer_cloudinary = BytesIO(pdf_content)
+            
+            # ✅ Subir como lote de un solo certificado
+            resultado_cloudinary = await self.pdf_service.subir_lote_certificados(
+                certificados=[{
+                    'buffer': pdf_buffer_cloudinary,  # ✅ BUFFER NUEVO
+                    'nombre': nombre_archivo,
+                    'estudiante': datos_estudiante.__dict__
+                }],
+                nombre_lote=id_certificado,
+                metadata_comun=metadata_cloudinary
             )
             
-            if resultado_cloudinary and resultado_cloudinary.get('type') == 'cloudinary':
+            # Verificar resultado y extraer URL
+            if resultado_cloudinary and resultado_cloudinary.get('tipo') == 'cloudinary':
                 cloudinary_info = resultado_cloudinary
-                logger.info(f"☁️ Certificado subido a Cloudinary exitosamente")
+                
+                # Extraer URL del primer certificado
+                if cloudinary_info.get('certificados') and len(cloudinary_info['certificados']) > 0:
+                    url_descarga_cloudinary = cloudinary_info['certificados'][0].get('url')
+                    logger.info(f"☁️ Certificado subido a Cloudinary: {url_descarga_cloudinary}")
+                else:
+                    logger.warning(f"⚠️ Respuesta de Cloudinary sin URL")
             else:
                 logger.warning(f"⚠️ Cloudinary no configurado - usando almacenamiento local")
                 
         except Exception as e:
             logger.error(f"❌ Error subiendo a Cloudinary: {str(e)}")
+            logger.exception(e)
             logger.warning(f"⚠️ Continuando con almacenamiento local solamente")
         
-        # Generar URL de descarga
+        # ✅ 6. GENERAR URL DE DESCARGA
         base_url = self._obtener_base_url()
         
-        # ✅ Usar URL de Cloudinary si está disponible
-        if cloudinary_info:
-            url_descarga = cloudinary_info.get('secure_url', f"{base_url}/admin/reportes/certificados/descargar/{id_certificado}")
+        # Prioridad: URL de Cloudinary > URL local
+        if url_descarga_cloudinary:
+            url_descarga = url_descarga_cloudinary
+            logger.info(f"🔗 Usando URL de Cloudinary")
         else:
-            url_descarga = f"{base_url}/admin/reportes/certificados/descargar/{id_certificado}"
+            url_descarga = f"{base_url}/api/v1/admin/reportes/certificados/descargar/{id_certificado}"
+            logger.info(f"🔗 Usando URL local: {url_descarga}")
         
-        # Guardar metadata con timezone
+        # ✅ 7. GUARDAR METADATA CON TIMEZONE
         fecha_generacion = datetime.now(timezone.utc)
         fecha_expiracion = fecha_generacion + timedelta(days=7)
         
-        # ✅ GUARDAR EN FIREBASE SEGÚN ESPECIFICACIÓN
+        # ✅ 8. GUARDAR EN FIREBASE
         metadata_certificado = {
             'id_certificado': id_certificado,
-            'id_lote': None,  # ✅ Para individual, id_lote es None
-            'id_estudiante': [request.id_estudiante],  # ✅ ARRAY con un solo estudiante
+            'id_lote': None,
+            'id_estudiante': [request.id_estudiante],
             'id_proyecto': request.id_proyecto,
             'id_evento': id_evento,
             'nombre_archivo': nombre_archivo,
-            'ruta_archivo': cloudinary_info.get('secure_url') if cloudinary_info else ruta_archivo,
+            'ruta_archivo': url_descarga_cloudinary if url_descarga_cloudinary else ruta_archivo_local,
             'fecha_generacion': fecha_generacion,
             'fecha_expiracion': fecha_expiracion,
-            'estado': EstadoCertificadoEnum.DISPONIBLE
+            'estado': EstadoCertificadoEnum.DISPONIBLE,
+            'cloudinary': {
+                'subido': cloudinary_info is not None and cloudinary_info.get('tipo') == 'cloudinary',
+                'url': url_descarga_cloudinary,
+                'tipo': cloudinary_info.get('tipo', 'local') if cloudinary_info else 'local'
+            }
         }
         
         await self.certificate_repo.guardar_certificado_individual(metadata_certificado)
         
         logger.info(f"✅ Certificado individual generado: {nombre_archivo}")
         
+        # ✅ 9. PREPARAR RESPUESTA
         return {
             'id_certificado': id_certificado,
             'nombre_archivo': nombre_archivo,
@@ -506,9 +563,16 @@ class CertificateService:
                 identificacion=datos_estudiante.identificacion,
                 nombre_archivo_certificado=nombre_archivo
             ),
+            'proyecto': ProyectoCertificadoInfo(
+                titulo=datos_proyecto.titulo_proyecto,
+                evento=datos_evento.nombre_evento,
+                calificacion=datos_proyecto.calificacion if request.incluir_calificacion else None
+            ),
             'tamano_bytes': tamano_bytes,
             'fecha_generacion': fecha_generacion.isoformat(),
-            'cloudinary_subido': cloudinary_info is not None and cloudinary_info.get('type') == 'cloudinary'
+            'expira_en': '7 días',
+            'cloudinary_subido': cloudinary_info is not None and cloudinary_info.get('tipo') == 'cloudinary',
+            'tipo_descarga': 'cloudinary' if url_descarga_cloudinary else 'local'
         }
     
     def _crear_zip_certificados(self, certificados: List[Dict]) -> BytesIO:
@@ -572,6 +636,10 @@ class CertificateService:
         
         logger.info(f"🎓 Estudiante {id_estudiante_autenticado} generando su certificado")
         
+        # ✅ 1. GENERAR ID PRIMERO
+        id_certificado = f"CERT_EST_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        logger.info(f"🆔 ID Certificado generado: {id_certificado}")
+        
         # Verificar que el proyecto pertenece al estudiante
         proyecto = await self.project_repo.get_by_id(request.id_proyecto)
         if not proyecto:
@@ -603,7 +671,10 @@ class CertificateService:
         datos_proyecto = await self._obtener_datos_proyecto(request.id_proyecto)
         datos_evento = await self._obtener_datos_evento(id_evento)
         
-        # Generar PDF
+        logger.info(f"👤 Estudiante: {datos_estudiante.nombres} {datos_estudiante.apellidos}")
+        logger.info(f"📄 Proyecto: {datos_proyecto.titulo_proyecto}")
+        
+        # ✅ 2. GENERAR PDF
         pdf_buffer = self.generator.generar_certificado(
             estudiante=datos_estudiante,
             proyecto=datos_proyecto,
@@ -611,87 +682,123 @@ class CertificateService:
             incluir_calificacion=request.incluir_calificacion
         )
         
-        # Generar ID
-        id_certificado = f"CERT_EST_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         nombre_archivo = self.generator.obtener_nombre_archivo(datos_estudiante)
+        logger.info(f"📝 Nombre archivo: {nombre_archivo}")
         
-        # ✅ GUARDAR LOCALMENTE (FALLBACK)
-        ruta_archivo = os.path.join(self.directorio_certificados, nombre_archivo)
-        with open(ruta_archivo, 'wb') as f:
-            pdf_buffer.seek(0)
-            f.write(pdf_buffer.read())
+        # ✅ 3. LEER EL CONTENIDO DEL PDF UNA SOLA VEZ
+        pdf_buffer.seek(0)
+        pdf_content = pdf_buffer.read()
+        logger.info(f"📦 PDF generado: {len(pdf_content)} bytes")
         
-        tamano_bytes = os.path.getsize(ruta_archivo)
+        # ✅ 4. GUARDAR LOCALMENTE (FALLBACK)
+        ruta_archivo_local = os.path.join(self.directorio_certificados, nombre_archivo)
+        with open(ruta_archivo_local, 'wb') as f:
+            f.write(pdf_content)
         
-        # ✅ SUBIR A CLOUDINARY
+        tamano_bytes = len(pdf_content)
+        logger.info(f"💾 Archivo guardado localmente: {ruta_archivo_local} ({tamano_bytes} bytes)")
+        
+        # ✅ 5. SUBIR A CLOUDINARY (CON BUFFER NUEVO)
         cloudinary_info = None
+        url_descarga_cloudinary = None
+        
         try:
+            # Preparar metadata
             metadata_cloudinary = {
                 'id_certificado': id_certificado,
                 'id_estudiante': id_estudiante_autenticado,
                 'id_proyecto': request.id_proyecto,
                 'id_evento': id_evento,
+                'fecha_generacion': datetime.now(timezone.utc).isoformat(),
                 'estudiante': f"{datos_estudiante.nombres} {datos_estudiante.apellidos}",
-                'tipo': 'autogenerado'
+                'identificacion': datos_estudiante.identificacion,
+                'tipo': 'autogenerado',
+                'proyecto': datos_proyecto.titulo_proyecto,
+                'evento': datos_evento.nombre_evento
             }
             
-            pdf_buffer.seek(0)
-            resultado_cloudinary = await self.pdf_service.subir_certificado(
-                pdf_buffer=pdf_buffer,
-                nombre_archivo=nombre_archivo,
-                metadata=metadata_cloudinary
+            # ✅ CREAR UN NUEVO BUFFER CON EL CONTENIDO
+            pdf_buffer_cloudinary = BytesIO(pdf_content)
+            
+            # ✅ Subir como lote de un solo certificado
+            resultado_cloudinary = await self.pdf_service.subir_lote_certificados(
+                certificados=[{
+                    'buffer': pdf_buffer_cloudinary,  # ✅ BUFFER NUEVO
+                    'nombre': nombre_archivo,
+                    'estudiante': datos_estudiante.__dict__
+                }],
+                nombre_lote=id_certificado,
+                metadata_comun=metadata_cloudinary
             )
             
-            if resultado_cloudinary and resultado_cloudinary.get('type') == 'cloudinary':
+            # Verificar resultado y extraer URL
+            if resultado_cloudinary and resultado_cloudinary.get('tipo') == 'cloudinary':
                 cloudinary_info = resultado_cloudinary
-                logger.info(f"☁️ Certificado subido a Cloudinary")
                 
+                # Extraer URL del primer certificado
+                if cloudinary_info.get('certificados') and len(cloudinary_info['certificados']) > 0:
+                    url_descarga_cloudinary = cloudinary_info['certificados'][0].get('url')
+                    logger.info(f"☁️ Certificado subido a Cloudinary: {url_descarga_cloudinary}")
+                else:
+                    logger.warning(f"⚠️ Respuesta de Cloudinary sin URL")
+            else:
+                logger.warning(f"⚠️ Cloudinary no configurado - usando almacenamiento local")
+                    
         except Exception as e:
             logger.error(f"❌ Error subiendo a Cloudinary: {str(e)}")
+            logger.exception(e)
+            logger.warning(f"⚠️ Continuando con almacenamiento local solamente")
         
-        # Generar URL de descarga
+        # ✅ 6. GENERAR URL DE DESCARGA
         base_url = self._obtener_base_url()
         
-        # ✅ Usar URL de Cloudinary si está disponible
-        if cloudinary_info:
-            url_descarga = cloudinary_info.get('secure_url', f"{base_url}/estudiante/certificados/descargar/{id_certificado}")
+        # Prioridad: URL de Cloudinary > URL local
+        if url_descarga_cloudinary:
+            url_descarga = url_descarga_cloudinary
+            logger.info(f"🔗 Usando URL de Cloudinary")
         else:
-            url_descarga = f"{base_url}/estudiante/certificados/descargar/{id_certificado}"
+            url_descarga = f"{base_url}/api/v1/estudiante/certificados/descargar/{id_certificado}"
+            logger.info(f"🔗 Usando URL local: {url_descarga}")
         
-        # Guardar metadata con timezone
+        # ✅ 7. GUARDAR METADATA CON TIMEZONE
         fecha_generacion = datetime.now(timezone.utc)
         fecha_expiracion = fecha_generacion + timedelta(days=7)
         
+        # ✅ 8. GUARDAR EN FIREBASE
         metadata = {
             'id_certificado': id_certificado,
             'id_estudiante': id_estudiante_autenticado,
             'id_proyecto': request.id_proyecto,
             'id_evento': id_evento,
             'nombre_archivo': nombre_archivo,
-            'ruta_archivo': ruta_archivo,
+            'ruta_archivo': url_descarga_cloudinary if url_descarga_cloudinary else ruta_archivo_local,
             'tamano_bytes': tamano_bytes,
             'fecha_generacion': fecha_generacion,
             'fecha_expiracion': fecha_expiracion,
             'estado': EstadoCertificadoEnum.DISPONIBLE,
             'enviado_correo': False,
-            # ✅ Información de Cloudinary
             'cloudinary': {
-                'subido': cloudinary_info is not None and cloudinary_info.get('type') == 'cloudinary',
-                'url': cloudinary_info.get('secure_url') if cloudinary_info else None,
-                'public_id': cloudinary_info.get('public_id') if cloudinary_info else None
+                'subido': cloudinary_info is not None and cloudinary_info.get('tipo') == 'cloudinary',
+                'url': url_descarga_cloudinary,
+                'tipo': cloudinary_info.get('tipo', 'local') if cloudinary_info else 'local'
             }
         }
         
         await self.certificate_repo.guardar_certificado_individual(metadata)
         
-        # Enviar por correo si se solicita
+        logger.info(f"✅ Certificado autogenerado guardado en Firebase")
+        
+        # ✅ 9. ENVIAR POR CORREO SI SE SOLICITA
         enviado_correo = False
         correo_destino = None
         
         if request.enviar_por_correo:
             try:
+                # ✅ CREAR OTRO BUFFER NUEVO PARA EL CORREO
+                pdf_buffer_correo = BytesIO(pdf_content)
+                
                 await self._enviar_certificado_por_correo(
-                    pdf_buffer,
+                    pdf_buffer_correo,
                     nombre_archivo,
                     datos_estudiante.correo,
                     datos_estudiante.nombres
@@ -704,9 +811,14 @@ class CertificateService:
                     id_certificado,
                     True
                 )
+                
+                logger.info(f"📧 Certificado enviado por correo a: {correo_destino}")
+                
             except Exception as e:
-                logger.error(f"Error enviando certificado por correo: {str(e)}")
+                logger.error(f"❌ Error enviando certificado por correo: {str(e)}")
+                logger.exception(e)
         
+        # ✅ 10. PREPARAR RESPUESTA
         return {
             'id_certificado': id_certificado,
             'nombre_archivo': nombre_archivo,
@@ -721,7 +833,8 @@ class CertificateService:
             'expira_en': '7 días',
             'enviado_correo': enviado_correo,
             'correo_destino': correo_destino,
-            'cloudinary_subido': cloudinary_info is not None and cloudinary_info.get('type') == 'cloudinary'
+            'cloudinary_subido': cloudinary_info is not None and cloudinary_info.get('tipo') == 'cloudinary',
+            'tipo_descarga': 'cloudinary' if url_descarga_cloudinary else 'local'
         }
     
     async def enviar_certificados_por_correo(
