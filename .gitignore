@@ -80,6 +80,7 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
+firebase_credentials.json
 
 # =========================================
 # Archivos de pruebas
