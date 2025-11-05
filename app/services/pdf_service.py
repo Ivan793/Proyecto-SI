@@ -83,46 +83,84 @@ class PDFService:
         try:
             # Preparar opciones de upload
             upload_folder = folder or self.folder_certificados
-            public_id = nombre_archivo.replace('.pdf', '')
+            
+            # ✅ CORRECCIÓN CRÍTICA: Mantener la extensión del archivo
+            # Para archivos RAW (PDF, ZIP, etc), Cloudinary NO agrega extensión automáticamente
+            # Debemos quitar SOLO la extensión para el public_id, pero especificarla en format
+            
+            # Obtener nombre base y extensión
+            if '.' in nombre_archivo:
+                nombre_base, extension = nombre_archivo.rsplit('.', 1)
+                extension = extension.lower()
+            else:
+                nombre_base = nombre_archivo
+                extension = 'pdf'  # Por defecto
+            
+            # ✅ El public_id NO debe incluir la extensión
+            public_id = nombre_base
             
             upload_options = {
-                "resource_type": "raw",
+                "resource_type": "raw",  # ✅ IMPORTANTE: 'raw' para PDFs y ZIPs
                 "folder": upload_folder,
                 "public_id": public_id,
+                "format": extension,  # ✅ CRÍTICO: Especificar la extensión correcta
                 "tags": ["certificado", "academico", "exposoftware"],
-                "use_filename": True,
+                "use_filename": False,  # ✅ No usar el nombre original
                 "unique_filename": False,
+                "overwrite": False,  # ✅ No sobrescribir si ya existe
             }
             
             # Agregar metadata si existe
             if metadata:
-                upload_options["context"] = f"metadata={json.dumps(metadata)}"
+                # ✅ CLOUDINARY ACEPTA CONTEXT COMO STRING O DICT
+                # Usar formato pipe-separated para mejor compatibilidad
+                context_str = "|".join([f"{k}={v}" for k, v in metadata.items()])
+                upload_options["context"] = context_str
+            
+            # ✅ ASEGURAR QUE EL BUFFER ESTÉ AL INICIO
+            pdf_buffer.seek(0)
+            pdf_bytes = pdf_buffer.read()
+            
+            # ✅ VERIFICAR QUE NO ESTÉ VACÍO
+            if len(pdf_bytes) == 0:
+                raise ValueError("El buffer del PDF está vacío")
+            
+            logger.info(f"📤 Subiendo archivo a Cloudinary: {nombre_archivo} ({len(pdf_bytes)} bytes)")
+            
+            # ✅ CREAR UN NUEVO BUFFER PARA LA SUBIDA
+            upload_buffer = BytesIO(pdf_bytes)
             
             # Subir archivo
-            pdf_buffer.seek(0)
             result = cloudinary.uploader.upload(
-                pdf_buffer,
+                upload_buffer,
                 **upload_options
             )
             
-            logger.info(f"✅ Certificado subido a Cloudinary: {result['public_id']}")
+            # ✅ LOG PARA VERIFICAR
+            logger.info(f"✅ Archivo subido a Cloudinary exitosamente")
+            logger.info(f"   📋 Public ID: {result['public_id']}")
+            logger.info(f"   🔗 Secure URL: {result['secure_url']}")
+            logger.info(f"   📦 Bytes: {result['bytes']}")
+            logger.info(f"   📄 Format: {result.get('format', 'N/A')}")
+            logger.info(f"   🗂️ Resource Type: {result['resource_type']}")
             
             return {
                 'public_id': result['public_id'],
-                'secure_url': result['secure_url'],
+                'secure_url': result['secure_url'],  # ✅ ESTA ES LA URL IMPORTANTE
                 'url': result['url'],
-                'format': result.get('format', 'pdf'),
+                'format': result.get('format', extension),
                 'bytes': result['bytes'],
                 'created_at': result['created_at'],
                 'resource_type': result['resource_type'],
                 'folder': result.get('folder', upload_folder),
                 'version': result.get('version'),
                 'signature': result.get('signature'),
-                'type': 'cloudinary'
+                'type': 'cloudinary'  # ✅ IMPORTANTE: Marcar como cloudinary
             }
             
         except Exception as e:
             logger.error(f"❌ Error subiendo certificado a Cloudinary: {str(e)}")
+            logger.exception(e)
             # Fallback: simular subida
             return self._simular_subida(pdf_buffer, nombre_archivo, metadata)
     
@@ -433,10 +471,10 @@ class PDFService:
         content = pdf_buffer.read()
         
         return {
-            'public_id': f"local_{nombre_archivo.replace('.pdf', '')}",
+            'public_id': f"local_{nombre_archivo.replace('.pdf', '').replace('.zip', '')}",
             'secure_url': f"/api/certificados/local/{nombre_archivo}",
             'url': f"/api/certificados/local/{nombre_archivo}",
-            'format': 'pdf',
+            'format': 'pdf' if nombre_archivo.endswith('.pdf') else 'zip',
             'bytes': len(content),
             'created_at': datetime.now().isoformat(),
             'resource_type': 'raw',
@@ -457,7 +495,7 @@ class PDFService:
         for cert in certificados:
             resultados.append({
                 'nombre_archivo': cert['nombre'],
-                'public_id': f"local_{cert['nombre'].replace('.pdf', '')}",
+                'public_id': f"local_{cert['nombre'].replace('.pdf', '').replace('.zip', '')}",
                 'url': f"/api/certificados/local/{cert['nombre']}",
                 'estudiante': cert.get('estudiante', {}),
                 'exitoso': True,
@@ -474,6 +512,7 @@ class PDFService:
             'fecha_subida': datetime.now().isoformat(),
             'tipo': 'local'
         }
+
 
 # Instancia global del servicio
 pdf_service = PDFService()
