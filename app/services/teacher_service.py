@@ -642,3 +642,32 @@ class TeacherService:
         except Exception as e:
             logger.error(f"Error listando todos los proyectos públicos: {str(e)}")
             raise DatabaseException("Error al listar los proyectos públicos")
+
+
+    async def get_teacher_with_user(self, teacher_id: str) -> TeacherWithFullUserResponse:
+        try:
+            teacher = await self.teacher_repo.get_by_id(teacher_id)
+            if not teacher:
+                raise TeacherNotFoundException(teacher_id)
+
+            user_id = teacher.get("id_usuario")
+            if not user_id:
+                raise ValidationException("Docente no tiene usuario asociado")
+
+            user = await self.user_repo.get_by_id(user_id)
+            if not user:
+                raise UserNotFoundException(user_id)
+
+            teacher_info = TeacherResponse(**teacher)
+
+            return TeacherWithFullUserResponse(
+                docente=TeacherResponse(**teacher),
+                usuario=teacher_info
+            )
+
+        except (TeacherNotFoundException, UserNotFoundException, ValidationException) as e:
+            logger.warning(f"Error obteniendo docente con usuario {teacher_id}: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Error inesperado obteniendo docente con usuario {teacher_id}: {str(e)}")
+            raise DatabaseException("Error al obtener información completa del docente")

@@ -58,7 +58,7 @@ wheels/
 .env
 .env.local
 .env.*.local
-serviceAccountKey.json
+firebase_credentials.json
 *-firebase-adminsdk-*.json
 *.firebase.json
 *.key.json

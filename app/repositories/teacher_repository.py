@@ -20,3 +20,13 @@ class TeacherRepository(BaseRepository):
 
     async def get_teacher_by_user_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         return await self.get_by_field("id_usuario", user_id)
+    
+    # async def get_teacher_by_user_id2(self, user_id: str):
+    #     """
+    #     Busca un profesor por su ID de usuario asociado.
+    #     """
+    #     query = self.collection.where("user_id", "==", user_id)
+    #     results = await query.get()
+    #     if not results:
+    #         return None
+    #     return results[0].to_dict(), "Perfil actualizado correctamente"
