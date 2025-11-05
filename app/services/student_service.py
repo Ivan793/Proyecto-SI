@@ -196,7 +196,8 @@ class StudentService:
             "id_usuario": user_id,
             "codigo_programa": student_data.codigo_programa,
             "semestre": student_data.semestre,
-            "anio_ingreso": student_data.anio_ingreso
+            "anio_ingreso": student_data.anio_ingreso,
+            "periodo": student_data.periodo,
         }
         
         return await self.student_repo.create(student_dict)

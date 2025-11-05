@@ -6,7 +6,6 @@ from app.schemas.types import ReasonText
 from app.services.student_service import StudentService
 from app.schemas.student import (
     StudentCreateWithUser,
-    StudentCreateWithExistingUser, 
     StudentUpdate, 
     StudentResponse
 )

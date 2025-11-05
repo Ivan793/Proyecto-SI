@@ -8,18 +8,16 @@ class StudentBase(BaseModel):
     codigo_programa: ProgramCode
     semestre: Semester
     anio_ingreso: YearOfEntry
+    periodo: period
 
 class StudentCreateWithUser(BaseModel):
     usuario: UserCreate
     codigo_programa: ProgramCode
     semestre: Semester
     anio_ingreso: YearOfEntry
+    periodo: period
+    model_config = ConfigDict(from_attributes=True)
 
-class StudentCreateWithExistingUser(BaseModel):
-    id_usuario: UserId
-    codigo_programa: ProgramCode
-    semestre: Semester
-    anio_ingreso: YearOfEntry
 
 class StudentUpdate(BaseModel):
     codigo_programa: Optional[ProgramCode] = None
@@ -46,6 +44,7 @@ class StudentWithUserResponse(BaseModel):
                     "codigo_programa": "ING02",
                     "semestre": 3,
                     "anio_ingreso": 2023,
+                    "periodo": 2,
                     "created_at": "2024-01-15T10:30:00",
                     "updated_at": "2024-01-15T10:30:00"
                 },

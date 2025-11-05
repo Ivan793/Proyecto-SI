@@ -237,6 +237,14 @@ YearOfEntry = Annotated[
     )
 ]
 
+period = Annotated[
+    int,
+    Field(
+        ge=1, le=2,
+        description= "periodo académico que ingreso el usuario a la institución es 1 o 2."
+    )
+]
+
 # ==================== TIPOS DE EGRESADO ====================
 
 GraduateId = Annotated[

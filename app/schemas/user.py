@@ -65,6 +65,7 @@ class UserBase(BaseModel, UserValidatorMixin):
                 "direccion_residencia": "Calle 45 #22-10, Barrio San Jose",
                 "telefono": "+57301343343",
                 "correo": "david.rodriguez@unicesar.edu.co",
+                "contraseña" : "Prueba123#",
                 "rol": Role.ESTUDIANTE,
                 "activo": True,
                 "razon_desactivacion": None
