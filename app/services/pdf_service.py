@@ -84,17 +84,28 @@ class PDFService:
             # Preparar opciones de upload
             upload_folder = folder or self.folder_certificados
             
-            # ✅ CRÍTICO: No quitar la extensión .pdf del public_id
-            public_id = nombre_archivo if nombre_archivo.endswith('.pdf') else f"{nombre_archivo}.pdf"
-            public_id = public_id.replace('.pdf', '')  # Cloudinary agrega la extensión automáticamente
+            # ✅ CORRECCIÓN CRÍTICA: Mantener la extensión del archivo
+            # Para archivos RAW (PDF, ZIP, etc), Cloudinary NO agrega extensión automáticamente
+            # Debemos quitar SOLO la extensión para el public_id, pero especificarla en format
+            
+            # Obtener nombre base y extensión
+            if '.' in nombre_archivo:
+                nombre_base, extension = nombre_archivo.rsplit('.', 1)
+                extension = extension.lower()
+            else:
+                nombre_base = nombre_archivo
+                extension = 'pdf'  # Por defecto
+            
+            # ✅ El public_id NO debe incluir la extensión
+            public_id = nombre_base
             
             upload_options = {
-                "resource_type": "raw",  # ✅ IMPORTANTE: 'raw' para PDFs
+                "resource_type": "raw",  # ✅ IMPORTANTE: 'raw' para PDFs y ZIPs
                 "folder": upload_folder,
                 "public_id": public_id,
-                "format": "pdf",  # ✅ NUEVO: Especificar formato explícitamente
+                "format": extension,  # ✅ CRÍTICO: Especificar la extensión correcta
                 "tags": ["certificado", "academico", "exposoftware"],
-                "use_filename": True,
+                "use_filename": False,  # ✅ No usar el nombre original
                 "unique_filename": False,
                 "overwrite": False,  # ✅ No sobrescribir si ya existe
             }
@@ -114,7 +125,7 @@ class PDFService:
             if len(pdf_bytes) == 0:
                 raise ValueError("El buffer del PDF está vacío")
             
-            logger.info(f"📤 Subiendo PDF a Cloudinary: {len(pdf_bytes)} bytes")
+            logger.info(f"📤 Subiendo archivo a Cloudinary: {nombre_archivo} ({len(pdf_bytes)} bytes)")
             
             # ✅ CREAR UN NUEVO BUFFER PARA LA SUBIDA
             upload_buffer = BytesIO(pdf_bytes)
@@ -126,7 +137,7 @@ class PDFService:
             )
             
             # ✅ LOG PARA VERIFICAR
-            logger.info(f"✅ Certificado subido a Cloudinary exitosamente")
+            logger.info(f"✅ Archivo subido a Cloudinary exitosamente")
             logger.info(f"   📋 Public ID: {result['public_id']}")
             logger.info(f"   🔗 Secure URL: {result['secure_url']}")
             logger.info(f"   📦 Bytes: {result['bytes']}")
@@ -137,7 +148,7 @@ class PDFService:
                 'public_id': result['public_id'],
                 'secure_url': result['secure_url'],  # ✅ ESTA ES LA URL IMPORTANTE
                 'url': result['url'],
-                'format': result.get('format', 'pdf'),
+                'format': result.get('format', extension),
                 'bytes': result['bytes'],
                 'created_at': result['created_at'],
                 'resource_type': result['resource_type'],
@@ -460,10 +471,10 @@ class PDFService:
         content = pdf_buffer.read()
         
         return {
-            'public_id': f"local_{nombre_archivo.replace('.pdf', '')}",
+            'public_id': f"local_{nombre_archivo.replace('.pdf', '').replace('.zip', '')}",
             'secure_url': f"/api/certificados/local/{nombre_archivo}",
             'url': f"/api/certificados/local/{nombre_archivo}",
-            'format': 'pdf',
+            'format': 'pdf' if nombre_archivo.endswith('.pdf') else 'zip',
             'bytes': len(content),
             'created_at': datetime.now().isoformat(),
             'resource_type': 'raw',
@@ -484,7 +495,7 @@ class PDFService:
         for cert in certificados:
             resultados.append({
                 'nombre_archivo': cert['nombre'],
-                'public_id': f"local_{cert['nombre'].replace('.pdf', '')}",
+                'public_id': f"local_{cert['nombre'].replace('.pdf', '').replace('.zip', '')}",
                 'url': f"/api/certificados/local/{cert['nombre']}",
                 'estudiante': cert.get('estudiante', {}),
                 'exitoso': True,
@@ -502,7 +513,6 @@ class PDFService:
             'tipo': 'local'
         }
 
-    
 
 # Instancia global del servicio
 pdf_service = PDFService()
