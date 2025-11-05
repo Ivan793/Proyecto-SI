@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, status, Query, Request
+from fastapi import APIRouter, HTTPException, status, Query, Request, Depends
 import logging
-
+from app.dependencies.auth_dependencies import get_current_user_from_token
 from app.services.graduate_service import GraduateService
 from app.schemas.graduate import GraduateCreate, GraduateUpdate
 from app.utils.responses import (
@@ -60,7 +60,7 @@ async def get_all_graduates(request: Request):
     try:
         graduates, _ = await graduate_service.get_all_graduates()
         return success_response(
-            data=graduates,  # ✅ ahora viene como lista de {"egresado": {}, "usuario": {}}
+            data=graduates,
             message="Egresados obtenidos exitosamente"
         )
     except Exception as e:
@@ -78,7 +78,7 @@ async def get_graduate(request: Request, graduate_id: str):
     try:
         result = await graduate_service.get_graduate(graduate_id)
         return success_response(
-            data=result,  # ✅ ya es un dict con {"egresado": {...}, "usuario": {...}}
+            data=result, 
             message="Egresado obtenido exitosamente"
         )
     except HTTPException as e:
@@ -101,7 +101,7 @@ async def update_graduate(
     try:
         result = await graduate_service.update_graduate(graduate_id, graduate_data)
         return updated_response(
-            data=result,  # ✅ retorna {"egresado": {...}, "usuario": {...}}
+            data=result, 
             message="Egresado actualizado exitosamente"
         )
     except HTTPException as e:
