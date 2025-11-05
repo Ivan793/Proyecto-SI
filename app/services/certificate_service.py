@@ -7,7 +7,7 @@ import os
 import uuid
 import zipfile
 import logging
-
+import requests 
 from app.services.certificate_generator import CertificateGenerator
 from app.services.email_service import EmailService
 from app.services.pdf_service import pdf_service  # ✅ NUEVO: Importar servicio de Cloudinary
@@ -375,7 +375,7 @@ class CertificateService:
         metadata_certificado = {
             'id_certificado': id_lote,
             'id_lote': id_lote,
-            'id_estudiante': uids_estudiantes,
+            'id_estudiante': uids_estudiantes,  # Array de UIDs
             'id_proyecto': request.id_proyecto,
             'id_evento': id_evento,
             'nombre_archivo': nombre_archivo_final,
@@ -383,6 +383,17 @@ class CertificateService:
             'fecha_generacion': fecha_generacion,
             'fecha_expiracion': fecha_expiracion,
             'estado': EstadoCertificadoEnum.DISPONIBLE,
+            # ✅ AGREGAR ESTE CAMPO CON LA INFO COMPLETA DE ESTUDIANTES
+            'estudiantes': [
+                {
+                    'id_estudiante': est.id_estudiante,
+                    'nombre_completo': est.nombre_completo,
+                    'identificacion': est.identificacion,
+                    'nombre_archivo_certificado': est.nombre_archivo_certificado
+                }
+                for est in estudiantes_info
+            ],
+            'cantidad_certificados': len(certificados_generados),
             'cloudinary': {
                 'subido': cloudinary_info is not None and cloudinary_info.get('tipo') == 'cloudinary',
                 'url': url_descarga_cloudinary,
@@ -843,7 +854,9 @@ class CertificateService:
     ) -> Dict[str, Any]:
         """
         Envía certificados por correo electrónico desde un lote generado previamente.
-        """
+        Soporta descarga desde Cloudinary si el archivo local no existe.
+        """ 
+        
         try:
             logger.info(f"📧 Iniciando envío de certificados - Lote: {request.id_lote}")
             
@@ -853,7 +866,37 @@ class CertificateService:
             if not lote:
                 raise ValueError(f"Lote de certificados {request.id_lote} no encontrado")
             
-            logger.info(f"📦 Lote encontrado: {lote.get('cantidad_certificados', 0)} certificados")
+            cantidad_certificados = lote.get('cantidad_certificados', 0)
+            student_ids = lote.get('id_estudiante', [])  # IDs de estudiantes
+            
+            logger.info(f"📦 Lote encontrado: {cantidad_certificados} certificados")
+            logger.info(f"👥 IDs de estudiantes en lote: {len(student_ids)}")
+            
+            # ✅ VERIFICAR QUE HAYA ESTUDIANTES
+            if not student_ids:
+                raise ValueError("El lote no contiene información de estudiantes. Regenere el lote.")
+            
+            # ✅ OBTENER INFORMACIÓN COMPLETA DE CADA ESTUDIANTE
+            estudiantes_completos = []
+            for student_id in student_ids:
+                try:
+                    estudiante_info = await self._obtener_datos_estudiante(student_id)
+                    estudiantes_completos.append({
+                        'id_estudiante': student_id,
+                        'nombre_completo': f"{estudiante_info.nombres} {estudiante_info.apellidos}",
+                        'identificacion': estudiante_info.identificacion,
+                        'correo': estudiante_info.correo,
+                        'nombre_archivo_certificado': self.generator.obtener_nombre_archivo(estudiante_info)
+                    })
+                    logger.info(f"✅ Estudiante encontrado: {estudiante_info.nombres} {estudiante_info.apellidos} - {estudiante_info.correo}")
+                except Exception as e:
+                    logger.error(f"❌ Error obteniendo datos del estudiante {student_id}: {str(e)}")
+                    continue
+            
+            if not estudiantes_completos:
+                raise ValueError("No se pudo obtener información de ningún estudiante")
+            
+            logger.info(f"👥 Estudiantes con información completa: {len(estudiantes_completos)}")
             
             # 2. Verificar que no haya expirado
             if lote.get('fecha_expiracion'):
@@ -864,59 +907,104 @@ class CertificateService:
                 if datetime.now(timezone.utc) > fecha_exp:
                     raise ValueError("El lote de certificados ha expirado")
             
-            # 3. Verificar que exista el archivo ZIP
+            # 3. Obtener archivo ZIP (local o desde Cloudinary)
             ruta_zip = lote.get('ruta_archivo')
+            archivo_temporal = None
+            
+            # ✅ SI NO EXISTE LOCALMENTE, DESCARGAR DE CLOUDINARY
             if not ruta_zip or not os.path.exists(ruta_zip):
-                raise ValueError("Archivo de certificados no encontrado")
+                logger.warning(f"⚠️ Archivo local no encontrado: {ruta_zip}")
+                
+                url_cloudinary = lote.get('cloudinary', {}).get('url')
+                
+                if not url_cloudinary:
+                    raise ValueError("No se encontró URL de Cloudinary. El archivo no está disponible.")
+                
+                logger.info(f"☁️ Descargando desde Cloudinary: {url_cloudinary}")
+                
+                try:
+                    response = requests.get(url_cloudinary, timeout=30)
+                    response.raise_for_status()
+                    
+                    # Guardar temporalmente
+                    archivo_temporal = os.path.join(
+                        self.directorio_certificados,
+                        f"temp_{request.id_lote}.zip"
+                    )
+                    
+                    with open(archivo_temporal, 'wb') as f:
+                        f.write(response.content)
+                    
+                    ruta_zip = archivo_temporal
+                    logger.info(f"✅ Archivo descargado exitosamente ({len(response.content)} bytes)")
+                    
+                except requests.RequestException as e:
+                    logger.error(f"❌ Error descargando de Cloudinary: {str(e)}")
+                    raise ValueError(f"No se pudo descargar el archivo de certificados: {str(e)}")
+            else:
+                logger.info(f"📁 Usando archivo local: {ruta_zip}")
             
-            logger.info(f"📁 Archivo encontrado: {ruta_zip}")
-            
-            # 4. Extraer certificados del ZIP
+            # 4. Extraer y preparar certificados
             certificados_para_enviar = []
-            estudiantes_en_lote = lote.get('estudiantes', [])
             
-            with zipfile.ZipFile(ruta_zip, 'r') as zip_file:
-                for estudiante_info in estudiantes_en_lote:
+            try:
+                with zipfile.ZipFile(ruta_zip, 'r') as zip_file:
+                    archivos_en_zip = zip_file.namelist()
+                    logger.info(f"📋 Archivos en ZIP: {len(archivos_en_zip)} - {archivos_en_zip[:3]}...")
+                    
+                    for estudiante_info in estudiantes_completos:
+                        try:
+                            nombre_archivo = estudiante_info.get('nombre_archivo_certificado')
+                            nombre_completo = estudiante_info.get('nombre_completo', 'Estudiante')
+                            correo_estudiante = estudiante_info.get('correo')
+                            
+                            if not nombre_archivo:
+                                logger.warning(f"⚠️ {nombre_completo} sin nombre de archivo")
+                                continue
+                            
+                            if not correo_estudiante:
+                                logger.warning(f"⚠️ {nombre_completo} sin correo electrónico")
+                                continue
+                            
+                            # Verificar que existe en el ZIP
+                            if nombre_archivo not in archivos_en_zip:
+                                logger.warning(f"⚠️ Archivo no encontrado en ZIP: {nombre_archivo}")
+                                continue
+                            
+                            # Leer PDF
+                            pdf_content = zip_file.read(nombre_archivo)
+                            logger.info(f"✅ Leído: {nombre_archivo} ({len(pdf_content)} bytes)")
+                            
+                            certificados_para_enviar.append({
+                                'correo': correo_estudiante,
+                                'nombre': nombre_completo,
+                                'nombre_archivo': nombre_archivo,
+                                'contenido': pdf_content
+                            })
+                            
+                            logger.info(f"✅ Preparado: {nombre_completo} → {correo_estudiante}")
+                            
+                        except Exception as e:
+                            logger.error(f"❌ Error procesando {estudiante_info.get('nombre_completo')}: {str(e)}")
+                            continue
+                            
+            except zipfile.BadZipFile:
+                raise ValueError("El archivo no es un ZIP válido o está corrupto")
+            finally:
+                # Limpiar archivo temporal
+                if archivo_temporal and os.path.exists(archivo_temporal):
                     try:
-                        nombre_archivo = estudiante_info.get('nombre_archivo_certificado')
-                        
-                        if not nombre_archivo:
-                            logger.warning(f"⚠️ Estudiante sin nombre de archivo: {estudiante_info}")
-                            continue
-                        
-                        # Leer el PDF del ZIP
-                        pdf_content = zip_file.read(nombre_archivo)
-                        
-                        # Obtener datos del estudiante para el correo
-                        nombre_completo = estudiante_info.get('nombre_completo', 'Estudiante')
-                        identificacion = estudiante_info.get('identificacion')
-                        
-                        # Buscar el correo del estudiante
-                        correo_estudiante = await self._obtener_correo_estudiante(identificacion)
-                        
-                        if not correo_estudiante:
-                            logger.warning(f"⚠️ No se encontró correo para {nombre_completo}")
-                            continue
-                        
-                        certificados_para_enviar.append({
-                            'correo': correo_estudiante,
-                            'nombre': nombre_completo,
-                            'nombre_archivo': nombre_archivo,
-                            'contenido': pdf_content
-                        })
-                        
-                        logger.info(f"✅ Preparado para {nombre_completo}: {correo_estudiante}")
-                        
-                    except Exception as e:
-                        logger.error(f"❌ Error extrayendo certificado para {estudiante_info.get('nombre_completo', 'desconocido')}: {str(e)}")
-                        continue
+                        os.remove(archivo_temporal)
+                        logger.info("🗑️ Archivo temporal eliminado")
+                    except:
+                        pass
             
             if not certificados_para_enviar:
-                raise ValueError("No se encontraron certificados válidos para enviar")
+                raise ValueError("No se pudieron preparar certificados para envío")
             
-            logger.info(f"📬 {len(certificados_para_enviar)} certificados listos para envío")
+            logger.info(f"📬 {len(certificados_para_enviar)} certificados listos")
             
-            # 5. Enviar certificados usando el servicio de email
+            # 5. Enviar certificados
             asunto = request.asunto or "Tu Certificado de Participación - ExpoSoftware"
             
             resultado_envio = await self.email_service.enviar_certificados_masivo(
@@ -925,16 +1013,15 @@ class CertificateService:
                 mensaje_personalizado=request.mensaje_personalizado
             )
             
-            # 6. Actualizar estado del lote
+            # 6. Actualizar estado
             if resultado_envio['exitosos'] > 0:
                 await self.certificate_repo.actualizar_estado(
                     request.id_lote,
                     EstadoCertificadoEnum.ENVIADO
                 )
             
-            logger.info(f"✅ Envío completado: {resultado_envio['exitosos']}/{resultado_envio['total']} exitosos")
+            logger.info(f"✅ Envío completado: {resultado_envio['exitosos']}/{resultado_envio['total']}")
             
-            # 7. Preparar respuesta
             return {
                 'id_lote': request.id_lote,
                 'total_certificados': resultado_envio['total'],
@@ -947,7 +1034,22 @@ class CertificateService:
             
         except Exception as e:
             logger.error(f"❌ Error en envío de certificados: {str(e)}")
+            logger.exception(e)
             raise
+
+    def _obtener_nombre_archivo_desde_estudiante(self, estudiante_info: dict) -> str:
+        """
+        Genera el nombre del archivo del certificado basado en la información del estudiante.
+        """
+        nombres = estudiante_info.get('nombres', '').replace(' ', '_')
+        apellidos = estudiante_info.get('apellidos', '').replace(' ', '_')
+        identificacion = estudiante_info.get('identificacion', '')
+        
+        nombre_archivo = f"certificado_{nombres}_{apellidos}_{identificacion}.pdf".lower()
+        # Limpiar caracteres especiales
+        nombre_archivo = ''.join(c for c in nombre_archivo if c.isalnum() or c in ['_', '.', '-'])
+        
+        return nombre_archivo
 
     async def _enviar_certificado_por_correo(
         self,
