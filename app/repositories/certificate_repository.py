@@ -35,7 +35,7 @@ class CertificateRepository(BaseRepository):
             ID del lote guardado
         """
         try:
-            id_lote = datos_lote.get('id_lote')
+            id_lote = datos_lote.get('id_certificado')  # ✅ Cambiar a id_certificado
             
             # Guardar en Firestore
             doc_ref = self._db.collection(self.lotes_collection).document(id_lote)
