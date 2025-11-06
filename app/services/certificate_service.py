@@ -1305,54 +1305,42 @@ class CertificateService:
     ) -> tuple[str, BytesIO]:
         """
         Obtiene un lote completo de certificados para descarga.
-        ✅ CORREGIDO: Verificación más flexible para lotes en producción
+        ✅ CORREGIDO para AWS Lambda - Manejo robusto de buffers y conexiones
         """
         
         try:
-            logger.info(f"🔍 [LOTE] Buscando lote para descarga: {id_lote}")
+            logger.info(f"🔍 [LOTE LAMBDA] Iniciando descarga para: {id_lote}")
             
             # Buscar el lote en la base de datos
             lote = await self.certificate_repo.obtener_por_id(id_lote)
             
             if not lote:
-                logger.error(f"❌ [LOTE] Lote {id_lote} no encontrado en la base de datos")
+                logger.error(f"❌ [LOTE LAMBDA] Lote {id_lote} no encontrado en BD")
                 raise ValueError("El lote de certificados no existe o ha expirado")
             
-            # ✅ CORRECCIÓN: Log detallado para diagnóstico
-            logger.info(f"📋 [LOTE] Estructura del lote encontrado:")
-            logger.info(f"   - id_lote: {lote.get('id_lote')}")
-            logger.info(f"   - id_certificado: {lote.get('id_certificado')}")
-            logger.info(f"   - cantidad_certificados: {lote.get('cantidad_certificados')}")
-            logger.info(f"   - estudiantes: {len(lote.get('estudiantes', []))}")
-            logger.info(f"   - id_estudiante: {lote.get('id_estudiante')}")
-            logger.info(f"   - cloudinary.subido: {lote.get('cloudinary', {}).get('subido', False)}")
+            logger.info(f"✅ [LOTE LAMBDA] Lote encontrado: {lote.get('id_lote')}")
             
-            # ✅ CORRECCIÓN: Verificación más flexible para lotes
-            # Un lote puede identificarse por múltiples criterios:
+            # ✅ CORRECCIÓN: Verificación más robusta para Lambda
             cantidad_certificados = lote.get('cantidad_certificados', 0)
             estudiantes_count = len(lote.get('estudiantes', []))
             id_estudiantes_count = len(lote.get('id_estudiante', [])) if isinstance(lote.get('id_estudiante'), list) else 0
             
-            # Criterios para identificar un lote (OR lógico)
+            # Criterios para identificar un lote
             es_lote = (
-                lote.get('id_lote') is not None or  # Tiene campo id_lote
-                cantidad_certificados > 1 or  # Tiene múltiples certificados
-                estudiantes_count > 1 or  # Tiene múltiples estudiantes en la lista
-                id_estudiantes_count > 1 or  # Tiene múltiples IDs de estudiantes
-                (id_lote.startswith('CERT_') and  # ID comienza con CERT_
-                not id_lote.startswith('CERT_IND_') and  # No es individual
-                not id_lote.startswith('CERT_EST_'))  # No es autogenerado
+                lote.get('id_lote') is not None or
+                cantidad_certificados > 1 or
+                estudiantes_count > 1 or
+                id_estudiantes_count > 1 or
+                (id_lote.startswith('CERT_') and 
+                not id_lote.startswith('CERT_IND_') and 
+                not id_lote.startswith('CERT_EST_'))
             )
             
             if not es_lote:
-                logger.error(f"❌ [LOTE] {id_lote} identificado como certificado individual")
-                logger.error(f"    - cantidad_certificados: {cantidad_certificados}")
-                logger.error(f"    - estudiantes_count: {estudiantes_count}")
-                logger.error(f"    - id_estudiantes_count: {id_estudiantes_count}")
-                logger.error(f"    - id_lote field: {lote.get('id_lote')}")
+                logger.error(f"❌ [LOTE LAMBDA] {id_lote} identificado como certificado individual")
                 raise ValueError("ID corresponde a un certificado individual, no a un lote")
             
-            logger.info(f"✅ [LOTE] {id_lote} validado como lote con {cantidad_certificados} certificados")
+            logger.info(f"✅ [LOTE LAMBDA] Validado como lote con {cantidad_certificados} certificados")
             
             # Verificar expiración
             if lote.get('fecha_expiracion'):
@@ -1362,48 +1350,108 @@ class CertificateService:
                     fecha_exp = datetime.fromisoformat(fecha_exp.replace('Z', '+00:00'))
                 
                 if datetime.now(timezone.utc) > fecha_exp:
-                    logger.error(f"❌ [LOTE] Lote {id_lote} ha expirado")
+                    logger.error(f"❌ [LOTE LAMBDA] Lote {id_lote} ha expirado")
                     raise ValueError("El enlace de descarga ha expirado")
             
             nombre_archivo = lote.get('nombre_archivo', f"certificados_{id_lote}.zip")
-            logger.info(f"📁 [LOTE] Nombre archivo: {nombre_archivo}")
+            logger.info(f"📁 [LOTE LAMBDA] Nombre archivo: {nombre_archivo}")
             
-            # ✅ PRIORIDAD 1: URL de Cloudinary
+            # ✅ PRIORIDAD 1: URL de Cloudinary (CON MANEJO MEJORADO PARA LAMBDA)
             cloudinary_info = lote.get('cloudinary', {})
             if cloudinary_info.get('subido') and cloudinary_info.get('url'):
-                logger.info(f"☁️ [LOTE] Descargando desde Cloudinary: {cloudinary_info['url']}")
+                logger.info(f"☁️ [LOTE LAMBDA] Descargando desde Cloudinary...")
+                
                 try:
-                    # Configurar timeout más largo para producción
-                    response = requests.get(cloudinary_info['url'], timeout=60)
+                    # ✅ CORRECCIÓN: Configuración optimizada para Lambda
+                    import requests
+                    
+                    # Crear sesión con configuración robusta
+                    session = requests.Session()
+                    
+                    # Configurar adapters para mejor manejo de conexiones
+                    http_adapter = requests.adapters.HTTPAdapter(
+                        pool_connections=2,
+                        pool_maxsize=2,
+                        max_retries=3,
+                        pool_block=False
+                    )
+                    session.mount('http://', http_adapter)
+                    session.mount('https://', http_adapter)
+                    
+                    # Headers específicos para Lambda
+                    headers = {
+                        'User-Agent': 'AWS-Lambda-ExpoSoftware',
+                        'Accept': '*/*',
+                        'Accept-Encoding': 'gzip, deflate'
+                    }
+                    
+                    # Realizar petición con timeout controlado
+                    response = session.get(
+                        cloudinary_info['url'],
+                        headers=headers,
+                        timeout=(10, 30),  # (connect_timeout, read_timeout)
+                        stream=True  # ✅ IMPORTANTE: Stream para archivos grandes
+                    )
+                    
                     response.raise_for_status()
                     
-                    zip_buffer = BytesIO(response.content)
-                    logger.info(f"✅ [LOTE] Descargado desde Cloudinary: {len(response.content)} bytes")
+                    # ✅ CORRECCIÓN: Crear buffer de manera eficiente
+                    zip_buffer = BytesIO()
+                    
+                    # Copiar contenido en chunks para evitar problemas de memoria
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            zip_buffer.write(chunk)
+                    
+                    # ✅ CRÍTICO: Posicionar buffer al inicio
+                    zip_buffer.seek(0)
+                    
+                    buffer_size = zip_buffer.getbuffer().nbytes
+                    logger.info(f"✅ [LOTE LAMBDA] Descargado desde Cloudinary: {buffer_size} bytes")
+                    
+                    # Verificar que el buffer no esté vacío
+                    if buffer_size == 0:
+                        logger.error("❌ [LOTE LAMBDA] Buffer vacío después de descarga")
+                        raise ValueError("El archivo descargado está vacío")
                     
                     return nombre_archivo, zip_buffer
                     
-                except requests.RequestException as e:
-                    logger.error(f"❌ [LOTE] Error descargando desde Cloudinary: {str(e)}")
+                except requests.exceptions.Timeout:
+                    logger.error(f"❌ [LOTE LAMBDA] Timeout descargando desde Cloudinary")
+                    # Continuar con siguiente opción
+                except requests.exceptions.RequestException as e:
+                    logger.error(f"❌ [LOTE LAMBDA] Error de conexión: {str(e)}")
+                    # Continuar con siguiente opción
+                except Exception as e:
+                    logger.error(f"❌ [LOTE LAMBDA] Error inesperado con Cloudinary: {str(e)}")
                     # Continuar con siguiente opción
             else:
-                logger.info(f"ℹ️ [LOTE] Cloudinary no disponible o no configurado")
+                logger.info(f"ℹ️ [LOTE LAMBDA] Cloudinary no disponible")
             
             # ✅ PRIORIDAD 2: Ruta local del archivo ZIP
             ruta_archivo = lote.get('ruta_archivo')
-            if ruta_archivo:
-                logger.info(f"📥 [LOTE] Intentando ruta local: {ruta_archivo}")
-                if os.path.exists(ruta_archivo):
-                    logger.info(f"✅ [LOTE] Descargando lote local: {ruta_archivo}")
-                    
+            if ruta_archivo and os.path.exists(ruta_archivo):
+                logger.info(f"📥 [LOTE LAMBDA] Descargando desde ruta local: {ruta_archivo}")
+                
+                try:
                     with open(ruta_archivo, 'rb') as f:
                         zip_buffer = BytesIO(f.read())
                     
+                    # ✅ CRÍTICO: Posicionar buffer al inicio
+                    zip_buffer.seek(0)
+                    
+                    buffer_size = zip_buffer.getbuffer().nbytes
+                    logger.info(f"✅ [LOTE LAMBDA] Descargado localmente: {buffer_size} bytes")
+                    
                     return nombre_archivo, zip_buffer
-                else:
-                    logger.warning(f"⚠️ [LOTE] Ruta local no existe: {ruta_archivo}")
+                    
+                except Exception as e:
+                    logger.error(f"❌ [LOTE LAMBDA] Error leyendo archivo local: {str(e)}")
+            else:
+                logger.warning(f"⚠️ [LOTE LAMBDA] Ruta local no disponible: {ruta_archivo}")
             
-            # ✅ PRIORIDAD 3: Reconstruir el ZIP desde los certificados individuales en Cloudinary
-            logger.warning(f"⚠️ [LOTE] No se encontró archivo del lote, intentando reconstruir...")
+            # ✅ PRIORIDAD 3: Reconstruir el ZIP desde certificados individuales
+            logger.warning(f"⚠️ [LOTE LAMBDA] Reconstruyendo lote desde certificados individuales...")
             
             estudiantes_info = lote.get('estudiantes', [])
             if not estudiantes_info:
@@ -1412,22 +1460,17 @@ class CertificateService:
                 if isinstance(id_estudiantes, list) and id_estudiantes:
                     estudiantes_info = []
                     for id_est in id_estudiantes:
-                        try:
-                            estudiante_data = await self._obtener_datos_estudiante(id_est)
-                            estudiantes_info.append({
-                                'id_estudiante': id_est,
-                                'nombre_completo': f"{estudiante_data.nombres} {estudiante_data.apellidos}",
-                                'correo': estudiante_data.correo,
-                                'identificacion': estudiante_data.identificacion
-                            })
-                        except Exception as e:
-                            logger.error(f"❌ [LOTE] Error obteniendo datos estudiante {id_est}: {str(e)}")
-                            continue
+                        estudiantes_info.append({
+                            'id_estudiante': id_est,
+                            'nombre_completo': f"Estudiante_{id_est}",
+                            'nombre_archivo_certificado': f"certificado_{id_est}.pdf"
+                        })
             
             if estudiantes_info:
                 try:
-                    logger.info(f"🔄 [LOTE] Reconstruyendo lote con {len(estudiantes_info)} estudiantes")
+                    logger.info(f"🔄 [LOTE LAMBDA] Reconstruyendo con {len(estudiantes_info)} estudiantes")
                     
+                    # ✅ CORRECCIÓN: Crear buffer ANTES del ZIP
                     zip_buffer = BytesIO()
                     certificados_agregados = 0
                     
@@ -1438,57 +1481,60 @@ class CertificateService:
                                 if not estudiante_id:
                                     continue
                                     
-                                # Buscar certificados individuales de este estudiante
+                                # Buscar certificados individuales
                                 certificados_estudiante, _ = await self.certificate_repo.obtener_por_estudiante(
                                     estudiante_id, 
-                                    limite=100
+                                    limite=10
                                 )
                                 
                                 if certificados_estudiante:
-                                    # Buscar el certificado que coincida con el proyecto del lote
+                                    # Buscar certificado que coincida con el proyecto
                                     id_proyecto_lote = lote.get('id_proyecto')
                                     for cert in certificados_estudiante:
                                         if (cert.get('id_proyecto') == id_proyecto_lote and 
                                             cert.get('cloudinary', {}).get('url')):
                                             
-                                            # Descargar de Cloudinary
                                             cloudinary_url = cert['cloudinary']['url']
-                                            logger.info(f"📥 [LOTE] Descargando certificado individual: {cloudinary_url}")
                                             
-                                            response = requests.get(cloudinary_url, timeout=30)
-                                            if response.status_code == 200:
-                                                # Generar nombre de archivo
-                                                nombre_archivo_cert = cert.get('nombre_archivo') or self._obtener_nombre_archivo_desde_estudiante(estudiante)
-                                                zipf.writestr(nombre_archivo_cert, response.content)
-                                                certificados_agregados += 1
-                                                logger.info(f"✅ [LOTE] Agregado: {nombre_archivo_cert}")
-                                                break
-                                            else:
-                                                logger.warning(f"⚠️ [LOTE] Error descargando certificado: {response.status_code}")
+                                            # Descargar certificado individual
+                                            try:
+                                                session = requests.Session()
+                                                response = session.get(cloudinary_url, timeout=15)
+                                                if response.status_code == 200:
+                                                    nombre_archivo_cert = cert.get('nombre_archivo') or estudiante.get('nombre_archivo_certificado') or f"certificado_{estudiante_id}.pdf"
+                                                    zipf.writestr(nombre_archivo_cert, response.content)
+                                                    certificados_agregados += 1
+                                                    logger.info(f"✅ [LOTE LAMBDA] Agregado: {nombre_archivo_cert}")
+                                                    break
+                                            except Exception as e:
+                                                logger.warning(f"⚠️ [LOTE LAMBDA] Error descargando certificado individual: {str(e)}")
+                                                continue
                                                 
                             except Exception as e:
-                                logger.error(f"❌ [LOTE] Error procesando estudiante {estudiante.get('id_estudiante')}: {str(e)}")
+                                logger.error(f"❌ [LOTE LAMBDA] Error procesando estudiante {estudiante.get('id_estudiante')}: {str(e)}")
                                 continue
                     
+                    # ✅ CRÍTICO: Posicionar buffer al inicio DESPUÉS de cerrar el ZIP
                     zip_buffer.seek(0)
+                    
                     if certificados_agregados > 0:
-                        logger.info(f"✅ [LOTE] Lote reconstruido con {certificados_agregados} certificados: {zip_buffer.getbuffer().nbytes} bytes")
+                        buffer_size = zip_buffer.getbuffer().nbytes
+                        logger.info(f"✅ [LOTE LAMBDA] Reconstruido con {certificados_agregados} certificados: {buffer_size} bytes")
                         return nombre_archivo, zip_buffer
                     else:
-                        logger.error("❌ [LOTE] No se pudieron reconstruir certificados - cero archivos agregados")
+                        logger.error("❌ [LOTE LAMBDA] No se pudieron reconstruir certificados")
                     
                 except Exception as e:
-                    logger.error(f"❌ [LOTE] Error reconstruyendo lote: {str(e)}")
-                    logger.exception(e)
+                    logger.error(f"❌ [LOTE LAMBDA] Error reconstruyendo lote: {str(e)}")
             else:
-                logger.error("❌ [LOTE] No hay información de estudiantes para reconstruir el lote")
+                logger.error("❌ [LOTE LAMBDA] No hay información de estudiantes")
             
             # Si llegamos aquí, no se pudo obtener el lote
-            logger.error(f"❌ [LOTE] No se pudo obtener el archivo del lote {id_lote}")
+            logger.error(f"❌ [LOTE LAMBDA] No se pudo obtener el archivo del lote {id_lote}")
             raise ValueError("El archivo del lote de certificados no está disponible")
             
         except Exception as e:
-            logger.error(f"❌ [LOTE] Error en obtener_lote_para_descarga: {str(e)}")
+            logger.error(f"❌ [LOTE LAMBDA] Error crítico en obtener_lote_para_descarga: {str(e)}")
             logger.exception(e)
             raise
         
