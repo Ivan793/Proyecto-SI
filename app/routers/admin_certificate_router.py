@@ -229,15 +229,15 @@ async def descargar_certificado_o_lote(
         
         if es_lote:
             logger.info(f"📦 Descargando lote: {id}")
-            nombre_archivo, buffer = await service.obtener_lote_para_descarga(id_lote=id)
+            # ✅ CORRECCIÓN: Quitar el parámetro nombrado
+            nombre_archivo, buffer = await service.obtener_lote_para_descarga(id)
             media_type = "application/zip"
             content_disposition = f'attachment; filename="{nombre_archivo}"'
             
         else:
             logger.info(f"📄 Descargando certificado individual: {id}")
-            nombre_archivo, buffer = await service.obtener_certificado_para_descarga(
-                id_certificado=id
-            )
+            # ✅ CORRECCIÓN: Quitar el parámetro nombrado y pasar solo el ID
+            nombre_archivo, buffer = await service.obtener_certificado_para_descarga(id)
             media_type = "application/pdf"
             content_disposition = f'attachment; filename="{nombre_archivo}"'
         
