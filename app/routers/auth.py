@@ -302,22 +302,95 @@ async def refresh_access_token(
     "/me",
     response_model=None,
     status_code=status.HTTP_200_OK,
-    summary="Obtener información del usuario actual",
-    description="Obtiene los datos del usuario autenticado",
+    summary="Obtener información completa del usuario autenticado",
+    description="Obtiene todos los datos del usuario autenticado y sus datos específicos según el rol (Egresado, Estudiante, Docente, Invitado o Administrativo).",
     responses=ResponseDocumentation.get_standard_responses()
 )
 async def get_current_user_info(
     request: Request,
     current_user: Dict[str, Any] = Depends(get_current_user_from_token)
 ) -> Dict[str, Any]:
+    """
+    Retorna toda la información del usuario autenticado (campos completos del usuario)
+    y la información de su rol asociado (Egresado, Estudiante, Docente, Invitado, Administrativo).
+    """
     try:
+        from app.repositories.user_repository import UserRepository
+        from app.repositories.graduate_repository import GraduateRepository
+        from app.repositories.student_repository import StudentRepository
+        from app.repositories.guest_repository import GuestRepository
+        from app.repositories.teacher_repository import TeacherRepository
+
+        user_repo = UserRepository()
+        rol = current_user.get("rol")
+        user_id = current_user.get("user_id")
+
+        # Obtener usuario completo desde Firestore
+        user = await user_repo.get_by_id(user_id)
+        if not user:
+            return unauthorized_response(message="Usuario no encontrado en Firestore")
+
+        # Asegurar incluir todos los campos definidos en UserBase
+        user_data = {
+            "id_usuario": user.get("id_usuario"),
+            "tipo_documento": user.get("tipo_documento"),
+            "identificacion": user.get("identificacion"),
+            "primer_nombre": user.get("primer_nombre"),
+            "segundo_nombre": user.get("segundo_nombre"),
+            "primer_apellido": user.get("primer_apellido"),
+            "segundo_apellido": user.get("segundo_apellido"),
+            "sexo": user.get("sexo"),
+            "identidad_sexual": user.get("identidad_sexual"),
+            "fecha_nacimiento": user.get("fecha_nacimiento"),
+            "nacionalidad": user.get("nacionalidad"),
+            "pais_residencia": user.get("pais_residencia"),
+            "departamento": user.get("departamento"),
+            "municipio": user.get("municipio"),
+            "ciudad_residencia": user.get("ciudad_residencia"),
+            "direccion_residencia": user.get("direccion_residencia"),
+            "telefono": user.get("telefono"),
+            "correo": user.get("correo"),
+            "rol": user.get("rol"),
+            "activo": user.get("activo"),
+            "razon_desactivacion": user.get("razon_desactivacion"),
+            "ultima_conexion": user.get("ultima_conexion"),
+            "created_at": user.get("created_at"),
+            "updated_at": user.get("updated_at")
+        }
+
+        # Datos específicos del rol
+        role_data = None
+        if rol == "Egresado":
+            grad_repo = GraduateRepository()
+            role_data = await grad_repo.get_graduate_by_user_id(user_id)
+        elif rol == "Estudiante":
+            student_repo = StudentRepository()
+            role_data = await student_repo.get_student_by_user_id(user_id)
+        elif rol == "Docente":
+            teacher_repo = TeacherRepository()
+            role_data = await teacher_repo.get_teacher_by_user_id(user_id)
+        elif rol == "Invitado":
+            guest_repo = GuestRepository()
+            role_data = await guest_repo.get_guest_by_user_id(user_id)
+        elif rol == "Administrativo":
+            role_data = {"mensaje": "Rol administrativo, sin colección asociada"}
+
+        # Armar respuesta final
+        full_data = {
+            "usuario": user_data,
+            "rol": rol,
+            "datos_rol": role_data or {}
+        }
+
         return success_response(
-            data=current_user,
-            message="Información de usuario obtenida correctamente"
+            data=full_data,
+            message=f"Información completa del usuario ({rol}) obtenida correctamente"
         )
+
     except Exception as e:
-        logger.error(f"Error obteniendo info de usuario: {str(e)}", exc_info=True)
+        logger.error(f"Error obteniendo info completa de usuario: {str(e)}", exc_info=True)
         return internal_server_error_response()
+
 
 
 @router.post(
