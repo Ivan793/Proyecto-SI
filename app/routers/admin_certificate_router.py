@@ -205,34 +205,54 @@ async def enviar_certificados_por_correo(
         )
 
 @router.get(
-    "/descargar/{id_lote}",
-    summary="Descargar lote de certificados"
+    "/descargar/{id}",
+    summary="Descargar certificado individual o lote de certificados"
 )
-async def descargar_lote_certificados(
-    id_lote: str,
+async def descargar_certificado_o_lote(
+    id: str,
     # current_user = Depends(get_current_admin_user)
 ):
     """
-    Descarga un archivo ZIP con los certificados generados previamente.
+    Descarga un certificado individual o un lote completo de certificados.
     
-    **Importante:** El enlace de descarga expira después de 7 días.
+    **Determinación automática:**
+    - Si el ID empieza con `CERT_` (pero no `CERT_IND_` o `CERT_EST_`): Se trata de un lote (ZIP)
+    - Cualquier otro formato: Se trata de un certificado individual (PDF)
+    
+    **Importante:** Los enlaces de descarga expiran después de 7 días.
     """
     try:
         service = CertificateService()
-        nombre_archivo, buffer = await service.obtener_certificado_para_descarga(
-            id_certificado=id_lote
-        )
         
+        # Determinar si es lote o certificado individual por el formato del ID
+        es_lote = id.startswith('CERT_') and not id.startswith('CERT_IND_') and not id.startswith('CERT_EST_')
+        
+        if es_lote:
+            logger.info(f"📦 Descargando lote: {id}")
+            nombre_archivo, buffer = await service.obtener_lote_para_descarga(id_lote=id)
+            media_type = "application/zip"
+            content_disposition = f'attachment; filename="{nombre_archivo}"'
+            
+        else:
+            logger.info(f"📄 Descargando certificado individual: {id}")
+            nombre_archivo, buffer = await service.obtener_certificado_para_descarga(
+                id_certificado=id
+            )
+            media_type = "application/pdf"
+            content_disposition = f'attachment; filename="{nombre_archivo}"'
+        
+        # Devolver archivo
         return StreamingResponse(
             buffer,
-            media_type="application/zip",
+            media_type=media_type,
             headers={
-                "Content-Disposition": f'attachment; filename="{nombre_archivo}"'
+                "Content-Disposition": content_disposition,
+                "Content-Length": str(buffer.getbuffer().nbytes)
             }
         )
     
     except ValueError as e:
-        logger.error(f"Error descargando certificados: {str(e)}")
+        logger.error(f"Error descargando: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
