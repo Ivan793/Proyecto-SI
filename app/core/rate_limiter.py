@@ -63,7 +63,7 @@ def strict_rate_limit(calls: int = 5, period: int = 60):
 # Rate limiting específico para endpoints de autenticación
 def auth_rate_limit():
 
-    return limiter.limit("5/minute")
+    return limiter.limit("10/minute")
 
 #    Rate limiting para endpoints de administrador
 def admin_rate_limit():

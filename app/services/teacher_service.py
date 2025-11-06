@@ -5,6 +5,7 @@ from firebase_admin import auth as firebase_auth
 from firebase_admin.exceptions import FirebaseError
 
 from app.exceptions.base_exceptions import ValidationException, DatabaseException
+from app.repositories.academic_repository import ProgramRepository
 from app.repositories.teacher_repository import TeacherRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.teacher import (
@@ -32,6 +33,8 @@ from firebase_admin._auth_utils import (
 from app.core.validators import validate_user_role_email_match
 from app.services.auth_service import AuthService
 from app.schemas.teacher import UserBasicInfo
+from app.validators.teacher_validators import TeacherValidators
+from app.validators.user_validators import UserValidators
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,9 @@ class TeacherService:
         self.teacher_repo = TeacherRepository()
         self.user_repo = UserRepository()
         self.auth_service = AuthService()
+        self.program_repo = ProgramRepository()
+        self.user_validators = UserValidators(self.user_repo)
+        self.teacher_validators = TeacherValidators(self.program_repo)
 
     async def create_teacher_with_user(
         self, 
@@ -50,9 +56,13 @@ class TeacherService:
         usuario_data = teacher_data.usuario
         
         try:
-            await self._validate_teacher_creation_prerequisites(usuario_data)
-            
-            
+            # VALIDACIONES ESPECÍFICAS DE USUARIO
+            await self.user_validators.validate_all_user_fields(
+                usuario_data, 
+                expected_role="Docente"
+            )
+
+            await self.teacher_validators.validate_all_teacher_fields(teacher_data)
             # Variables para rollback
             firebase_user = None
             user_created = False
@@ -107,60 +117,6 @@ class TeacherService:
         except Exception as e:
             logger.error(f"Error inesperado en validaciones iniciales: {str(e)}")
             raise DatabaseException("Error interno del sistema")
-
-    async def _validate_teacher_creation_prerequisites(self, usuario_data: UserCreate) -> None:
-        # Validar rol
-        if usuario_data.rol != "Docente":
-            raise ValidationException(
-                message="El rol debe ser 'Docente' para este endpoint",
-                field="rol"
-            )
-        
-        # Validar identificación única
-        existing_by_id = await self.user_repo.get_by_field(
-            "identificacion", 
-            usuario_data.identificacion
-        )
-        if existing_by_id:
-            raise UserAlreadyExistsException(
-                field="identificacion", 
-                value=usuario_data.identificacion
-            )
-        
-        # Validar correo único
-        existing_user = await self.user_repo.get_user_by_email(usuario_data.correo)
-        if existing_user:
-            raise UserAlreadyExistsException(
-                field="correo", 
-                value=usuario_data.correo
-            )
-        
-        # Validar correo único en Firebase Auth
-        if await self._email_exists_in_firebase_auth(usuario_data.correo):
-            raise UserAlreadyExistsException(
-                field="correo", 
-                value=usuario_data.correo
-            )
-        
-        # Validar dominio de correo
-        try:
-            validate_user_role_email_match(usuario_data.correo, usuario_data.rol)
-        except ValueError as e:
-            raise InvalidEmailDomainException(role=usuario_data.rol, custom_message=str(e))
-        
-    async def _email_exists_in_firebase_auth(self, email: str) -> bool:
-            """Verifica si el email ya existe en Firebase Authentication"""
-            try:
-                firebase_auth.get_user_by_email(email)
-                return True  # Si no lanza excepción, el usuario existe
-            except firebase_auth.UserNotFoundError:
-                return False  # Usuario no encontrado
-            except Exception as e:
-                logger.warning(f"Error verificando email en Firebase Auth: {str(e)}")
-                # En caso de error, asumimos que no existe para permitir que el flujo continúe
-                # La creación fallará después si realmente existe
-                return False
-
 
     async def _create_firebase_user(self, usuario_data: UserCreate) -> Any:
         try:
