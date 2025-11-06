@@ -394,6 +394,7 @@ async def get_current_user_info(
         return internal_server_error_response()
 
 
+
 @router.post(
     "/logout",
     status_code=status.HTTP_200_OK,

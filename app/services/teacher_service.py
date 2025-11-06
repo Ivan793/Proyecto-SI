@@ -4,7 +4,8 @@ import logging
 from firebase_admin import auth as firebase_auth
 from firebase_admin.exceptions import FirebaseError
 
-from app.exceptions.base_exceptions import NotFoundException, ValidationException, DatabaseException
+from app.exceptions.base_exceptions import ValidationException, DatabaseException
+from app.repositories.academic_repository import ProgramRepository
 from app.repositories.teacher_repository import TeacherRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.teacher import (
@@ -32,6 +33,8 @@ from firebase_admin._auth_utils import (
 from app.core.validators import validate_user_role_email_match
 from app.services.auth_service import AuthService
 from app.schemas.teacher import UserBasicInfo
+from app.validators.teacher_validators import TeacherValidators
+from app.validators.user_validators import UserValidators
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,9 @@ class TeacherService:
         self.teacher_repo = TeacherRepository()
         self.user_repo = UserRepository()
         self.auth_service = AuthService()
+        self.program_repo = ProgramRepository()
+        self.user_validators = UserValidators(self.user_repo)
+        self.teacher_validators = TeacherValidators(self.program_repo)
 
     async def create_teacher_with_user(
         self, 
@@ -50,9 +56,13 @@ class TeacherService:
         usuario_data = teacher_data.usuario
         
         try:
-            await self._validate_teacher_creation_prerequisites(usuario_data)
-            
-            
+            # VALIDACIONES ESPECÍFICAS DE USUARIO
+            await self.user_validators.validate_all_user_fields(
+                usuario_data, 
+                expected_role="Docente"
+            )
+
+            await self.teacher_validators.validate_all_teacher_fields(teacher_data)
             # Variables para rollback
             firebase_user = None
             user_created = False
@@ -107,60 +117,6 @@ class TeacherService:
         except Exception as e:
             logger.error(f"Error inesperado en validaciones iniciales: {str(e)}")
             raise DatabaseException("Error interno del sistema")
-
-    async def _validate_teacher_creation_prerequisites(self, usuario_data: UserCreate) -> None:
-        # Validar rol
-        if usuario_data.rol != "Docente":
-            raise ValidationException(
-                message="El rol debe ser 'Docente' para este endpoint",
-                field="rol"
-            )
-        
-        # Validar identificación única
-        existing_by_id = await self.user_repo.get_by_field(
-            "identificacion", 
-            usuario_data.identificacion
-        )
-        if existing_by_id:
-            raise UserAlreadyExistsException(
-                field="identificacion", 
-                value=usuario_data.identificacion
-            )
-        
-        # Validar correo único
-        existing_user = await self.user_repo.get_user_by_email(usuario_data.correo)
-        if existing_user:
-            raise UserAlreadyExistsException(
-                field="correo", 
-                value=usuario_data.correo
-            )
-        
-        # Validar correo único en Firebase Auth
-        if await self._email_exists_in_firebase_auth(usuario_data.correo):
-            raise UserAlreadyExistsException(
-                field="correo", 
-                value=usuario_data.correo
-            )
-        
-        # Validar dominio de correo
-        try:
-            validate_user_role_email_match(usuario_data.correo, usuario_data.rol)
-        except ValueError as e:
-            raise InvalidEmailDomainException(role=usuario_data.rol, custom_message=str(e))
-        
-    async def _email_exists_in_firebase_auth(self, email: str) -> bool:
-            """Verifica si el email ya existe en Firebase Authentication"""
-            try:
-                firebase_auth.get_user_by_email(email)
-                return True  # Si no lanza excepción, el usuario existe
-            except firebase_auth.UserNotFoundError:
-                return False  # Usuario no encontrado
-            except Exception as e:
-                logger.warning(f"Error verificando email en Firebase Auth: {str(e)}")
-                # En caso de error, asumimos que no existe para permitir que el flujo continúe
-                # La creación fallará después si realmente existe
-                return False
-
 
     async def _create_firebase_user(self, usuario_data: UserCreate) -> Any:
         try:
@@ -536,136 +492,3 @@ class TeacherService:
         except Exception as e:
             logger.error(f"Error obteniendo docente por usuario {user_id}: {str(e)}")
             return None
-        
-
-
-
-
-    
-    #MÉTODOS PÚBLICOS (acceso sin autenticación de administrador)
-
-
-    async def get_teacher_public_info(self, teacher_id: str) -> dict:
-        """
-        Obtiene información pública del docente (solo datos básicos).
-        """
-        try:
-            teacher = await self.teacher_repo.get_by_id(teacher_id)
-            if not teacher:
-                raise TeacherNotFoundException(teacher_id)
-            
-            user = await self.user_repo.get_by_id(teacher["id_usuario"])
-            if not user:
-                raise UserNotFoundException(teacher["id_usuario"])
-
-            # Solo datos públicos
-            public_info = {
-                "id_docente": teacher_id,
-                "nombre_completo": f"{user.get('primer_nombre', '')} {user.get('segundo_nombre', '')} "
-                                   f"{user.get('primer_apellido', '')} {user.get('segundo_apellido', '')}".strip(),
-                "correo_institucional": user.get("correo"),
-                "categoria_docente": teacher.get("categoria_docente"),
-                "codigo_programa": teacher.get("codigo_programa"),
-            }
-            return public_info
-
-        except (TeacherNotFoundException, UserNotFoundException):
-            raise
-        except Exception as e:
-            logger.error(f"Error obteniendo información pública del docente {teacher_id}: {str(e)}")
-            raise DatabaseException("Error al obtener información pública del docente")
-
-    async def list_teacher_subjects(self, teacher_id: str) -> list:
-        """
-        Lista las materias que dicta un docente.
-        """
-        try:
-            from app.repositories.teacher_repository import TeacherSubjectRepository
-            ts_repo = TeacherSubjectRepository()
-            subjects = await ts_repo.get_subjects_by_teacher(teacher_id)
-            return subjects
-        except Exception as e:
-            logger.error(f"Error listando materias del docente {teacher_id}: {str(e)}")
-            raise DatabaseException("Error al listar materias del docente")
-
-    async def list_subject_groups(self, subject_code: str) -> list:
-        """
-        Lista los grupos asociados a una materia específica.
-        """
-        try:
-            from app.repositories.group_repository import GroupRepository
-            group_repo = GroupRepository()
-            groups = await group_repo.get_groups_by_subject(subject_code)
-            return groups
-        except Exception as e:
-            logger.error(f"Error listando grupos de la materia {subject_code}: {str(e)}")
-            raise DatabaseException("Error al listar grupos de la materia")
-
-    async def list_teacher_projects(self, teacher_id: str) -> list:
-        """
-        Lista los proyectos en los que participa un docente.
-        """
-        try:
-            from app.repositories.teacher_repository import TeacherRepository
-            projects = await self.teacher_repo.get_projects_by_teacher(teacher_id)
-            return projects
-        except Exception as e:
-            logger.error(f"Error listando proyectos del docente {teacher_id}: {str(e)}")
-            raise DatabaseException("Error al listar proyectos del docente")
-
-    async def get_project_info(self, project_id: str) -> dict:
-        """
-        Obtiene la información detallada de un proyecto.
-        """
-        try:
-            from app.repositories.proyect_repository import ProjectRepository
-            project_repo = ProjectRepository()
-            project = await project_repo.get_project_detail(project_id)
-            if not project:
-                raise ValidationException("Proyecto no encontrado")
-            return project
-        except ValidationException:
-            raise
-        except Exception as e:
-            logger.error(f"Error obteniendo detalle del proyecto {project_id}: {str(e)}")
-            raise DatabaseException("Error al obtener detalle del proyecto")
-
-    async def list_all_projects(self) -> list:
-        """
-        Lista todos los proyectos disponibles públicamente.
-        """
-        try:
-            from app.repositories.proyect_repository import ProjectRepository
-            project_repo = ProjectRepository()
-            projects = await project_repo.get_all_projects()
-            return projects
-        except Exception as e:
-            logger.error(f"Error listando todos los proyectos públicos: {str(e)}")
-            raise DatabaseException("Error al listar los proyectos públicos")
-
-
-    async def get_teacher_with_user(self, teacher_id: str) -> TeacherWithFullUserResponse:
-        try:
-            teacher = await self.teacher_repo.get_by_id(teacher_id)
-            if not teacher:
-                raise NotFoundException("Docente no encontrado")
-
-            # Aquí obtienes el id del usuario asociado al docente
-            user_id = teacher.get("id_usuario")
-            if not user_id:
-                raise NotFoundException("El docente no tiene usuario asociado")
-
-            # 🔹 Buscar el usuario en Firestore
-            user = await self.user_repo.get_by_id(user_id)
-            if not user:
-                raise NotFoundException("Usuario asociado no encontrado")
-
-            # 🔹 Construir respuesta con ambos modelos
-            return TeacherWithFullUserResponse(
-                docente=TeacherResponse(**teacher),
-                usuario=UserResponse(**user)  # <--- este debe ser el modelo correcto
-            )
-
-        except Exception as e:
-            logger.error(f"Error inesperado obteniendo docente con usuario {teacher_id}: {str(e)}")
-            raise DatabaseException("Error al obtener información completa del docente")
