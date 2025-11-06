@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, status, Query, Request
+from fastapi import APIRouter, HTTPException, status, Query, Request, Depends
 import logging
-
+from app.dependencies.auth_dependencies import get_current_user_from_token
 from app.services.graduate_service import GraduateService
 from app.schemas.graduate import GraduateCreate, GraduateUpdate
 from app.utils.responses import (

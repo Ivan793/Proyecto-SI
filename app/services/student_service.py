@@ -8,8 +8,7 @@ from app.exceptions.base_exceptions import ValidationException, DatabaseExceptio
 from app.repositories.student_repository import StudentRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.student import (
-    StudentCreateWithUser, 
-    StudentUpdate, 
+    StudentUpdate,
     StudentResponse,
     StudentWithFullUserResponse, 
     StudentWithUserResponse
@@ -41,70 +40,6 @@ class StudentService:
         self.user_repo = UserRepository()
         self.auth_service = AuthService()
 
-    async def create_student_with_user(
-        self, 
-        student_data: StudentCreateWithUser
-    ) -> StudentResponse:
-        usuario_data = student_data.usuario
-        
-        try:
-            await self._validate_student_creation_prerequisites(usuario_data)
-            
-            # Variables para rollback
-            firebase_user = None
-            user_created = False
-            student_created = False
-            
-            try:
-                firebase_user = await self._create_firebase_user(usuario_data)
-                user_id = firebase_user.uid
-                logger.info(f"Usuario creado en Firebase Auth: {user_id}")
-                
-                await self._create_firestore_user(usuario_data, user_id)
-                user_created = True
-                logger.info(f"Usuario creado en Firestore: {user_id}")
-                
-                student_id = await self._create_student_record(student_data, user_id)
-                student_created = True
-                logger.info(f"Estudiante creado y vinculado: {student_id} -> {user_id}")
-                
-                # Enviar email de verificación
-                try:
-                    email_sent = await self.auth_service.send_email_verification(
-                        usuario_data.correo
-                    )
-                    if email_sent:
-                        logger.info(f"Email de verificación enviado a: {usuario_data.correo}")
-                    else:
-                        logger.warning(f"No se pudo enviar email de verificación a: {usuario_data.correo}")
-                except Exception as e:
-                    # No detener el proceso si falla el envío de email
-                    logger.error(f"Error enviando email de verificación: {str(e)}")
-                
-                return await self._get_created_student(student_id)
-                
-            except FirebaseError as e:
-                logger.error(f"Error de Firebase al crear usuario: {str(e)}")
-                raise DatabaseException(
-                    message="Error al crear usuario en el sistema de autenticación",
-                    details={"firebase_error": str(e)}
-                )
-            except Exception as e:
-                logger.error(f"Error inesperado durante creación: {str(e)}")
-                await self._rollback_student_creation(
-                    firebase_user, user_created, student_created
-                )
-                raise DatabaseException(
-                    message="Error durante la creación del estudiante",
-                    details={"internal_error": str(e)}
-                )
-                
-        except (ValidationException, UserAlreadyExistsException, InvalidEmailDomainException) as e:
-            logger.warning(f"Error de validación/negocio: {str(e)}")
-            raise
-        except Exception as e:
-            logger.error(f"Error inesperado en validaciones iniciales: {str(e)}")
-            raise DatabaseException("Error interno del sistema")
 
     async def _validate_student_creation_prerequisites(self, usuario_data: UserCreate) -> None:
         # Validar rol
@@ -190,17 +125,6 @@ class StudentService:
         
         await self.user_repo.create(user_dict, document_id=user_id)
 
-    async def _create_student_record(self, student_data: StudentCreateWithUser, user_id: str) -> str:
-        """Crea registro de estudiante"""
-        student_dict = {
-            "id_usuario": user_id,
-            "codigo_programa": student_data.codigo_programa,
-            "semestre": student_data.semestre,
-            "anio_ingreso": student_data.anio_ingreso,
-            "periodo": student_data.periodo,
-        }
-        
-        return await self.student_repo.create(student_dict)
 
     async def _get_created_student(self, student_id: str) -> StudentResponse:
         """Obtiene estudiante creado"""
