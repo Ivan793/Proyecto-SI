@@ -1185,74 +1185,240 @@ class CertificateService:
     ) -> tuple[str, BytesIO]:
         """
         Obtiene un certificado para descarga.
-        Si id_estudiante se proporciona, valida que sea el propietario.
-        ✅ CORREGIDO: Maneja URLs de Cloudinary
+        ✅ CORREGIDO para AWS Lambda
         """
         
-        certificado = await self.certificate_repo.obtener_por_id(id_certificado)
-        
-        if not certificado:
-            raise ValueError("El certificado no existe o ha expirado")
-        
-        # Validar propiedad si es estudiante
-        if id_estudiante:
-            # Para lotes, id_estudiante es una lista
-            estudiantes = certificado.get('id_estudiante', [])
-            if isinstance(estudiantes, list) and id_estudiante not in estudiantes:
-                raise ValueError("No tienes permiso para descargar este certificado")
-            elif isinstance(estudiantes, str) and estudiantes != id_estudiante:
-                raise ValueError("No tienes permiso para descargar este certificado")
-        
-        # Verificar expiración con timezone aware
-        if certificado.get('fecha_expiracion'):
-            fecha_exp = certificado['fecha_expiracion']
+        try:
+            logger.info(f"🔍 Buscando certificado: {id_certificado}")
             
-            # Convertir a datetime si es necesario
-            if isinstance(fecha_exp, str):
-                fecha_exp = datetime.fromisoformat(fecha_exp.replace('Z', '+00:00'))
+            certificado = await self.certificate_repo.obtener_por_id(id_certificado)
             
-            # Comparar con datetime timezone-aware
-            if datetime.now(timezone.utc) > fecha_exp:
-                raise ValueError("El enlace de descarga ha expirado")
-        
-        # ✅ CORRECCIÓN: Manejar tanto archivos locales como URLs de Cloudinary
-        ruta_archivo = certificado.get('ruta_archivo')
-        nombre_archivo = certificado.get('nombre_archivo', 'certificado.pdf')
-        
-        if not ruta_archivo:
-            logger.error("❌ No se encontró ruta de archivo en el certificado")
-            raise ValueError("El archivo del certificado no está disponible")
-        
-        # Verificar si es una URL de Cloudinary
-        if ruta_archivo.startswith('http'):
-            logger.info(f"☁️ Descargando desde Cloudinary: {ruta_archivo}")
-            try:
-                # Descargar desde Cloudinary
-                response = requests.get(ruta_archivo, timeout=30)
-                response.raise_for_status()
+            if not certificado:
+                logger.error(f"❌ Certificado {id_certificado} no encontrado")
+                raise ValueError("El certificado no existe o ha expirado")
+            
+            # Validar propiedad si es estudiante
+            if id_estudiante:
+                estudiantes = certificado.get('id_estudiante', [])
+                if isinstance(estudiantes, list) and id_estudiante not in estudiantes:
+                    raise ValueError("No tienes permiso para descargar este certificado")
+                elif isinstance(estudiantes, str) and estudiantes != id_estudiante:
+                    raise ValueError("No tienes permiso para descargar este certificado")
+            
+            # Verificar expiración
+            if certificado.get('fecha_expiracion'):
+                fecha_exp = certificado['fecha_expiracion']
                 
-                # Crear buffer con el contenido descargado
-                pdf_buffer = BytesIO(response.content)
-                logger.info(f"✅ Descargado desde Cloudinary: {len(response.content)} bytes")
+                if isinstance(fecha_exp, str):
+                    fecha_exp = datetime.fromisoformat(fecha_exp.replace('Z', '+00:00'))
+                
+                if datetime.now(timezone.utc) > fecha_exp:
+                    raise ValueError("El enlace de descarga ha expirado")
+            
+            # ✅ CORRECCIÓN: Manejar Cloudinary como prioridad
+            ruta_archivo = certificado.get('ruta_archivo')
+            nombre_archivo = certificado.get('nombre_archivo', 'certificado.pdf')
+            
+            logger.info(f"📁 Ruta archivo: {ruta_archivo}")
+            
+            # ✅ PRIORIDAD 1: URL de Cloudinary
+            cloudinary_info = certificado.get('cloudinary', {})
+            if cloudinary_info.get('subido') and cloudinary_info.get('url'):
+                logger.info(f"☁️ Descargando desde Cloudinary: {cloudinary_info['url']}")
+                try:
+                    # Configurar timeout más largo para Lambda
+                    response = requests.get(cloudinary_info['url'], timeout=60)
+                    response.raise_for_status()
+                    
+                    # Verificar que sea un PDF válido
+                    if response.headers.get('content-type') != 'application/pdf':
+                        logger.warning("⚠️ Cloudinary no devolvió un PDF, verificando contenido...")
+                    
+                    pdf_buffer = BytesIO(response.content)
+                    logger.info(f"✅ Descargado desde Cloudinary: {len(response.content)} bytes")
+                    
+                    return nombre_archivo, pdf_buffer
+                    
+                except requests.RequestException as e:
+                    logger.error(f"❌ Error descargando desde Cloudinary: {str(e)}")
+                    # Continuar con siguiente opción
+            
+            # ✅ PRIORIDAD 2: Ruta local (usar /tmp en Lambda)
+            if ruta_archivo and os.path.exists(ruta_archivo):
+                logger.info(f"📥 Descargando certificado local: {ruta_archivo}")
+                
+                with open(ruta_archivo, 'rb') as f:
+                    pdf_buffer = BytesIO(f.read())
                 
                 return nombre_archivo, pdf_buffer
-                
-            except requests.RequestException as e:
-                logger.error(f"❌ Error descargando desde Cloudinary: {str(e)}")
-                raise ValueError(f"No se pudo descargar el certificado desde la nube: {str(e)}")
-        
-        # Si es un archivo local
-        elif os.path.exists(ruta_archivo):
-            logger.info(f"📥 Descargando certificado local: {ruta_archivo}")
             
-            with open(ruta_archivo, 'rb') as f:
-                pdf_buffer = BytesIO(f.read())
+            # ✅ PRIORIDAD 3: Intentar reconstruir desde estudiantes
+            logger.warning(f"⚠️ No se encontró archivo, intentando reconstruir certificado...")
             
-            return nombre_archivo, pdf_buffer
-        
-        else:
-            logger.error(f"❌ Archivo no encontrado: {ruta_archivo}")
+            # Intentar regenerar el certificado si tenemos la información
+            estudiantes_info = certificado.get('estudiantes', [])
+            if estudiantes_info and len(estudiantes_info) == 1:
+                try:
+                    # Regenerar el certificado individual
+                    estudiante_info = estudiantes_info[0]
+                    id_estudiante_regenerar = estudiante_info.get('id_estudiante')
+                    id_proyecto = certificado.get('id_proyecto')
+                    
+                    if id_estudiante_regenerar and id_proyecto:
+                        logger.info(f"🔄 Regenerando certificado para estudiante: {id_estudiante_regenerar}")
+                        
+                        # Crear request para regenerar
+                        from app.schemas.certificate import GenerarCertificadoIndividualRequest
+                        request = GenerarCertificadoIndividualRequest(
+                            id_estudiante=id_estudiante_regenerar,
+                            id_proyecto=id_proyecto,
+                            incluir_calificacion=True
+                        )
+                        
+                        # Regenerar certificado
+                        nuevo_certificado = await self.generar_certificado_individual(request)
+                        
+                        # Obtener el buffer del nuevo certificado
+                        if nuevo_certificado.get('url_descarga'):
+                            # Si está en Cloudinary, descargar
+                            if nuevo_certificado.get('cloudinary_subido'):
+                                response = requests.get(nuevo_certificado['url_descarga'], timeout=60)
+                                response.raise_for_status()
+                                pdf_buffer = BytesIO(response.content)
+                                return nombre_archivo, pdf_buffer
+                            
+                except Exception as e:
+                    logger.error(f"❌ Error regenerando certificado: {str(e)}")
+            
+            # Si llegamos aquí, no se pudo obtener el certificado
+            logger.error(f"❌ No se pudo obtener el archivo del certificado {id_certificado}")
             raise ValueError("El archivo del certificado no está disponible")
+            
+        except Exception as e:
+            logger.error(f"❌ Error en obtener_certificado_para_descarga: {str(e)}")
+            logger.exception(e)
+            raise
+
+    async def obtener_lote_para_descarga(
+        self,
+        id_lote: str
+    ) -> tuple[str, BytesIO]:
+        """
+        Obtiene un lote completo de certificados para descarga.
+        ✅ ESPECÍFICO para lotes (ZIP con múltiples certificados)
+        """
+        
+        try:
+            logger.info(f"🔍 Buscando lote para descarga: {id_lote}")
+            
+            # Buscar el lote en la base de datos
+            lote = await self.certificate_repo.obtener_por_id(id_lote)
+            
+            if not lote:
+                logger.error(f"❌ Lote {id_lote} no encontrado")
+                raise ValueError("El lote de certificados no existe o ha expirado")
+            
+            # Verificar que sea un lote (no un certificado individual)
+            if not lote.get('id_lote') and lote.get('id_certificado'):
+                logger.error(f"❌ {id_lote} es un certificado individual, no un lote")
+                raise ValueError("ID corresponde a un certificado individual, no a un lote")
+            
+            # Verificar expiración
+            if lote.get('fecha_expiracion'):
+                fecha_exp = lote['fecha_expiracion']
+                
+                if isinstance(fecha_exp, str):
+                    fecha_exp = datetime.fromisoformat(fecha_exp.replace('Z', '+00:00'))
+                
+                if datetime.now(timezone.utc) > fecha_exp:
+                    raise ValueError("El enlace de descarga ha expirado")
+            
+            nombre_archivo = lote.get('nombre_archivo', f"certificados_{id_lote}.zip")
+            logger.info(f"📁 Nombre archivo: {nombre_archivo}")
+            
+            # ✅ PRIORIDAD 1: URL de Cloudinary
+            cloudinary_info = lote.get('cloudinary', {})
+            if cloudinary_info.get('subido') and cloudinary_info.get('url'):
+                logger.info(f"☁️ Descargando lote desde Cloudinary: {cloudinary_info['url']}")
+                try:
+                    response = requests.get(cloudinary_info['url'], timeout=60)
+                    response.raise_for_status()
+                    
+                    zip_buffer = BytesIO(response.content)
+                    logger.info(f"✅ Lote descargado desde Cloudinary: {len(response.content)} bytes")
+                    
+                    return nombre_archivo, zip_buffer
+                    
+                except requests.RequestException as e:
+                    logger.error(f"❌ Error descargando lote desde Cloudinary: {str(e)}")
+                    # Continuar con siguiente opción
+            
+            # ✅ PRIORIDAD 2: Ruta local del archivo ZIP
+            ruta_archivo = lote.get('ruta_archivo')
+            if ruta_archivo and os.path.exists(ruta_archivo):
+                logger.info(f"📥 Descargando lote local: {ruta_archivo}")
+                
+                with open(ruta_archivo, 'rb') as f:
+                    zip_buffer = BytesIO(f.read())
+                
+                return nombre_archivo, zip_buffer
+            
+            # ✅ PRIORIDAD 3: Reconstruir el ZIP desde los certificados individuales en Cloudinary
+            logger.warning(f"⚠️ No se encontró archivo del lote, intentando reconstruir desde Cloudinary...")
+            
+            estudiantes_info = lote.get('estudiantes', [])
+            if estudiantes_info:
+                try:
+                    logger.info(f"🔄 Reconstruyendo lote con {len(estudiantes_info)} certificados")
+                    
+                    zip_buffer = BytesIO()
+                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                        for estudiante in estudiantes_info:
+                            try:
+                                # Buscar certificados individuales de este estudiante
+                                certificados_estudiante = await self.certificate_repo.obtener_por_estudiante(
+                                    estudiante.get('id_estudiante'), 
+                                    limite=100
+                                )
+                                
+                                if certificados_estudiante:
+                                    # Buscar el certificado que coincida con el proyecto del lote
+                                    for cert in certificados_estudiante:
+                                        if (cert.get('id_proyecto') == lote.get('id_proyecto') and 
+                                            cert.get('cloudinary', {}).get('url')):
+                                            
+                                            # Descargar de Cloudinary
+                                            response = requests.get(cert['cloudinary']['url'], timeout=30)
+                                            if response.status_code == 200:
+                                                nombre_archivo_cert = cert.get('nombre_archivo', 
+                                                                            estudiante.get('nombre_archivo_certificado', 
+                                                                                        f"certificado_{estudiante.get('id_estudiante')}.pdf"))
+                                                zipf.writestr(nombre_archivo_cert, response.content)
+                                                logger.info(f"✅ Agregado: {nombre_archivo_cert}")
+                                                break
+                                                
+                            except Exception as e:
+                                logger.error(f"❌ Error procesando estudiante {estudiante.get('id_estudiante')}: {str(e)}")
+                                continue
+                    
+                    zip_buffer.seek(0)
+                    if zip_buffer.getbuffer().nbytes > 0:
+                        logger.info(f"✅ Lote reconstruido: {zip_buffer.getbuffer().nbytes} bytes")
+                        return nombre_archivo, zip_buffer
+                    else:
+                        logger.error("❌ No se pudieron reconstruir certificados")
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error reconstruyendo lote: {str(e)}")
+            
+            # Si llegamos aquí, no se pudo obtener el lote
+            logger.error(f"❌ No se pudo obtener el archivo del lote {id_lote}")
+            raise ValueError("El archivo del lote de certificados no está disponible")
+            
+        except Exception as e:
+            logger.error(f"❌ Error en obtener_lote_para_descarga: {str(e)}")
+            logger.exception(e)
+            raise
         
 
     async def obtener_mis_certificados(
