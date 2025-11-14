@@ -58,16 +58,17 @@ class LoginRequest(BaseModel):
         }
     }
 
+
 class LoginResponse(BaseModel):
     access_token: str = Field(..., description="Token JWT de acceso")
     refresh_token: str = Field(..., description="Token para refrescar sesión")
     token_type: str = Field(default="bearer", description="Tipo de token")
     expires_in: int = Field(..., description="Tiempo de expiración en segundos")
     user: Dict[str, Any] = Field(
-        ..., 
+        ...,
         description="Datos mínimos del usuario (solo id, correo, rol)"
     )
-    
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -87,7 +88,7 @@ class LoginResponse(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     """Esquema para refrescar token"""
-    
+
     refresh_token: str = Field(..., description="Token de refresco")
 
 
@@ -97,13 +98,13 @@ def _create_login_response(result: Dict[str, Any]) -> Dict[str, Any]:
     Solo incluye datos mínimos necesarios para el frontend.
     """
     user_data = result.get("user", {})
-    
+
     nombre = user_data.get("nombre")
     if nombre:
         message = f"Bienvenido, {nombre}"
     else:
         message = "Inicio de sesión exitoso"
-    
+
     return success_response(
         data={
             "access_token": result["access_token"],
@@ -114,6 +115,7 @@ def _create_login_response(result: Dict[str, Any]) -> Dict[str, Any]:
         },
         message=message
     )
+
 
 # ==================== ENDPOINTS ====================
 
@@ -129,26 +131,26 @@ def _create_login_response(result: Dict[str, Any]) -> Dict[str, Any]:
     - Estudiante
     - Egresado
     - Invitado
-    
+
     El sistema detecta automáticamente el rol del usuario y valida sus permisos.
     """,
     responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def universal_login(
-    request: Request,
-    credentials: LoginRequest
+        request: Request,
+        credentials: LoginRequest
 ) -> Dict[str, Any]:
     try:
         auth_service = AuthService()
-        
+
         result = await auth_service.login(
             correo=credentials.correo,
             password=credentials.password
         )
-        
+
         return _create_login_response(result)
-        
+
     except InvalidCredentialsException as e:
         return unauthorized_response(message="Credenciales inválidas")
     except AccountDisabledException as e:
@@ -176,20 +178,20 @@ async def universal_login(
 )
 @auth_rate_limit()
 async def admin_login(
-    request: Request,
-    credentials: LoginRequest
+        request: Request,
+        credentials: LoginRequest
 ) -> Dict[str, Any]:
     try:
         auth_service = AuthService()
-        
+
         result = await auth_service.login(
             correo=credentials.correo,
             password=credentials.password,
             required_role="Administrativo"
         )
-        
+
         return _create_login_response(result)
-        
+
     except InvalidCredentialsException as e:
         return unauthorized_response(message=str(e))
     except AccountDisabledException as e:
@@ -209,12 +211,12 @@ async def admin_login(
 )
 @auth_rate_limit()
 async def teacher_login(
-    request: Request,
-    credentials: LoginRequest
+        request: Request,
+        credentials: LoginRequest
 ) -> Dict[str, Any]:
     try:
         auth_service = AuthService()
-        
+
         result = await auth_service.login(
             correo=credentials.correo,
             password=credentials.password,
@@ -242,25 +244,25 @@ async def teacher_login(
 )
 @auth_rate_limit()
 async def student_login(
-    request: Request,
-    credentials: LoginRequest
+        request: Request,
+        credentials: LoginRequest
 ) -> Dict[str, Any]:
     try:
         auth_service = AuthService()
-        
+
         result = await auth_service.login(
             correo=credentials.correo,
             password=credentials.password
         )
-        
+
         user_role = result["user"]["rol"]
         if user_role not in ["Estudiante", "Egresado"]:
             return unauthorized_response(
                 message="Este login es solo para estudiantes y egresados"
             )
-        
+
         return _create_login_response(result)
-        
+
     except InvalidCredentialsException as e:
         return unauthorized_response(message=str(e))
     except AccountDisabledException as e:
@@ -279,18 +281,18 @@ async def student_login(
     responses=ResponseDocumentation.get_standard_responses()
 )
 async def refresh_access_token(
-    request: Request,
-    refresh_data: RefreshTokenRequest
+        request: Request,
+        refresh_data: RefreshTokenRequest
 ) -> Dict[str, Any]:
     try:
         auth_service = AuthService()
         result = await auth_service.refresh_token(refresh_data.refresh_token)
-        
+
         return success_response(
             data=result,
             message="Token refrescado exitosamente"
         )
-        
+
     except InvalidCredentialsException as e:
         return unauthorized_response(message=str(e))
     except Exception as e:
@@ -302,21 +304,93 @@ async def refresh_access_token(
     "/me",
     response_model=None,
     status_code=status.HTTP_200_OK,
-    summary="Obtener información del usuario actual",
-    description="Obtiene los datos del usuario autenticado",
+    summary="Obtener información completa del usuario autenticado",
+    description="Obtiene todos los datos del usuario autenticado y sus datos específicos según el rol (Egresado, Estudiante, Docente, Invitado o Administrativo).",
     responses=ResponseDocumentation.get_standard_responses()
 )
 async def get_current_user_info(
-    request: Request,
-    current_user: Dict[str, Any] = Depends(get_current_user_from_token)
+        request: Request,
+        current_user: Dict[str, Any] = Depends(get_current_user_from_token)
 ) -> Dict[str, Any]:
+    """
+    Retorna toda la información del usuario autenticado (campos completos del usuario)
+    y la información de su rol asociado (Egresado, Estudiante, Docente, Invitado, Administrativo).
+    """
     try:
+        from app.repositories.user_repository import UserRepository
+        from app.repositories.graduate_repository import GraduateRepository
+        from app.repositories.student_repository import StudentRepository
+        from app.repositories.guest_repository import GuestRepository
+        from app.repositories.teacher_repository import TeacherRepository
+
+        user_repo = UserRepository()
+        rol = current_user.get("rol")
+        user_id = current_user.get("user_id")
+
+        # Obtener usuario completo desde Firestore
+        user = await user_repo.get_by_id(user_id)
+        if not user:
+            return unauthorized_response(message="Usuario no encontrado en Firestore")
+
+        # Asegurar incluir todos los campos definidos en UserBase
+        user_data = {
+            "id_usuario": user.get("id_usuario"),
+            "tipo_documento": user.get("tipo_documento"),
+            "identificacion": user.get("identificacion"),
+            "primer_nombre": user.get("primer_nombre"),
+            "segundo_nombre": user.get("segundo_nombre"),
+            "primer_apellido": user.get("primer_apellido"),
+            "segundo_apellido": user.get("segundo_apellido"),
+            "sexo": user.get("sexo"),
+            "identidad_sexual": user.get("identidad_sexual"),
+            "fecha_nacimiento": user.get("fecha_nacimiento"),
+            "nacionalidad": user.get("nacionalidad"),
+            "pais_residencia": user.get("pais_residencia"),
+            "departamento": user.get("departamento"),
+            "municipio": user.get("municipio"),
+            "ciudad_residencia": user.get("ciudad_residencia"),
+            "direccion_residencia": user.get("direccion_residencia"),
+            "telefono": user.get("telefono"),
+            "correo": user.get("correo"),
+            "rol": user.get("rol"),
+            "activo": user.get("activo"),
+            "razon_desactivacion": user.get("razon_desactivacion"),
+            "ultima_conexion": user.get("ultima_conexion"),
+            "created_at": user.get("created_at"),
+            "updated_at": user.get("updated_at")
+        }
+
+        # Datos específicos del rol
+        role_data = None
+        if rol == "Egresado":
+            grad_repo = GraduateRepository()
+            role_data = await grad_repo.get_graduate_by_user_id(user_id)
+        elif rol == "Estudiante":
+            student_repo = StudentRepository()
+            role_data = await student_repo.get_student_by_user_id(user_id)
+        elif rol == "Docente":
+            teacher_repo = TeacherRepository()
+            role_data = await teacher_repo.get_teacher_by_user_id(user_id)
+        elif rol == "Invitado":
+            guest_repo = GuestRepository()
+            role_data = await guest_repo.get_guest_by_user_id(user_id)
+        elif rol == "Administrativo":
+            role_data = {"mensaje": "Rol administrativo, sin colección asociada"}
+
+        # Armar respuesta final
+        full_data = {
+            "usuario": user_data,
+            "rol": rol,
+            "datos_rol": role_data or {}
+        }
+
         return success_response(
-            data=current_user,
-            message="Información de usuario obtenida correctamente"
+            data=full_data,
+            message=f"Información completa del usuario ({rol}) obtenida correctamente"
         )
+
     except Exception as e:
-        logger.error(f"Error obteniendo info de usuario: {str(e)}", exc_info=True)
+        logger.error(f"Error obteniendo info completa de usuario: {str(e)}", exc_info=True)
         return internal_server_error_response()
 
 
@@ -328,17 +402,17 @@ async def get_current_user_info(
     responses=ResponseDocumentation.get_standard_responses()
 )
 async def logout(
-    request: Request,
-    current_user: Dict[str, Any] = Depends(get_current_user_from_token)
+        request: Request,
+        current_user: Dict[str, Any] = Depends(get_current_user_from_token)
 ) -> Dict[str, Any]:
     try:
         logger.info(f"Logout de usuario: {current_user.get('email')}")
-        
+
         return success_response(
             data=None,
             message="Sesión cerrada exitosamente"
         )
-        
+
     except Exception as e:
         logger.error(f"Error en logout: {str(e)}")
         return internal_server_error_response()

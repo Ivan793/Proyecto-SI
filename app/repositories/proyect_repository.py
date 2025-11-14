@@ -68,3 +68,56 @@ class ProyectoRepository(BaseRepository):
         except Exception as e:
             logger.error(f"Error al desactivar proyecto {document_id}: {e}")
             return False
+
+    async def get_students_by_project(self, project_id: str) -> list:
+        """
+        Obtiene los UIDs de los estudiantes asociados a un proyecto.
+        
+        Args:
+            project_id: ID del proyecto
+        
+        Returns:
+            Lista de UIDs de estudiantes
+        """
+        try:
+            # Obtener el documento del proyecto
+            doc_ref = self._collection_ref.document(project_id)
+            doc = doc_ref.get()
+            
+            if not doc.exists:
+                logger.error(f"Proyecto {project_id} no encontrado")
+                raise NotFoundException(f"Proyecto con ID {project_id} no encontrado")
+            
+            proyecto = doc.to_dict()
+            
+            # Obtener el campo id_estudiantes (puede tener diferentes estructuras)
+            id_estudiantes = proyecto.get('id_estudiantes', [])
+            
+            if not id_estudiantes:
+                logger.warning(f"Proyecto {project_id} no tiene estudiantes asociados")
+                return []
+            
+            # Normalizar los datos - puede venir como lista de strings o lista de dicts
+            uids_estudiantes = []
+            
+            for estudiante in id_estudiantes:
+                if isinstance(estudiante, str):
+                    # Si es un string directo, es el UID
+                    uids_estudiantes.append(estudiante)
+                elif isinstance(estudiante, dict):
+                    # Si es un diccionario, buscar el campo id_estudiante o id_usuario
+                    uid = estudiante.get('id_estudiante') or estudiante.get('id_usuario')
+                    if uid:
+                        uids_estudiantes.append(uid)
+                else:
+                    logger.warning(f"Formato de estudiante no reconocido: {type(estudiante)}")
+            
+            logger.info(f"Proyecto {project_id}: {len(uids_estudiantes)} estudiante(s) encontrado(s)")
+            
+            return uids_estudiantes
+            
+        except NotFoundException:
+            raise
+        except Exception as e:
+            logger.error(f"Error obteniendo estudiantes del proyecto {project_id}: {e}")
+            raise DatabaseException(f"Error al obtener estudiantes del proyecto: {str(e)}")

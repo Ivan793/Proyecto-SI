@@ -7,7 +7,7 @@ from . import auth, graduate_router, guest_router, proyect_router, student_route
 
 router = APIRouter(prefix="/api/v1")
 
-# Agrupar routers principales
+# Registrar router admin (sin prefix adicional, ya tiene /admin en su definición)
 router.include_router(admin_router)
 
 router.include_router(auth.router)
@@ -20,3 +20,4 @@ router.include_router(assistence_router.router)
 router.include_router(public_academic_router.router)
 router.include_router(admin_certificate_router.router)
 router.include_router(teacher_router.router)
+router.include_router(admin_certificate_router.router)

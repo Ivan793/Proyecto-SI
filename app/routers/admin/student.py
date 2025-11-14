@@ -6,7 +6,6 @@ from app.schemas.types import ReasonText
 from app.services.student_service import StudentService
 from app.schemas.student import (
     StudentCreateWithUser,
-    StudentCreateWithExistingUser, 
     StudentUpdate, 
     StudentResponse
 )
@@ -42,32 +41,6 @@ router = APIRouter(tags=["Estudiantes - Administración"])
     Este endpoint es de uso exclusivo para administradores."""
 )
 @admin_rate_limit()
-async def create_student_with_existing_user(
-    request: Request,
-    student_data: StudentCreateWithExistingUser,
-    current_admin: Dict[str, Any] = Depends(get_current_admin_user)
-):
-    """
-    Solo administradores pueden asignar usuarios existentes como estudiantes.
-    """
-    try:
-        service = StudentService()
-        student = await service.create_student_with_existing_user(student_data)
-        
-        logger.info(f"✅ Estudiante creado: {student.id_estudiante} por {current_admin['nombre_completo']}")
-        
-        return created_response(
-            data=student.model_dump(),
-            message="Estudiante asignado a usuario existente correctamente"
-        )
-        
-    except StudentAlreadyExistsException as e:
-        return conflict_response(message=str(e))
-    except UserNotFoundException as e:
-        return not_found_response("Usuario", student_data.id_usuario)
-    except Exception as e:
-        logger.error(f"❌ Error creando estudiante: {str(e)}")
-        return internal_server_error_response()
 
 
 

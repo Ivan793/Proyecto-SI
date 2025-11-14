@@ -35,7 +35,7 @@ class CertificateRepository(BaseRepository):
             ID del lote guardado
         """
         try:
-            id_lote = datos_lote.get('id_lote')
+            id_lote = datos_lote.get('id_certificado')  # ✅ Cambiar a id_certificado
             
             # Guardar en Firestore
             doc_ref = self._db.collection(self.lotes_collection).document(id_lote)
@@ -291,3 +291,51 @@ class CertificateRepository(BaseRepository):
         except Exception as e:
             logger.error(f"❌ Error limpiando certificados expirados: {str(e)}")
             return 0
+        
+    # Agregar este método en la clase CertificateRepository
+
+    async def obtener_lotes_paginados(
+        self,
+        pagina: int = 1,
+        limite: int = 20
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """
+        Obtiene lotes de certificados con paginación.
+        
+        Args:
+            pagina: Número de página
+            limite: Cantidad de resultados por página
+            
+        Returns:
+            Tupla con (lista de lotes, total)
+        """
+        try:
+            offset = (pagina - 1) * limite
+            
+            # Consultar lotes de certificados
+            query = (
+                self._db.collection(self.lotes_collection)
+                .order_by('fecha_generacion', direction='DESCENDING')
+                .limit(limite)
+                .offset(offset)
+            )
+            
+            docs = query.stream()
+            lotes = []
+            
+            for doc in docs:
+                lote = doc.to_dict()
+                lote['id'] = doc.id
+                lotes.append(lote)
+            
+            # Contar total
+            total_query = self._db.collection(self.lotes_collection)
+            total = len(list(total_query.stream()))
+            
+            logger.info(f"✅ {len(lotes)} lotes obtenidos (página {pagina})")
+            
+            return lotes, total
+            
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo lotes paginados: {str(e)}")
+            return [], 0

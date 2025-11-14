@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     
     # ==================== API ====================
     API_V1_PREFIX: str = "/api/v1"
+    API_BASE_URL: Optional[str] = None  
     
     # ==================== SEGURIDAD ====================
     SECRET_KEY: str = "MuIOjdl8Dl9mqr7-9nyQXneaHhwWcKSRGikRIcBZr9c"
@@ -25,6 +26,14 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: str = "firebase_credentials.json"
     FIREBASE_DATABASE_URL: Optional[str] = None
     FIREBASE_API_KEY: str = "AIzaSyCbEN3vnK6AtsLNbaKPPMT4Iz0hrP5vSuk"
+    
+    # ==================== CLOUDINARY ==================== ✅ NUEVO
+    CLOUDINARY_CLOUD_NAME: Optional[str] = None
+    CLOUDINARY_API_KEY: Optional[str] = None
+    CLOUDINARY_API_SECRET: Optional[str] = None
+    CLOUDINARY_STORAGE_FOLDER: str = "exposoftware"
+    CLOUDINARY_CERTIFICATES_FOLDER: str = "certificados"
+    CLOUDINARY_REPORTS_FOLDER: str = "reportes"
     
     # ==================== CORS ====================
     ALLOWED_ORIGINS: list[str] = [
