@@ -48,30 +48,6 @@ async def get_my_profile(request: Request, current_teacher: Dict[str, Any] = Dep
 # 🌐 ENDPOINTS PÚBLICOS DE DOCENTES
 # ============================================================
 
-@router.get("/proyectos", response_model=List[ProyectoBase])
-async def obtener_todos_los_proyectos():
-    """
-    Lista todos los proyectos disponibles públicamente.
-    """
-    try:
-        proyectos = await teacher_service.list_all_projects()
-        return proyectos
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al obtener proyectos: {str(e)}")
-
-
-@router.get("/{id_docente}/perfil")
-async def obtener_informacion_docente(id_docente: str):
-    """
-    Obtiene información pública del docente (perfil básico).
-    """
-    try:
-        docente = await teacher_service.get_teacher_public_info(id_docente)
-        return docente
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Docente no encontrado: {str(e)}")
-
-
 @router.get("/{id_docente}/materias")
 async def obtener_materias_docente(id_docente: str):
     """

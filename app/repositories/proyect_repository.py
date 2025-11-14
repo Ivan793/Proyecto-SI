@@ -121,3 +121,17 @@ class ProyectoRepository(BaseRepository):
         except Exception as e:
             logger.error(f"Error obteniendo estudiantes del proyecto {project_id}: {e}")
             raise DatabaseException(f"Error al obtener estudiantes del proyecto: {str(e)}")
+        
+    async def get_projects_by_teacher(self, teacher_id: str):
+        """
+        Retorna todos los proyectos donde participa el docente `teacher_id`.
+        """
+        return await self.get_all(filters={
+            "id_docente.uid_docente": teacher_id
+        })
+    
+    async def get_project_detail(self, project_id: str) -> dict:
+        """
+        Obtiene la información completa de un proyecto por su ID.
+        """
+        return await self.get_by_id(project_id)

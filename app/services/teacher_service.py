@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Any
 import logging
 from firebase_admin import auth as firebase_auth
 from firebase_admin.exceptions import FirebaseError
+from app.repositories.proyect_repository import ProyectoRepository
 
 from app.exceptions.base_exceptions import NotFoundException, ValidationException, DatabaseException
 from app.repositories.teacher_repository import TeacherRepository
@@ -40,6 +41,7 @@ class TeacherService:
     
     def __init__(self):
         self.teacher_repo = TeacherRepository()
+        self.proyect_repo = ProyectoRepository()
         self.user_repo = UserRepository()
         self.auth_service = AuthService()
 
@@ -601,29 +603,31 @@ class TeacherService:
             logger.error(f"Error listando grupos de la materia {subject_code}: {str(e)}")
             raise DatabaseException("Error al listar grupos de la materia")
 
+
     async def list_teacher_projects(self, teacher_id: str) -> list:
         """
         Lista los proyectos en los que participa un docente.
         """
         try:
-            from app.repositories.teacher_repository import TeacherRepository
-            projects = await self.teacher_repo.get_projects_by_teacher(teacher_id)
+            projects = await self.proyect_repo.get_projects_by_teacher(teacher_id)
             return projects
         except Exception as e:
             logger.error(f"Error listando proyectos del docente {teacher_id}: {str(e)}")
             raise DatabaseException("Error al listar proyectos del docente")
+
 
     async def get_project_info(self, project_id: str) -> dict:
         """
         Obtiene la información detallada de un proyecto.
         """
         try:
-            from app.repositories.proyect_repository import ProjectRepository
-            project_repo = ProjectRepository()
-            project = await project_repo.get_project_detail(project_id)
+            project = await self.proyect_repo.get_project_detail(project_id)
+
             if not project:
                 raise ValidationException("Proyecto no encontrado")
+
             return project
+
         except ValidationException:
             raise
         except Exception as e:
