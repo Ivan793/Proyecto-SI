@@ -135,3 +135,12 @@ class ProyectoRepository(BaseRepository):
         Obtiene la información completa de un proyecto por su ID.
         """
         return await self.get_by_id(project_id)
+    
+    async def get_projects_by_teacher_and_subject(self, teacher_id: str, materia: str):
+        query = (
+            self.collection
+            .where("id_docente.uid_docente", "==", teacher_id)
+            .where("codigo_materia", "==", materia)
+        )
+        docs = query.get()
+        return [doc.to_dict() | {"id_proyecto": doc.id} for doc in docs]

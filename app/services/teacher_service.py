@@ -673,3 +673,26 @@ class TeacherService:
         except Exception as e:
             logger.error(f"Error inesperado obteniendo docente con usuario {teacher_id}: {str(e)}")
             raise DatabaseException("Error al obtener información completa del docente")
+        
+        
+    async def list_projects_by_teacher_and_subject(self, teacher_id: str, materia: str):
+        # 1. Verificar docente
+        docente = await self.teacher_repo.get_by_id(teacher_id)
+        if not docente:
+            raise ValueError("DOCENTE_NO_ENCONTRADO")
+
+        # 2. (Opcional) validar la materia si tienes un catálogo o colección de materias
+        # materia_existe = await self.materia_repo.get_by_name(materia)
+        # if not materia_existe:
+        #     raise ValueError("MATERIA_NO_EXISTE")
+
+        # 3. Consultar proyectos
+        proyectos = await self.proyect_repo.get_projects_by_teacher_and_subject(
+            teacher_id,
+            materia
+        )
+
+        if not proyectos or len(proyectos) == 0:
+            raise ValueError("NO_HAY_PROYECTOS_PARA_MATERIA")
+
+        return proyectos
