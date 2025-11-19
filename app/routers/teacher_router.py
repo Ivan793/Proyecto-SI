@@ -3,18 +3,22 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, logger, status
 from typing import Any, Dict, List
 
-from app.dependencies.auth_dependencies import get_current_teacher_user
+from app.core.rate_limiter import admin_rate_limit, auth_rate_limit
+from app.dependencies.auth_dependencies import require_teacher, get_current_teacher_user
+from app.dependencies.service_dependencies import get_teacher_service
+from app.services import teacher_service
 from app.services.teacher_service import TeacherService
 from app.schemas.proyect import ProyectoBase
-from app.schemas.teacher import TeacherBase
-from app.utils.responses import internal_server_error_response, not_found_response, success_response
+from app.schemas.teacher import TeacherBase, TeacherProfileUpdate
+from app.utils.responses import internal_server_error_response, not_found_response, success_response, updated_response
+from app.utils.swagger_docs import ResponseDocumentation
 
 router = APIRouter(
     prefix="/docentes",
     tags=["Docentes"]
 )
 
-teacher_service = TeacherService()
+
 
 # Obtener perfil del estudiante autenticado
 @router.get("/mi-perfil", status_code=status.HTTP_200_OK, summary="Obtener perfil del docente actual")
@@ -121,3 +125,43 @@ async def obtener_detalle_proyecto(id_proyecto: str):
     
 # ============================================================
 
+
+@router.put(
+    "/{teacher_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Actualizar profesor",
+    description="Permite a los administradores modificar los datos académicos del docente.",
+    responses=ResponseDocumentation.get_standard_responses()
+)
+@auth_rate_limit()
+async def update_teacher(
+    request: Request,
+    teacher_data: TeacherProfileUpdate,
+    current_admin: Dict[str, Any] = Depends(require_teacher),
+    service: TeacherService = Depends(get_teacher_service)
+):
+    """
+    Actualiza el perfil completo del docente autenticado.
+    
+    - **Requiere autenticación**: Token JWT válido con rol Docente
+    - **Transacción atómica**: Docente y usuario se actualizan juntos en Firestore
+    - **Contraseña**: Se actualiza en Firebase Auth (operación separada)
+    - **Campos opcionales**: Solo se actualizan los campos proporcionados
+    - **Validaciones**: Semestre válido, coherencia con año de ingreso, etc.
+    """
+    # Obtener docente por user_id del token
+    teacher = await service.teacher_repo.get_teacher_by_user_id(
+        current_admin["user_id"]
+    )
+
+    # Actualizar perfil con transacción atómica
+    updated_profile = await service.update_teacher(
+        teacher["id_docente"], 
+        teacher_data
+    )
+    
+
+    return updated_response(
+        data=updated_profile.model_dump(),
+        message="Perfil actualizado exitosamente"
+    )

@@ -167,38 +167,30 @@ async def get_teacher_groups(
 
 
 @router.put(
-    "/mi-perfil",
+    "/{teacher_id}",
     status_code=status.HTTP_200_OK,
     summary="Actualizar profesor",
+    description="Permite a los administradores modificar los datos académicos del docente.",
     responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def update_teacher(
     request: Request,
+    teacher_id: str,
     teacher_data: TeacherProfileUpdate,
-    current_admin: Dict[str, Any] = Depends(require_admin_or_teacher),
+    current_admin: Dict[str, Any] = Depends(get_current_admin_user),
     service: TeacherService = Depends(get_teacher_service)
 ):
     
     # Obtener docente por user_id del token
-    teacher = await service.teacher_repo.get_teacher_by_user_id(
-        current_admin["user_id"]
-    )
+    teacher = await service.update_teacher(teacher_id, teacher_data)
 
-    # Actualizar perfil con transacción atómica
-    updated_profile = await service.update_teacher(
-        teacher["id_docente"], 
-        teacher_data
-    )
+    logger.info(f"Estudiante actualizado: {teacher_id} por {current_admin['nombre_completo']}")
 
-    logger.info(
-        f"Perfil actualizado exitosamente: {teacher['id_docente']}",
-        extra={"user_id": current_admin["user_id"]}
-    )
 
     return updated_response(
-        data=updated_profile.model_dump(),
-        message="Profesor actualizado exitosamente"
+        data=teacher.model_dump(),
+        message="Estudiante actualizado exitosamente"
     )
 
 

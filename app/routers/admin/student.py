@@ -19,7 +19,7 @@ from app.dependencies.auth_dependencies import (
 )
 from app.core.rate_limiter import admin_rate_limit
 from app.utils.responses import (
-    success_response, created_response, paginated_response, 
+    message_response, success_response, created_response, paginated_response, 
     updated_response, not_found_response, conflict_response,
     bad_request_response, internal_server_error_response
 )
@@ -82,19 +82,6 @@ async def get_students(
         message="Estudiantes obtenidos exitosamente"
     )
 
-<<<<<<< HEAD
-=======
-        return paginated_response(
-            data=[student.model_dump() for student in students],
-            page=params.page,
-            limit=params.limit,
-            total_items=total
-        )
-        
-    except Exception as e:
-        logger.error(f"❌ Error obteniendo estudiantes: {str(e)}")
-        return internal_server_error_response()
->>>>>>> feature/deploy
 
 
 
@@ -111,7 +98,6 @@ async def get_student_by_id(
     current_user: Dict[str, Any] = Depends(require_admin_or_teacher),
     service: StudentService = Depends(get_student_service)
 ):
-<<<<<<< HEAD
     """
     Obtiene estudiante por ID.
     
@@ -123,22 +109,6 @@ async def get_student_by_id(
         data=student.model_dump(),
         message="Estudiante obtenido correctamente"
     )
-=======
-    try:
-        service = StudentService()
-        student = await service.get_student(student_id)
-        
-        return success_response(
-            data=student.model_dump(),
-            message="Estudiante obtenido correctamente"
-        )
-        
-    except StudentNotFoundException:
-        return not_found_response("Estudiante", student_id)
-    except Exception as e:
-        logger.error(f"❌ Error obteniendo estudiante {student_id}: {str(e)}")
-        return internal_server_error_response()
->>>>>>> feature/deploy
 
 
 # Obtener estudiante con datos del usuario
@@ -155,7 +125,6 @@ async def get_student_with_user(
     current_user: Dict[str, Any] = Depends(get_current_admin_user),
     service: StudentService = Depends(get_student_service)
 ):
-<<<<<<< HEAD
     """
     Obtiene estudiante con información completa de usuario.
     
@@ -167,24 +136,6 @@ async def get_student_with_user(
         data=student_with_user.model_dump(),
         message="Estudiante con información completa"
     )
-=======
-    try:
-        service = StudentService()
-        student_with_user = await service.get_student_with_user(student_id)
-        
-        return success_response(
-            data=student_with_user.model_dump(),
-            message="Estudiante con información completa"
-        )
-        
-    except StudentNotFoundException:
-        return not_found_response("Estudiante", student_id)
-    except UserNotFoundException:
-        return not_found_response("Usuario", "asociado al estudiante")
-    except Exception as e:
-        logger.error(f"❌ Error: {str(e)}")
-        return internal_server_error_response()
->>>>>>> feature/deploy
 
 
 
@@ -203,7 +154,6 @@ async def update_student(
     current_user: Dict[str, Any] = Depends(get_current_admin_user),
     service: StudentService = Depends(get_student_service)
 ):
-<<<<<<< HEAD
     """
     Actualiza estudiante.
     
@@ -217,24 +167,6 @@ async def update_student(
         data=student.model_dump(),
         message="Estudiante actualizado exitosamente"
     )
-=======
-    try:
-        service = StudentService()
-        student = await service.update_student(student_id, student_data)
-        
-        logger.info(f"🛠️ Estudiante actualizado: {student_id} por {current_user['nombre_completo']}")
-        
-        return updated_response(
-            data=student.model_dump(),
-            message="Estudiante actualizado exitosamente"
-        )
-        
-    except StudentNotFoundException:
-        return not_found_response("Estudiante", student_id)
-    except Exception as e:
-        logger.error(f"❌ Error actualizando estudiante {student_id}: {str(e)}")
-        return internal_server_error_response()
->>>>>>> feature/deploy
 
 
 
@@ -253,32 +185,12 @@ async def deactivate_student(
     current_user: Dict[str, Any] = Depends(get_current_admin_user),
     service: StudentService = Depends(get_student_service)
 ):
-<<<<<<< HEAD
     success = await service.deactivate_student(student_id, razon)
     
     if success:
         logger.info(f"Estudiante desactivado: {student_id}")
         return message_response("Estudiante desactivado exitosamente")
 
-=======
-    try:
-        service = StudentService()
-        success = await service.deactivate_student(student_id, razon)
-        
-        if success:
-            logger.info(f"🧩 Estudiante desactivado: {student_id}")
-            return success_response(
-                data={"desactivado": True},
-                message="Estudiante desactivado exitosamente"
-            )
-        return bad_request_response(message="No se pudo desactivar")
-            
-    except StudentNotFoundException:
-        return not_found_response("Estudiante", student_id)
-    except Exception as e:
-        logger.error(f"❌ Error: {str(e)}")
-        return internal_server_error_response()
->>>>>>> feature/deploy
 
 
 # Activar estudiante
@@ -295,32 +207,12 @@ async def activate_student(
     current_user: Dict[str, Any] = Depends(get_current_admin_user),
     service: StudentService = Depends(get_student_service)
 ):
-<<<<<<< HEAD
 
     success = await service.activate_student(student_id)
     
     if success:
         logger.info(f"Estudiante activado: {student_id}")
         return message_response("Estudiante activado exitosamente")
-=======
-    try:
-        service = StudentService()
-        success = await service.activate_student(student_id)
-        
-        if success:
-            logger.info(f"✅ Estudiante activado: {student_id}")
-            return success_response(
-                data={"activado": True},
-                message="Estudiante activado exitosamente"
-            )
-        return bad_request_response(message="No se pudo activar")
-            
-    except StudentNotFoundException:
-        return not_found_response("Estudiante", student_id)
-    except Exception as e:
-        logger.error(f" Error: {str(e)}")
-        return internal_server_error_response()
->>>>>>> feature/deploy
 
 
 # Obtener estudiantes por programa
@@ -336,24 +228,9 @@ async def get_students_by_program(
     current_user: Dict[str, Any] = Depends(require_admin_or_teacher),
     service: StudentService = Depends(get_student_service)
 ):
-<<<<<<< HEAD
     students = await service.get_students_by_program(program_code)
     
     return success_response(
         data=[student.model_dump() for student in students],
         message=f"Estudiantes del programa {program_code}"
     )
-=======
-    try:
-        service = StudentService()
-        students = await service.get_students_by_program(program_code)
-        
-        return success_response(
-            data=[student.model_dump() for student in students],
-            message=f"Estudiantes del programa {program_code}"
-        )
-        
-    except Exception as e:
-        logger.error(f"❌ Error obteniendo estudiantes por programa: {str(e)}")
-        return internal_server_error_response()
->>>>>>> feature/deploy
