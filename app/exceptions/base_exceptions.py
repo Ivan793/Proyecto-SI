@@ -187,3 +187,15 @@ class BusinessRuleException(AppException):
             details=details,
             code=code
         )
+
+
+class TransactionException(DatabaseException):
+    """
+    Excepción lanzada cuando ocurre un error durante una transacción en Firestore.
+
+    Args:
+        message: Mensaje descriptivo del error.
+        details: Información adicional opcional (por ejemplo, IDs o datos relacionados).
+    """
+    def __init__(self, message="Error en transacción de Firestore", details=None):
+        super().__init__(message=message, details=details or {})

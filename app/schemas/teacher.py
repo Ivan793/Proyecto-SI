@@ -1,10 +1,10 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Optional
 from datetime import datetime
 
 from app.core.validators import TeacherValidatorMixin
 from app.schemas.types import *
-from app.schemas.user import UserBasicInfo, UserCreate, UserResponse
+from app.schemas.user import UserBasicInfo, UserCreate, UserResponse, UserUpdate
 from app.core.constants import Defaults
 
 class TeacherBase(BaseModel, TeacherValidatorMixin):
@@ -62,6 +62,21 @@ TeacherCreate = TeacherCreateWithUser
 class TeacherUpdate(BaseModel):
     categoria_docente: Optional[TeacherCategoryType] = None
     codigo_programa: Optional[ProgramCode] = None
+
+
+class TeacherProfileUpdate(BaseModel):
+    """Esquema para actualizar perfil completo del docente"""
+    datos_docente: Optional[TeacherUpdate] = None
+    datos_usuario: Optional[UserUpdate] = None
+
+    @model_validator(mode='after')
+    def validate_at_least_one_section(self) -> 'TeacherProfileUpdate':
+        """Valida que se proporcione al menos una sección para actualizar"""
+        if not self.datos_docente and not self.datos_usuario:
+            raise ValueError("Debe proporcionar datos del docente o del usuario para actualizar")
+        return self
+    
+    model_config = ConfigDict(from_attributes=True)
 
 class TeacherResponse(BaseModel):
     id_docente: TeacherId
