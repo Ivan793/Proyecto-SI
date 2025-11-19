@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     
     # ==================== API ====================
     API_V1_PREFIX: str = "/api/v1"
+    API_BASE_URL: Optional[str] = None  
     
     # ==================== SEGURIDAD ====================
     SECRET_KEY: str = "MuIOjdl8Dl9mqr7-9nyQXneaHhwWcKSRGikRIcBZr9c"
@@ -26,12 +27,21 @@ class Settings(BaseSettings):
     FIREBASE_DATABASE_URL: Optional[str] = None
     FIREBASE_API_KEY: str = "AIzaSyCbEN3vnK6AtsLNbaKPPMT4Iz0hrP5vSuk"
     
+    # ==================== CLOUDINARY ==================== ✅ NUEVO
+    CLOUDINARY_CLOUD_NAME: Optional[str] = None
+    CLOUDINARY_API_KEY: Optional[str] = None
+    CLOUDINARY_API_SECRET: Optional[str] = None
+    CLOUDINARY_STORAGE_FOLDER: str = "exposoftware"
+    CLOUDINARY_CERTIFICATES_FOLDER: str = "certificados"
+    CLOUDINARY_REPORTS_FOLDER: str = "reportes"
+    
     # ==================== CORS ====================
     ALLOWED_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:3001",
         "http://localhost:8000",
+        "https://z6gasdnp5zp6v6egg4kg3jsitu0ffcqu.lambda-url.us-east-1.on.aws",
     ]
     
     # ==================== RATE LIMITING ====================

@@ -20,6 +20,7 @@ class GroupBase(BaseModel):
         }
     )
 
+
 class GroupCreate(BaseModel):
     codigo_grupo: GroupCode
     id_docente: TeacherId
@@ -56,7 +57,6 @@ class GroupUpdate(BaseModel):
             }
         }
     )
-
 
 
 class GroupResponse(BaseModel):

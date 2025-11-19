@@ -1,9 +1,8 @@
-from fastapi import APIRouter, HTTPException, status, Query, Request
-from typing import Optional
+from fastapi import APIRouter, HTTPException, status, Query, Request, Depends
 import logging
-
+from app.dependencies.auth_dependencies import get_current_user_from_token
 from app.services.graduate_service import GraduateService
-from app.schemas.graduate import GraduateCreate, GraduateResponse, GraduateUpdate
+from app.schemas.graduate import GraduateCreate, GraduateUpdate
 from app.utils.responses import (
     success_response, created_response, updated_response,
     not_found_response, bad_request_response, internal_server_error_response,
@@ -40,7 +39,6 @@ async def create_graduate_with_user(
         )
 
     except HTTPException as e:
-        # ✅ Devolvemos el mismo formato estructurado del servicio
         logger.warning(f"Error controlado al crear egresado: {e.detail}")
         return e
 
@@ -55,16 +53,14 @@ async def create_graduate_with_user(
 @router.get(
     "",
     response_model=None,
-    summary="Listar egresados activos",
+    summary="Listar egresados activos (con datos del usuario)",
     responses=ResponseDocumentation.get_standard_responses()
 )
-async def get_all_graduates(
-    request: Request
-):
+async def get_all_graduates(request: Request):
     try:
         graduates, _ = await graduate_service.get_all_graduates()
         return success_response(
-            data=[grad.model_dump() for grad in graduates],
+            data=graduates,  # ✅ ahora viene como lista de {"egresado": {}, "usuario": {}}
             message="Egresados obtenidos exitosamente"
         )
     except Exception as e:
@@ -75,19 +71,18 @@ async def get_all_graduates(
 @router.get(
     "/{graduate_id}",
     response_model=None,
-    summary="Obtener egresado por ID",
+    summary="Obtener egresado por ID (con datos del usuario)",
     responses=ResponseDocumentation.get_standard_responses()
 )
-async def get_graduate(
-    request: Request,
-    graduate_id: str
-):
+async def get_graduate(request: Request, graduate_id: str):
     try:
         result = await graduate_service.get_graduate(graduate_id)
         return success_response(
-            data=result.model_dump(),
+            data=result,  # ✅ ya es un dict con {"egresado": {...}, "usuario": {...}}
             message="Egresado obtenido exitosamente"
         )
+    except HTTPException as e:
+        return e
     except Exception as e:
         return not_found_response("Egresado", graduate_id)
 
@@ -95,7 +90,7 @@ async def get_graduate(
 @router.put(
     "/{graduate_id}",
     response_model=None,
-    summary="Actualizar egresado",
+    summary="Actualizar egresado y usuario",
     responses=ResponseDocumentation.get_standard_responses()
 )
 async def update_graduate(
@@ -106,9 +101,11 @@ async def update_graduate(
     try:
         result = await graduate_service.update_graduate(graduate_id, graduate_data)
         return updated_response(
-            data=result.model_dump(),
+            data=result,  # ✅ retorna {"egresado": {...}, "usuario": {...}}
             message="Egresado actualizado exitosamente"
         )
+    except HTTPException as e:
+        return e
     except Exception as e:
         return bad_request_response(message=str(e))
 

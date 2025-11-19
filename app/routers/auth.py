@@ -58,16 +58,17 @@ class LoginRequest(BaseModel):
         }
     }
 
+
 class LoginResponse(BaseModel):
     access_token: str = Field(..., description="Token JWT de acceso")
     refresh_token: str = Field(..., description="Token para refrescar sesión")
     token_type: str = Field(default="bearer", description="Tipo de token")
     expires_in: int = Field(..., description="Tiempo de expiración en segundos")
     user: Dict[str, Any] = Field(
-        ..., 
+        ...,
         description="Datos mínimos del usuario (solo id, correo, rol)"
     )
-    
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -87,7 +88,7 @@ class LoginResponse(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     """Esquema para refrescar token"""
-    
+
     refresh_token: str = Field(..., description="Token de refresco")
 
 
@@ -97,13 +98,13 @@ def _create_login_response(result: Dict[str, Any]) -> Dict[str, Any]:
     Solo incluye datos mínimos necesarios para el frontend.
     """
     user_data = result.get("user", {})
-    
+
     nombre = user_data.get("nombre")
     if nombre:
         message = f"Bienvenido, {nombre}"
     else:
         message = "Inicio de sesión exitoso"
-    
+
     return success_response(
         data={
             "access_token": result["access_token"],
@@ -114,6 +115,7 @@ def _create_login_response(result: Dict[str, Any]) -> Dict[str, Any]:
         },
         message=message
     )
+
 
 # ==================== ENDPOINTS ====================
 
@@ -129,26 +131,26 @@ def _create_login_response(result: Dict[str, Any]) -> Dict[str, Any]:
     - Estudiante
     - Egresado
     - Invitado
-    
+
     El sistema detecta automáticamente el rol del usuario y valida sus permisos.
     """,
     responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()
 async def universal_login(
-    request: Request,
-    credentials: LoginRequest
+        request: Request,
+        credentials: LoginRequest
 ) -> Dict[str, Any]:
     try:
         auth_service = AuthService()
-        
+
         result = await auth_service.login(
             correo=credentials.correo,
             password=credentials.password
         )
-        
+
         return _create_login_response(result)
-        
+
     except InvalidCredentialsException as e:
         return unauthorized_response(message="Credenciales inválidas")
     except AccountDisabledException as e:
@@ -176,20 +178,20 @@ async def universal_login(
 )
 @auth_rate_limit()
 async def admin_login(
-    request: Request,
-    credentials: LoginRequest
+        request: Request,
+        credentials: LoginRequest
 ) -> Dict[str, Any]:
     try:
         auth_service = AuthService()
-        
+
         result = await auth_service.login(
             correo=credentials.correo,
             password=credentials.password,
             required_role="Administrativo"
         )
-        
+
         return _create_login_response(result)
-        
+
     except InvalidCredentialsException as e:
         return unauthorized_response(message=str(e))
     except AccountDisabledException as e:
@@ -209,12 +211,12 @@ async def admin_login(
 )
 @auth_rate_limit()
 async def teacher_login(
-    request: Request,
-    credentials: LoginRequest
+        request: Request,
+        credentials: LoginRequest
 ) -> Dict[str, Any]:
     try:
         auth_service = AuthService()
-        
+
         result = await auth_service.login(
             correo=credentials.correo,
             password=credentials.password,
@@ -242,25 +244,25 @@ async def teacher_login(
 )
 @auth_rate_limit()
 async def student_login(
-    request: Request,
-    credentials: LoginRequest
+        request: Request,
+        credentials: LoginRequest
 ) -> Dict[str, Any]:
     try:
         auth_service = AuthService()
-        
+
         result = await auth_service.login(
             correo=credentials.correo,
             password=credentials.password
         )
-        
+
         user_role = result["user"]["rol"]
         if user_role not in ["Estudiante", "Egresado"]:
             return unauthorized_response(
                 message="Este login es solo para estudiantes y egresados"
             )
-        
+
         return _create_login_response(result)
-        
+
     except InvalidCredentialsException as e:
         return unauthorized_response(message=str(e))
     except AccountDisabledException as e:
@@ -279,18 +281,18 @@ async def student_login(
     responses=ResponseDocumentation.get_standard_responses()
 )
 async def refresh_access_token(
-    request: Request,
-    refresh_data: RefreshTokenRequest
+        request: Request,
+        refresh_data: RefreshTokenRequest
 ) -> Dict[str, Any]:
     try:
         auth_service = AuthService()
         result = await auth_service.refresh_token(refresh_data.refresh_token)
-        
+
         return success_response(
             data=result,
             message="Token refrescado exitosamente"
         )
-        
+
     except InvalidCredentialsException as e:
         return unauthorized_response(message=str(e))
     except Exception as e:
@@ -307,8 +309,8 @@ async def refresh_access_token(
     responses=ResponseDocumentation.get_standard_responses()
 )
 async def get_current_user_info(
-    request: Request,
-    current_user: Dict[str, Any] = Depends(get_current_user_from_token)
+        request: Request,
+        current_user: Dict[str, Any] = Depends(get_current_user_from_token)
 ) -> Dict[str, Any]:
     """
     Retorna toda la información del usuario autenticado (campos completos del usuario)
@@ -401,17 +403,17 @@ async def get_current_user_info(
     responses=ResponseDocumentation.get_standard_responses()
 )
 async def logout(
-    request: Request,
-    current_user: Dict[str, Any] = Depends(get_current_user_from_token)
+        request: Request,
+        current_user: Dict[str, Any] = Depends(get_current_user_from_token)
 ) -> Dict[str, Any]:
     try:
         logger.info(f"Logout de usuario: {current_user.get('email')}")
-        
+
         return success_response(
             data=None,
             message="Sesión cerrada exitosamente"
         )
-        
+
     except Exception as e:
         logger.error(f"Error en logout: {str(e)}")
         return internal_server_error_response()

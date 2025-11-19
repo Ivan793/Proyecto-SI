@@ -28,12 +28,11 @@ class GraduateService:
         self.user_repo = UserRepository()
         self.graduate_repo = GraduateRepository()
 
-        # -------------------------------
+    # -------------------------------
     # Crear egresado con usuario (CASCADA)
     # -------------------------------
     async def create_graduate_with_user(self, graduate_data: GraduateCreate) -> GraduateResponse:
         try:
-            # 🔹 1. Validar identificación duplicada
             existing_by_id = await self.user_repo.get_by_field("identificacion", graduate_data.identificacion)
             if existing_by_id:
                 logger.warning(f"Identificación duplicada: {graduate_data.identificacion}")
@@ -47,7 +46,6 @@ class GraduateService:
                     }
                 )
 
-            # 🔹 2. Validar correo duplicado
             existing_user = await self.user_repo.get_user_by_email(graduate_data.correo)
             if existing_user:
                 logger.warning(f"Correo duplicado: {graduate_data.correo}")
@@ -61,7 +59,6 @@ class GraduateService:
                     }
                 )
 
-            # 🔹 3. Crear usuario en Firebase Auth
             firebase_user = firebase_auth.create_user(
                 email=graduate_data.correo,
                 password=graduate_data.contraseña,
@@ -71,22 +68,18 @@ class GraduateService:
             uid = firebase_user.uid
             logger.info(f"Usuario creado en Firebase Auth: {uid}")
 
-            # 🔹 4. Crear usuario en Firestore
             user_dict = graduate_data.model_dump(exclude={
                 "contraseña", "programa_academico", "codigo_programa", "año_graduacion",
                 "titulo_obtenido", "titulado"
             })
             user_dict.update({
                 "rol": "Egresado",
-                "estado": "ACTIVO",
-                "activo": True,
                 "created_at": datetime.utcnow(),
                 "updated_at": datetime.utcnow()
             })
             await self.user_repo.create(user_dict, document_id=uid)
             logger.info(f"Usuario creado en Firestore: {uid}")
 
-            # 🔹 5. Crear egresado asociado
             graduate_dict = {
                 "id_usuario": uid,
                 "codigo_programa": graduate_data.codigo_programa,
@@ -105,29 +98,23 @@ class GraduateService:
                 else graduate_created
             )
 
-            # ✅ 🔹 6. Enviar email de verificación (nuevo)
             try:
                 from app.services.auth_service import AuthService
                 auth_service = AuthService()
                 email_sent = await auth_service.send_email_verification(graduate_data.correo)
-
                 if email_sent:
                     logger.info(f"Email de verificación enviado a: {graduate_data.correo}")
                 else:
                     logger.warning(f"No se pudo enviar email de verificación a: {graduate_data.correo}")
             except Exception as e:
                 logger.error(f"Error enviando email de verificación: {str(e)}")
-                # No interrumpe la creación del egresado
 
-            # 🔹 7. Obtener y retornar el egresado
             graduate = await self.graduate_repo.get_by_id(graduate_id)
             return GraduateResponse(**graduate)
 
         except HTTPException:
-            raise  # ⚠️ Re-lanzar excepciones controladas
-
+            raise
         except Exception as e:
-            # 🔙 Rollback en caso de error
             if "firebase_user" in locals():
                 try:
                     firebase_auth.delete_user(firebase_user.uid)
@@ -146,22 +133,32 @@ class GraduateService:
                 }
             )
 
-
     # -------------------------------
-    # Obtener egresados activos
+    # Obtener egresados activos (solo campos específicos del usuario)
     # -------------------------------
     async def get_all_graduates(self, page: int = 1, limit: int = 20):
-        """Obtiene solo egresados cuyo usuario tenga activo=True"""
+        """Obtiene los egresados cuyo usuario tenga activo=True e incluye solo los campos relevantes del usuario"""
         try:
             graduates, total = await self.graduate_repo.get_all_paginated(page=page, limit=limit)
             active_graduates = []
 
-            # 🔍 Filtrar por usuarios activos
             for g in graduates:
                 user_id = g.get("id_usuario")
                 user = await self.user_repo.get_by_id(user_id)
                 if user and user.get("activo", False) is True:
-                    active_graduates.append(GraduateResponse(**g))
+                    nombre_completo = f"{user.get('primer_nombre', '')} {user.get('segundo_nombre', '')} {user.get('primer_apellido', '')} {user.get('segundo_apellido', '')}".strip()
+                    filtered_user = {
+                        "id_usuario": user.get("id_usuario"),
+                        "nombre_completo": nombre_completo,
+                        "identificacion": user.get("identificacion"),
+                        "correo": user.get("correo"),
+                        "telefono": user.get("telefono"),
+                        "activo": user.get("activo")
+                    }
+                    active_graduates.append({
+                        "egresado": g,
+                        "usuario": filtered_user
+                    })
 
             return active_graduates, len(active_graduates)
 
@@ -178,41 +175,26 @@ class GraduateService:
             )
 
     # -------------------------------
-    # Actualizar egresado
+    # Obtener egresado por ID (con datos del usuario)
     # -------------------------------
-    async def update_graduate(self, graduate_id: str, graduate_data: GraduateUpdate) -> GraduateResponse:
-        """Actualiza solo los datos del egresado (no los del usuario)"""
+    async def get_graduate(self, graduate_id: str) -> dict:
+        """Obtiene un egresado junto con todos los datos del usuario asociado"""
         try:
-            # 🔍 Buscar el egresado
             graduate = await self.graduate_repo.get_by_id(graduate_id)
             if not graduate:
                 graduate = await self.graduate_repo.get_by_field("id_usuario", graduate_id)
             if not graduate:
                 raise GraduateNotFoundException(graduate_id)
 
-            grad_update_data = graduate_data.model_dump(exclude_unset=True)
-            grad_update_data["updated_at"] = datetime.utcnow()
+            user_id = graduate.get("id_usuario")
+            user = await self.user_repo.get_by_id(user_id)
+            if not user:
+                raise UserNotFoundException(user_id)
 
-            # 🔹 Actualizar egresado en Firestore
-            success = await self.graduate_repo.update(graduate_id, grad_update_data)
-            if not success:
-                raise HTTPException(
-                    status_code=400,
-                    detail={
-                        "status": "error",
-                        "message": "No se pudo actualizar el egresado.",
-                        "code": "UPDATE_FAILED",
-                        "timestamp": datetime.utcnow().isoformat()
-                    }
-                )
-
-            # 🔹 Obtener egresado actualizado
-            updated_grad = await self.graduate_repo.get_by_id(graduate_id)
-            if not updated_grad:
-                raise GraduateNotFoundException(graduate_id)
-
-            logger.info(f"Egresado {graduate_id} actualizado correctamente.")
-            return GraduateResponse(**updated_grad)
+            return {
+                "egresado": graduate,
+                "usuario": user
+            }
 
         except GraduateNotFoundException as e:
             raise HTTPException(
@@ -224,10 +206,116 @@ class GraduateService:
                     "timestamp": datetime.utcnow().isoformat()
                 }
             )
+        except UserNotFoundException as e:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "status": "error",
+                    "message": f"No se encontró el usuario del egresado: {str(e)}",
+                    "code": "NOT_FOUND",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error al obtener egresado {graduate_id}: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "status": "error",
+                    "message": f"Error interno al obtener egresado: {str(e)}",
+                    "code": "INTERNAL_ERROR",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
 
-        except HTTPException:
-            raise
+    # -------------------------------
+    # ✅ Actualizar egresado + usuario (solo cambio aquí)
+    # -------------------------------
+    async def update_graduate(self, graduate_id: str, graduate_data: GraduateUpdate) -> dict:
+        """Actualiza todos los campos del egresado y del usuario excepto correo e identificación"""
+        try:
+            graduate = await self.graduate_repo.get_by_id(graduate_id)
+            if not graduate:
+                graduate = await self.graduate_repo.get_by_field("id_usuario", graduate_id)
+            if not graduate:
+                raise GraduateNotFoundException(graduate_id)
 
+            user_id = graduate.get("id_usuario")
+            user = await self.user_repo.get_by_id(user_id)
+            if not user:
+                raise UserNotFoundException(user_id)
+
+            # Tomar solo los datos que llegaron en el body
+            input_data = graduate_data.model_dump(exclude_unset=True)
+
+            # --- Campos permitidos para el egresado (solo estos se actualizan en la colección egresados) ---
+            grad_fields_allowed = [
+                "codigo_programa", "programa_academico", "año_graduacion",
+                "titulo_obtenido", "titulado"
+            ]
+            grad_update_data = {k: v for k, v in input_data.items() if k in grad_fields_allowed}
+            if grad_update_data:
+                grad_update_data["updated_at"] = datetime.utcnow()
+                await self.graduate_repo.update(graduate_id, grad_update_data)
+
+            # --- Campos permitidos para el usuario (TODOS menos 'correo' e 'identificacion') ---
+            user_fields_allowed = [
+                "primer_nombre", "segundo_nombre", "primer_apellido", "segundo_apellido",
+                "sexo", "identidad_sexual", "fecha_nacimiento", "nacionalidad",
+                "pais_residencia", "departamento", "municipio", "ciudad_residencia",
+                "direccion_residencia", "telefono", "activo"
+            ]
+            user_update_data = {k: v for k, v in input_data.items() if k in user_fields_allowed}
+            if user_update_data:
+                user_update_data["updated_at"] = datetime.utcnow()
+                await self.user_repo.update(user_id, user_update_data)
+
+            # Obtener actualizados
+            updated_grad = await self.graduate_repo.get_by_id(graduate_id)
+            updated_user = await self.user_repo.get_by_id(user_id)
+
+            # Generar nombre completo con los 4 campos
+            nombre_completo = f"{updated_user.get('primer_nombre', '')} {updated_user.get('segundo_nombre', '')} {updated_user.get('primer_apellido', '')} {updated_user.get('segundo_apellido', '')}".strip()
+
+            filtered_user = {
+                "id_usuario": updated_user.get("id_usuario"),
+                "nombre_completo": nombre_completo,
+                "primer_nombre": updated_user.get("primer_nombre"),
+                "segundo_nombre": updated_user.get("segundo_nombre"),
+                "primer_apellido": updated_user.get("primer_apellido"),
+                "segundo_apellido": updated_user.get("segundo_apellido"),
+                "identificacion": updated_user.get("identificacion"),  # solo lectura
+                "correo": updated_user.get("correo"),                  # solo lectura
+                "telefono": updated_user.get("telefono"),
+                "activo": updated_user.get("activo")
+            }
+
+            logger.info(f"Egresado {graduate_id} y usuario {user_id} actualizados correctamente.")
+            return {
+                "egresado": updated_grad,
+                "usuario": filtered_user
+            }
+
+        except GraduateNotFoundException as e:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "status": "error",
+                    "message": f"No se encontró el egresado: {str(e)}",
+                    "code": "NOT_FOUND",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
+        except UserNotFoundException as e:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "status": "error",
+                    "message": f"No se encontró el usuario del egresado: {str(e)}",
+                    "code": "NOT_FOUND",
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
         except Exception as e:
             logger.error(f"Error al actualizar egresado {graduate_id}: {e}")
             raise HTTPException(
@@ -266,4 +354,3 @@ class GraduateService:
 
         logger.info(f"Egresado {graduate_id} desactivado y usuario {user_id} inactivado correctamente.")
         return True
-

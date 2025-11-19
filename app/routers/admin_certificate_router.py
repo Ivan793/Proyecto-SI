@@ -251,3 +251,50 @@ async def descargar_lote_certificados(
                 "detalles": str(e)
             }
         )
+
+@router.get(
+    "/lotes",
+    response_model=Dict[str, Any],
+    status_code=status.HTTP_200_OK,
+    summary="Obtener listado de lotes de certificados"
+)
+async def obtener_lotes_certificados(
+    pagina: int = 1,
+    limite: int = 20,
+    # current_user = Depends(get_current_admin_user)
+):
+    """
+    Obtiene un listado paginado de todos los lotes de certificados generados.
+    
+    **Información incluida:**
+    - ID del lote
+    - ID del proyecto
+    - Nombre del proyecto
+    - Evento asociado
+    - Cantidad de certificados
+    - Fecha de generación
+    - Estado del lote
+    - Información de Cloudinary
+    """
+    try:
+        service = CertificateService()
+        resultado = await service.obtener_lotes_certificados(
+            pagina=pagina,
+            limite=limite
+        )
+        
+        return {
+            "status": "success",
+            "data": resultado
+        }
+    
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo lotes de certificados: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "error",
+                "mensaje": "Error interno al obtener lotes de certificados",
+                "detalles": str(e)
+            }
+        )

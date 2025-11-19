@@ -17,7 +17,6 @@ from app.utils.responses import (
     created_response, 
     updated_response, 
 )
-from app.utils.swagger_docs import ResponseDocumentation
 from app.exceptions.student_exceptions import StudentNotFoundException
 
 
@@ -26,11 +25,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/estudiantes", tags=["Estudiantes"])
 
 
+
+# Registro público de estudiante
 @router.post(
     "/registro",
     status_code=status.HTTP_201_CREATED,
     summary="Registro de estudiante",
-    description="""Registro público de estudiante con creación de usuario.""",
+    description="""Registro público de estudiante con creación de usuario asociado 
+    (incluye datos personales, académicos y periodo actual)."""
 )
 @auth_rate_limit()
 async def register_student(
@@ -91,6 +93,9 @@ async def get_my_profile(
         message="Perfil obtenido correctamente"
     )
 
+
+
+# Actualizar perfil del estudiante autenticado
 @router.put(
     "/mi-perfil",
     status_code=status.HTTP_200_OK,

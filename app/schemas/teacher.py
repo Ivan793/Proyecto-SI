@@ -7,6 +7,7 @@ from app.schemas.types import *
 from app.schemas.user import UserBasicInfo, UserCreate, UserResponse, UserUpdate
 from app.core.constants import Defaults
 
+
 class TeacherBase(BaseModel, TeacherValidatorMixin):
     categoria_docente: TeacherCategoryType
     codigo_programa: ProgramCode
@@ -25,7 +26,7 @@ class TeacherBase(BaseModel, TeacherValidatorMixin):
 # Crear profesor CON usuario en cascada
 class TeacherCreateWithUser(TeacherBase):
     usuario: UserCreate  # Datos completos del usuario a crear
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -56,8 +57,10 @@ class TeacherCreateWithUser(TeacherBase):
         }
     )
 
+
 # Alias para mantener compatibilidad (usar la opción que prefieras como default)
 TeacherCreate = TeacherCreateWithUser
+
 
 class TeacherUpdate(BaseModel):
     categoria_docente: Optional[TeacherCategoryType] = None
@@ -85,8 +88,9 @@ class TeacherResponse(BaseModel):
     codigo_programa: ProgramCode
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
+
 
 class TeacherWithUserResponse(BaseModel):
     docente: TeacherResponse

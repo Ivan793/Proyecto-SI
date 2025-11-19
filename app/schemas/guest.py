@@ -82,10 +82,53 @@ class GuestCreateExistingUser(GuestBase):
         }
     )
 
+# ✅ Aquí añadimos los campos del usuario para actualizar
 class GuestUpdate(BaseModel):
     institucion_origen: Optional[Institution] = None
     nombre_empresa: Optional[str] = None
     id_sector: Optional[Sector] = None
+    primer_nombre: Optional[UserName] = None
+    segundo_nombre: Optional[UserName] = None
+    primer_apellido: Optional[UserName] = None
+    segundo_apellido: Optional[UserName] = None
+    sexo: Optional[UserSex] = None
+    identidad_sexual: Optional[UserSexualIdentity] = None
+    fecha_nacimiento: Optional[datetime] = None
+    nacionalidad: Optional[UserNationality] = None
+    pais_residencia: Optional[UserCountry] = None
+    departamento: Optional[UserDepartment] = None
+    municipio: Optional[UserMunicipality] = None
+    ciudad_residencia: Optional[UserCity] = None
+    direccion_residencia: Optional[UserAddress] = None
+    telefono: Optional[UserPhone] = None
+    contraseña: Optional[UserPassword] = None
+    activo: Optional[StatusActive] = None
+    razon_desactivacion: Optional[ReasonText] = None
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "institucion_origen": "Universidad del Norte",
+                "nombre_empresa": "Tech Solutions S.A.S",
+                "id_sector": Sector.SOCIAL,
+                "primer_nombre": "Laura",
+                "segundo_nombre": "María",
+                "primer_apellido": "Castillo",
+                "segundo_apellido": "Ríos",
+                "sexo": "Mujer",
+                "identidad_sexual": "Heterosexual",
+                "fecha_nacimiento": "1998-05-17",
+                "nacionalidad": "Colombiana",
+                "pais_residencia": "Colombia",
+                "departamento": "Atlántico",
+                "municipio": "Barranquilla",
+                "ciudad_residencia": "Barranquilla",
+                "direccion_residencia": "Carrera 45 #32-15",
+                "telefono": "+573002223334",
+                "activo": True
+            }
+        }
+    )
 
 class GuestResponse(BaseModel):
     id_invitado: GuestId

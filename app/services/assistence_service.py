@@ -71,7 +71,8 @@ class AssistenceService:
 
     async def registrar_asistencia(self, id_evento: str, correo: str):
         """
-        Registra la asistencia de un usuario a un evento, validando existencia del evento y del usuario.
+        Registra la asistencia de un usuario a un evento,
+        validando existencia del evento, estado y que el usuario esté registrado.
         """
         try:
             # Verificar que el evento existe
@@ -100,40 +101,33 @@ class AssistenceService:
                     "status": 409
                 }
             
-            # Buscar usuario (opcional - puede ser invitado externo)
+            # Buscar usuario
             user = await self.user_repo.get_user_by_email(correo)
-            # Si se encontró el usuario, verificar que esté activo
-            if user:
-                if not user.get("activo", True):
-                    logger.warning(f"Usuario inactivo intentando registrar asistencia: {correo}")
-                    return {
-                        "error": "Tu cuenta de usuario está inactiva. No puedes registrar asistencia.",
-                        "status": 403
-                    }
-                logger.info(f"Usuario activo confirmado: {correo}")
-            else:
-                logger.info(f"Usuario no encontrado, procediendo como invitado: {correo}")
 
-            # Si el usuario no existe y el evento no permite invitados
-            if not user and not event.get("permite_invitados", True):
-                logger.warning(f"Evento no permite invitados: {correo}")
+            # Si el usuario no existe, no se permite el registro
+            if not user:
+                logger.warning(f"Correo no registrado intentando registrar asistencia: {correo}")
                 return {
-                    "error": "Solo usuarios registrados pueden asistir a este evento",
+                    "error": "El correo no está registrado en el sistema. No puedes registrar asistencia.",
                     "status": 403
                 }
+
+            # Si el usuario existe pero está inactivo
+            if not user.get("activo", True):
+                logger.warning(f"Usuario inactivo intentando registrar asistencia: {correo}")
+                return {
+                    "error": "Tu cuenta de usuario está inactiva. No puedes registrar asistencia.",
+                    "status": 403
+                }
+
+            logger.info(f"Usuario activo confirmado: {correo}")
 
             # Preparar datos de asistencia
             datos = {
                 "correo": correo,
-                "id_usuario": user.get("id_usuario") if user else None,
-                "nombre_completo": (
-                    f"{user.get('nombres', '')} {user.get('apellidos', '')}".strip()
-                    if user else "Invitado Externo"
-                ),
-                "rol": user.get("rol") if user else "Invitado",
-                "verificado": user is not None,  # True si es usuario registrado
-                "metodo_registro": "QR"
-            }
+                "id_usuario": user.get("id_usuario"),
+                "nombre_completo": f"{user.get('primer_nombre', '')} {user.get('segundo_nombre', '')} "
+                                   f"{user.get('primer_apellido', '')} {user.get('segundo_apellido', '')}".strip()            }
 
             # Registrar asistencia en subcolección
             resultado = await self.assistence_repo.agregar_asistencia(id_evento, datos)

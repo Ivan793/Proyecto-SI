@@ -3,16 +3,17 @@ import cloudinary.uploader
 from fastapi import UploadFile
 import io
 import logging
-
-# Configuración de Cloudinary
-cloudinary.config(
-    cloud_name="dnlmloos6",
-    api_key="636328951124317",
-    api_secret="DGb6Q2o-EeMl6caj-xUz8wIMTew",
-    secure=True
-)
+import os
 
 logger = logging.getLogger("cloudinary_service")
+
+# Cargar credenciales desde variables de entorno
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME", "dnlmloos6"),
+    api_key=os.getenv("CLOUDINARY_API_KEY", "636328951124317"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET", "DGb6Q2o-EeMl6caj-xUz8wIMTew"),
+    secure=True
+)
 
 
 async def upload_pdf_to_cloudinary(file: UploadFile) -> str:
