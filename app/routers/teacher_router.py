@@ -127,10 +127,10 @@ async def obtener_detalle_proyecto(id_proyecto: str):
 
 
 @router.put(
-    "/{teacher_id}",
+    "/",
     status_code=status.HTTP_200_OK,
     summary="Actualizar profesor",
-    description="Permite a los administradores modificar los datos académicos del docente.",
+    description="Permite a los Docentes modificar los datos académicos de su perfil",
     responses=ResponseDocumentation.get_standard_responses()
 )
 @auth_rate_limit()

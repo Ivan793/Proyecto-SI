@@ -9,7 +9,7 @@ from firebase_admin.exceptions import FirebaseError
 from firebase_admin._auth_utils import EmailAlreadyExistsError
 from google.cloud.firestore_v1 import transactional
 
-from app.exceptions.base_exceptions import ValidationException, DatabaseException
+from app.exceptions.base_exceptions import NotFoundException, ValidationException, DatabaseException
 from app.repositories.academic_repository import ProgramRepository
 from app.repositories.teacher_repository import TeacherRepository
 from app.repositories.user_repository import UserRepository
@@ -37,175 +37,6 @@ from app.validators.teacher_validators import TeacherValidators
 from app.validators.user_validators import UserValidators
 
 logger = logging.getLogger(__name__)
-
-class TeacherUpdateOrchestrator:
-    """
-    Orquestador que maneja la lógica de actualización de docente y usuario
-    con transacciones atómicas en Firestore.
-    """
-    
-    def __init__(
-        self, 
-        teacher_repo: TeacherRepository,
-        user_repo: UserRepository,
-        teacher_validators: TeacherValidators,
-        user_validators: UserValidators,
-        executor: ThreadPoolExecutor
-    ):
-        self.teacher_repo = teacher_repo
-        self.user_repo = user_repo
-        self.teacher_validators = teacher_validators
-        self.user_validators = user_validators
-        self.executor = executor
-    
-    async def update_profile(
-        self, 
-        teacher_id: str, 
-        profile_data: TeacherProfileUpdate
-    ) -> TeacherWithFullUserResponse:
-        """
-        Orquesta la actualización del perfil completo (docente + usuario).
-        
-        Operaciones:
-            - Actualiza datos del docente y usuario en transacción atómica
-            - Actualiza contraseña en Firebase Auth (operación separada)
-            - Maneja errores parciales con compensación
-        
-        Args:
-            teacher_id: ID del docente a actualizar
-            profile_data: Datos parciales del perfil a actualizar
-        
-        Returns:
-            TeacherWithFullUserResponse con los datos actualizados
-        
-        Raises:
-            TeacherNotFoundException: Si el docente no existe
-            ValidationException: Si los datos de actualización son inválidos
-            DatabaseException: Si falla la transacción de Firestore
-        """
-        # Obtener y validar existencia del docente
-        teacher = await self.teacher_repo.get_by_id(teacher_id)
-        if not teacher:
-            raise TeacherNotFoundException(teacher_id)
-        
-        user_id = teacher.get("id_usuario")
-        if not user_id:
-            raise ValidationException("Docente no tiene usuario asociado")
-        
-        # Preparar datos de actualización
-        teacher_updates = {}
-        user_updates = {}
-        password_update = None
-        
-        # Procesar datos del docente
-        if profile_data.datos_docente:
-            teacher_updates = profile_data.datos_docente.model_dump(
-                exclude_none=True, 
-                exclude_unset=True
-            )
-
-        # Procesar datos del usuario
-        if profile_data.datos_usuario:
-            user_updates = profile_data.datos_usuario.model_dump(
-                exclude_none=True,
-                exclude_unset=True
-            )
-            password_update = user_updates.pop("contraseña", None)
-
-        # Verificar que haya al menos un campo para actualizar
-        if not teacher_updates and not user_updates:
-            raise ValidationException("No se proporcionaron campos para actualizar")
-
-        # TRANSACCIÓN ATÓMICA: Actualizar Teacher + User en Firestore
-        if teacher_updates or user_updates:
-            await self._update_teacher_and_user_atomic(
-                teacher_id=teacher_id,
-                user_id=user_id,
-                teacher_updates=teacher_updates,
-                user_updates=user_updates
-            )
-
-        # ACTUALIZAR CONTRASEÑA (fuera de transacción, Firebase Auth separado)
-        if password_update:
-            await self._update_firebase_password_async(user_id, password_update)
-        
-        # Retornar datos actualizados
-        updated_teacher = await self.teacher_repo.get_by_id(teacher_id)
-        if not updated_teacher:
-            raise TeacherNotFoundException(teacher_id)
-        
-        user = await self.user_repo.get_by_id(user_id)
-        if not user:
-            raise UserNotFoundException(user_id)
-        
-        return TeacherWithFullUserResponse(
-            docente=TeacherResponse(**updated_teacher),
-            usuario=UserResponse(**user)
-        )
-    
-    async def _update_teacher_and_user_atomic(
-        self,
-        teacher_id: str,
-        user_id: str,
-        teacher_updates: dict,
-        user_updates: dict
-    ):
-        """
-        Actualiza Teacher + User en una transacción atómica de Firestore.
-        
-        Args:
-            teacher_id: ID del docente
-            user_id: ID del usuario
-            teacher_updates: Campos del docente a actualizar
-            user_updates: Campos del usuario a actualizar
-        
-        Raises:
-            Exception: Si falla la transacción (se revierte todo automáticamente)
-        """
-        @transactional
-        def run_transaction(transaction):
-            timestamp = datetime.now(timezone.utc)
-            
-            if teacher_updates:
-                teacher_ref = self.teacher_repo.db.collection(
-                    self.teacher_repo.collection_name
-                ).document(teacher_id)
-                teacher_updates["updated_at"] = timestamp
-                transaction.update(teacher_ref, teacher_updates)
-            
-            if user_updates:
-                user_ref = self.user_repo.db.collection(
-                    self.user_repo.collection_name
-                ).document(user_id)
-                user_updates["updated_at"] = timestamp
-                transaction.update(user_ref, user_updates)
-        
-        # Ejecutar transacción
-        transaction = self.teacher_repo.db.transaction()
-        run_transaction(transaction)
-        logger.info(f"Transacción exitosa: Teacher {teacher_id} + User {user_id}")
-    
-    async def _update_firebase_password_async(self, user_id: str, new_password: str):
-        """
-        Actualiza contraseña en Firebase Auth de forma async-safe.
-        
-        Args:
-            user_id: ID del usuario en Firebase Auth
-            new_password: Nueva contraseña
-        
-        Raises:
-            FirebaseError: Si falla la actualización
-        """
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            self.executor,
-            lambda: firebase_auth.update_user(user_id, password=new_password)
-        )
-        logger.info(f"Contraseña actualizada en Firebase Auth: {user_id}")
-    
-    
-    
-
 
 class TeacherService:
     """
@@ -240,15 +71,6 @@ class TeacherService:
         
         # Thread pool para operaciones bloqueantes (Firebase Auth)
         self._executor = ThreadPoolExecutor(max_workers=5)
-        
-        # Inyectar orquestador con dependencias
-        self.update_orchestrator = TeacherUpdateOrchestrator(
-            teacher_repo=teacher_repo,
-            user_repo=user_repo,
-            teacher_validators=teacher_validators,
-            user_validators=user_validators,
-            executor=self._executor
-        )
 
     async def create_teacher_with_user(
         self, 
@@ -311,17 +133,229 @@ class TeacherService:
         
         return await self._get_created_teacher(teacher_id)
     
+    async def update_teacher(
+        self, 
+        teacher_id: str, 
+        teacher_data: TeacherProfileUpdate
+    ) -> TeacherWithFullUserResponse:
+        """
+        Actualiza el perfil completo del docente (datos docente + usuario).
+        
+        Operaciones:
+            - Valida datos con UserValidators y TeacherValidators
+            - Actualiza datos del docente (programa, categoría)
+            - Actualiza datos del usuario (nombre, teléfono, etc.)
+            - Actualiza contraseña en Firebase Auth (si se proporciona)
+            - Todas las actualizaciones de Firestore se ejecutan en transacción atómica
+        
+        Args:
+            teacher_id: ID del docente a actualizar
+            teacher_data: Datos parciales del perfil a actualizar
+        
+        Returns:
+            TeacherWithFullUserResponse con los datos actualizados
+        
+        Raises:
+            TeacherNotFoundException: Si el docente no existe
+            UserNotFoundException: Si el usuario no existe
+            ValidationException: Si los datos de actualización son inválidos
+            UserAlreadyExistsException: Si email/identificación ya existen
+            InvalidEmailDomainException: Si el dominio no corresponde al rol
+            DatabaseException: Si falla la actualización
+        """
+        # OBTENER Y VALIDAR EXISTENCIA DEL DOCENTE
+        teacher = await self.teacher_repo.get_by_id(teacher_id)
+        if not teacher:
+            raise TeacherNotFoundException(teacher_id)
+        
+        user_id = teacher.get("id_usuario")
+        if not user_id:
+            raise ValidationException("Docente no tiene usuario asociado")
+        
+        # Obtener usuario actual para comparaciones
+        current_user = await self.user_repo.get_by_id(user_id)
+        if not current_user:
+            raise UserNotFoundException(user_id)
+        
+        # PREPARAR DATOS DE ACTUALIZACIÓN
+        teacher_updates = {}
+        user_updates = {}
+        password_update = None
+        
+        # Procesar datos del docente
+        if teacher_data.datos_docente:
+            teacher_updates = teacher_data.datos_docente.model_dump(
+                exclude_none=True, 
+                exclude_unset=True
+            )
+
+        # Procesar datos del usuario
+        if teacher_data.datos_usuario:
+            user_updates = teacher_data.datos_usuario.model_dump(
+                exclude_none=True,
+                exclude_unset=True
+            )
+            password_update = user_updates.pop("contraseña", None)
+
+        # Verificar que haya al menos un campo para actualizar
+        if not teacher_updates and not user_updates and not password_update:
+            raise ValidationException("No se proporcionaron campos para actualizar")
+        
+        # VALIDACIONES (delegar a los Validators)
+        if user_updates:
+            await self._validate_user_updates(
+                user_updates=user_updates,
+                current_user=current_user
+            )
+        
+        if teacher_updates:
+            await self._validate_teacher_updates(teacher_updates)
+        
+        # TRANSACCIÓN ATÓMICA: Actualizar Teacher + User en Firestore
+        if teacher_updates or user_updates:
+            await self._update_teacher_and_user_atomic(
+                teacher_id=teacher_id,
+                user_id=user_id,
+                teacher_updates=teacher_updates,
+                user_updates=user_updates
+            )
+
+        # ACTUALIZAR CONTRASEÑA (fuera de transacción, Firebase Auth separado)
+        if password_update:
+            await self._update_firebase_password_async(user_id, password_update)
+        
+        # RETORNAR DATOS ACTUALIZADOS
+        updated_teacher = await self.teacher_repo.get_by_id(teacher_id)
+        if not updated_teacher:
+            raise TeacherNotFoundException(teacher_id)
+        
+        user = await self.user_repo.get_by_id(user_id)
+        if not user:
+            raise UserNotFoundException(user_id)
+        
+        return TeacherWithFullUserResponse(
+            docente=TeacherResponse(**updated_teacher),
+            usuario=UserResponse(**user)
+        )
+    
+    async def _validate_user_updates(
+        self,
+        user_updates: dict,
+        current_user: dict
+    ) -> None:
+        """
+        Valida actualizaciones de usuario usando UserValidators.
+        Solo valida campos que realmente cambiaron.
+        """
+
+        
+        # VALIDACIÓN: Email único (si cambió)
+        new_email = user_updates.get("correo")
+        if new_email and new_email != current_user.get("correo"):
+            await self.user_validators.validate_unique_email(new_email)
+            
+            # Validar dominio con el rol actual
+            current_role = current_user.get("rol")
+            await self.user_validators.validate_email_domain(new_email, current_role)
+            
+            logger.info(f"Email validado para actualización: {new_email}")
+        
+        # VALIDACIÓN: Lógica de desactivación
+        new_active_status = user_updates.get("activo")
+        new_reason = user_updates.get("razon_desactivacion")
+        
+        if new_active_status is False and not new_reason:
+            raise ValidationException(
+                message="Debe proporcionar una razón al desactivar el usuario",
+                field="razon_desactivacion"
+            )
+        
+        # Limpiar razón si se activa
+        if new_active_status is True and "razon_desactivacion" not in user_updates:
+            user_updates["razon_desactivacion"] = None
+        
+        logger.debug("Validaciones de usuario completadas")
+
+    async def _validate_teacher_updates(self, teacher_updates: dict) -> None:
+        """
+        Valida actualizaciones de docente usando TeacherValidators.
+        """
+        # VALIDACIÓN: Programa académico existe (si cambió)
+        new_program = teacher_updates.get("codigo_programa")
+        if new_program:
+            await self.teacher_validators.validate_program_existence(new_program)
+            logger.info(f"Programa validado: {new_program}")
+        
+        logger.debug("Validaciones de docente completadas")
+
+    async def _update_teacher_and_user_atomic(
+        self,
+        teacher_id: str,
+        user_id: str,
+        teacher_updates: dict,
+        user_updates: dict
+    ):
+        """
+        Actualiza Teacher + User en una transacción atómica de Firestore.
+        Similar a _create_user_and_teacher_atomic pero para UPDATE.
+        """
+        @transactional
+        def run_transaction(transaction):
+            timestamp = datetime.now(timezone.utc)
+            
+            if teacher_updates:
+                teacher_ref = self.teacher_repo.db.collection(
+                    self.teacher_repo.collection_name
+                ).document(teacher_id)
+                teacher_updates["updated_at"] = timestamp
+                transaction.update(teacher_ref, teacher_updates)
+            
+            if user_updates:
+                user_ref = self.user_repo.db.collection(
+                    self.user_repo.collection_name
+                ).document(user_id)
+                user_updates["updated_at"] = timestamp
+                transaction.update(user_ref, user_updates)
+        
+        try:
+            transaction = self.teacher_repo.db.transaction()
+            run_transaction(transaction)
+            logger.info(f"Transacción exitosa: Teacher {teacher_id} + User {user_id}")
+        except Exception as e:
+            logger.error(f"Error en transacción atómica: {str(e)}")
+            raise DatabaseException(
+                message="Error al actualizar docente y usuario",
+                details={"error": str(e)}
+            )
+
+    async def _update_firebase_password_async(self, user_id: str, new_password: str):
+        """
+        Actualiza contraseña en Firebase Auth de forma async-safe.
+        Igual que en create pero para UPDATE.
+        """
+        loop = asyncio.get_event_loop()
+        
+        try:
+            await loop.run_in_executor(
+                self._executor,
+                lambda: firebase_auth.update_user(user_id, password=new_password)
+            )
+            logger.info(f"Contraseña actualizada en Firebase Auth: {user_id}")
+        except FirebaseError as e:
+            logger.error(f"Error actualizando contraseña: {str(e)}")
+            raise DatabaseException(
+                message="Error al actualizar contraseña",
+                details={"firebase_error": str(e)}
+            )
+
+    
     async def _create_firebase_user_async(self, usuario_data: UserCreate) -> Any:
         """
         Crea usuario en Firebase Auth de forma async-safe.
-        
-        
         Args:
             usuario_data: Datos del usuario a crear
-        
         Returns:
             UserRecord de Firebase
-        
         Raises:
             UserAlreadyExistsException: Si el email ya existe
             DatabaseException: Si falla la creación
@@ -360,8 +394,6 @@ class TeacherService:
     ) -> str:
         """
         Ejecuta la creación de User + Teacher en una transacción Firestore.
-        
-        
         Args:
             usuario_data: Datos del usuario
             user_id: ID generado por Firebase Auth
@@ -411,7 +443,6 @@ class TeacherService:
     async def _compensate_firebase_user(self, firebase_user):
         """
         Elimina el usuario de Firebase Auth en caso de rollback.
-        NO PROPAGA EXCEPCIONES - es una operación de limpieza.
         """
         if not firebase_user:
             return
@@ -561,46 +592,6 @@ class TeacherService:
         paginated_teachers = teachers[start:end]
         
         return paginated_teachers, total
-
-    async def update_teacher(
-        self, 
-        teacher_id: str, 
-        teacher_data: TeacherProfileUpdate
-    ) -> TeacherWithFullUserResponse:
-        """
-        Actualiza el perfil completo del docente (datos docente + usuario).
-        
-        Operaciones:
-            - Actualiza datos del docente (programa, etc.)
-            - Actualiza datos del usuario (nombre, teléfono, etc.)
-            - Actualiza contraseña en Firebase Auth (si se proporciona)
-            - Todas las actualizaciones de Firestore se ejecutan en transacción
-        
-        Args:
-            teacher_id: ID del docente a actualizar
-            teacher_data: Datos parciales del perfil a actualizar
-        
-        Returns:
-            TeacherWithFullUserResponse con los datos actualizados
-        
-        Raises:
-            TeacherNotFoundException: Si el docente no existe
-            ValidationException: Si los datos de actualización son inválidos
-            DatabaseException: Si falla la actualización parcial o completa
-        
-        Notes:
-            - Si falla la actualización de contraseña, no se revierten los cambios en Firestore
-            - Los campos no proporcionados no se actualizan (exclude_unset=True)
-            - La actualización de Firestore es atómica (transacción)
-        
-        Examples:
-            >>> updated = await service.update_teacher(
-            ...     "teacher_123",
-            ...     TeacherProfileUpdate(datos_docente=TeacherUpdate(programa=SI_01))
-            ... )
-        
-        """
-        return await self.update_orchestrator.update_profile(teacher_id, teacher_data)
     
     async def deactivate_teacher(self, teacher_id: str, reason: str) -> bool:
         """
@@ -709,3 +700,106 @@ class TeacherService:
             "detalle_grupos": active_groups,
             "estado": "ACTIVO" if teacher.get("activo", True) else "INACTIVO"
         }
+    
+
+# ------------- Francisco ---------------------
+    async def get_teacher_public_info(self, teacher_id: str) -> dict:
+            """
+            Obtiene información pública del docente (solo datos básicos).
+            """
+            try:
+                teacher = await self.teacher_repo.get_by_id(teacher_id)
+                if not teacher:
+                    raise TeacherNotFoundException(teacher_id)
+                
+                user = await self.user_repo.get_by_id(teacher["id_usuario"])
+                if not user:
+                    raise UserNotFoundException(teacher["id_usuario"])
+
+                # Solo datos públicos
+                public_info = {
+                    "id_docente": teacher_id,
+                    "nombre_completo": f"{user.get('primer_nombre', '')} {user.get('segundo_nombre', '')} "
+                                    f"{user.get('primer_apellido', '')} {user.get('segundo_apellido', '')}".strip(),
+                    "correo_institucional": user.get("correo"),
+                    "categoria_docente": teacher.get("categoria_docente"),
+                    "codigo_programa": teacher.get("codigo_programa"),
+                }
+                return public_info
+
+            except (TeacherNotFoundException, UserNotFoundException):
+                raise
+            except Exception as e:
+                logger.error(f"Error obteniendo información pública del docente {teacher_id}: {str(e)}")
+                raise DatabaseException("Error al obtener información pública del docente")
+
+    async def list_teacher_subjects(self, teacher_id: str) -> list:
+        """
+        Lista las materias que dicta un docente.
+        """
+        try:
+            from app.repositories.teacher_repository import TeacherSubjectRepository
+            ts_repo = TeacherSubjectRepository()
+            subjects = await ts_repo.get_subjects_by_teacher(teacher_id)
+            return subjects
+        except Exception as e:
+            logger.error(f"Error listando materias del docente {teacher_id}: {str(e)}")
+            raise DatabaseException("Error al listar materias del docente")
+
+    async def list_subject_groups(self, subject_code: str) -> list:
+        """
+        Lista los grupos asociados a una materia específica.
+        """
+        try:
+            from app.repositories.group_repository import GroupRepository
+            group_repo = GroupRepository()
+            groups = await group_repo.get_groups_by_subject(subject_code)
+            return groups
+        except Exception as e:
+            logger.error(f"Error listando grupos de la materia {subject_code}: {str(e)}")
+            raise DatabaseException("Error al listar grupos de la materia")
+
+    async def list_teacher_projects(self, teacher_id: str) -> list:
+        """
+        Lista los proyectos en los que participa un docente.
+        """
+        try:
+            from app.repositories.teacher_repository import TeacherRepository
+            projects = await self.teacher_repo.get_projects_by_teacher(teacher_id)
+            return projects
+        except Exception as e:
+            logger.error(f"Error listando proyectos del docente {teacher_id}: {str(e)}")
+            raise DatabaseException("Error al listar proyectos del docente")
+
+    async def get_project_info(self, project_id: str) -> dict:
+        """
+        Obtiene la información detallada de un proyecto.
+        """
+        try:
+            from app.repositories.proyect_repository import ProjectRepository
+            project_repo = ProjectRepository()
+            project = await project_repo.get_project_detail(project_id)
+            if not project:
+                raise ValidationException("Proyecto no encontrado")
+            return project
+        except ValidationException:
+            raise
+        except Exception as e:
+            logger.error(f"Error obteniendo detalle del proyecto {project_id}: {str(e)}")
+            raise DatabaseException("Error al obtener detalle del proyecto")
+
+    async def list_all_projects(self) -> list:
+        """
+        Lista todos los proyectos disponibles públicamente.
+        """
+        try:
+            from app.repositories.proyect_repository import ProjectRepository
+            project_repo = ProjectRepository()
+            projects = await project_repo.get_all_projects()
+            return projects
+        except Exception as e:
+            logger.error(f"Error listando todos los proyectos públicos: {str(e)}")
+            raise DatabaseException("Error al listar los proyectos públicos")
+
+
+    

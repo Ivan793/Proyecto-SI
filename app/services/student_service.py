@@ -43,184 +43,6 @@ from app.validators.user_validators import UserValidators
 logger = logging.getLogger(__name__)
 
 
-# ORQUESTADOR DE ACTUALIZACIÓN
-class StudentUpdateOrchestrator:
-    """
-    Orquestador que maneja la lógica de actualización de estudiante y usuario
-    con transacciones atómicas en Firestore.
-    """
-    
-    def __init__(
-        self, 
-        student_repo: StudentRepository,
-        user_repo: UserRepository,
-        student_validators: StudentValidators,
-        user_validators: UserValidators,
-        executor: ThreadPoolExecutor
-    ):
-        self.student_repo = student_repo
-        self.user_repo = user_repo
-        self.student_validators = student_validators
-        self.user_validators = user_validators
-        self.executor = executor
-    
-    async def update_profile(
-        self, 
-        student_id: str, 
-        profile_data: StudentProfileUpdate
-    ) -> StudentWithFullUserResponse:
-        """
-        Orquesta la actualización del perfil completo (estudiante + usuario).
-        
-        Operaciones:
-            - Actualiza datos del estudiante y usuario en transacción atómica
-            - Actualiza contraseña en Firebase Auth (operación separada)
-            - Maneja errores parciales con compensación
-        
-        Args:
-            student_id: ID del estudiante a actualizar
-            profile_data: Datos parciales del perfil a actualizar
-        
-        Returns:
-            StudentWithFullUserResponse con los datos actualizados
-        
-        Raises:
-            StudentNotFoundException: Si el estudiante no existe
-            ValidationException: Si los datos de actualización son inválidos
-            DatabaseException: Si falla la transacción de Firestore
-        """
-        # Obtener y validar existencia del estudiante
-        student = await self.student_repo.get_by_id(student_id)
-        if not student:
-            raise StudentNotFoundException(student_id)
-        
-        user_id = student.get("id_usuario")
-        if not user_id:
-            raise ValidationException("Estudiante no tiene usuario asociado")
-        
-        # Preparar datos de actualización
-        student_updates = {}
-        user_updates = {}
-        password_update = None
-        
-        # Procesar datos del estudiante
-        if profile_data.datos_estudiante:
-            await self._validate_student_updates(profile_data.datos_estudiante)
-            student_updates = profile_data.datos_estudiante.model_dump(
-                exclude_none=True, 
-                exclude_unset=True
-            )
-        
-        # Procesar datos del usuario
-        if profile_data.datos_usuario:
-            user_updates = profile_data.datos_usuario.model_dump(
-                exclude_none=True,
-                exclude_unset=True
-            )
-            password_update = user_updates.pop("contraseña", None)
-        
-        # TRANSACCIÓN ATÓMICA: Actualizar Student + User en Firestore
-        if student_updates or user_updates:
-            await self._update_student_and_user_atomic(
-                student_id=student_id,
-                user_id=user_id,
-                student_updates=student_updates,
-                user_updates=user_updates
-            )
-        
-        # ACTUALIZAR CONTRASEÑA (fuera de transacción, Firebase Auth separado)
-        if password_update:
-            await self._update_firebase_password_async(user_id, password_update)
-        
-        # Retornar datos actualizados
-        updated_student = await self.student_repo.get_by_id(student_id)
-        if not updated_student:
-            raise StudentNotFoundException(student_id)
-        
-        user = await self.user_repo.get_by_id(user_id)
-        if not user:
-            raise UserNotFoundException(user_id)
-        
-        return StudentWithFullUserResponse(
-            estudiante=StudentResponse(**updated_student),
-            usuario=UserResponse(**user)
-        )
-    
-    async def _update_student_and_user_atomic(
-        self,
-        student_id: str,
-        user_id: str,
-        student_updates: dict,
-        user_updates: dict
-    ):
-        """
-        Actualiza Student + User en una transacción atómica de Firestore.
-        
-        Args:
-            student_id: ID del estudiante
-            user_id: ID del usuario
-            student_updates: Campos del estudiante a actualizar
-            user_updates: Campos del usuario a actualizar
-        
-        Raises:
-            Exception: Si falla la transacción (se revierte todo automáticamente)
-        """
-        @transactional
-        def run_transaction(transaction):
-            timestamp = datetime.now(timezone.utc)
-            
-            if student_updates:
-                student_ref = self.student_repo.db.collection(
-                    self.student_repo.collection_name
-                ).document(student_id)
-                student_updates["updated_at"] = timestamp
-                transaction.update(student_ref, student_updates)
-            
-            if user_updates:
-                user_ref = self.user_repo.db.collection(
-                    self.user_repo.collection_name
-                ).document(user_id)
-                user_updates["updated_at"] = timestamp
-                transaction.update(user_ref, user_updates)
-        
-        # Ejecutar transacción
-        transaction = self.student_repo.db.transaction()
-        run_transaction(transaction)
-        logger.info(f"Transacción exitosa: Student {student_id} + User {user_id}")
-    
-    async def _update_firebase_password_async(self, user_id: str, new_password: str):
-        """
-        Actualiza contraseña en Firebase Auth de forma async-safe.
-        
-        Args:
-            user_id: ID del usuario en Firebase Auth
-            new_password: Nueva contraseña
-        
-        Raises:
-            FirebaseError: Si falla la actualización
-        """
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            self.executor,
-            lambda: firebase_auth.update_user(user_id, password=new_password)
-        )
-        logger.info(f"Contraseña actualizada en Firebase Auth: {user_id}")
-    
-    async def _validate_student_updates(self, student_data: StudentUpdate):
-        """
-        Valida campos específicos del estudiante usando validadores.
-        
-        Args:
-            student_data: Datos del estudiante a validar
-        
-        Raises:
-            ValidationException: Si alguna validación falla
-        """
-        if student_data.semestre is not None:
-            await self.student_validators.validate_semester_range(
-                student_data.semestre
-            )
-
 class StudentService:
     """
     Servicio de gestión de estudiantes con inyección de dependencias completa.
@@ -259,15 +81,6 @@ class StudentService:
         
         # Thread pool para operaciones bloqueantes (Firebase Auth)
         self._executor = ThreadPoolExecutor(max_workers=5)
-        
-        # Inyectar orquestador con dependencias
-        self.update_orchestrator = StudentUpdateOrchestrator(
-            student_repo=student_repo,
-            user_repo=user_repo,
-            student_validators=student_validators,
-            user_validators=user_validators,
-            executor=self._executor
-        )
 
 
 
@@ -340,7 +153,177 @@ class StudentService:
             logger.warning(f"Error enviando email de verificación: {str(e)}")
         
         return await self._get_created_student(student_id)
+    
 
+    async def update_student(
+        self, 
+        student_id: str, 
+        student_data: StudentProfileUpdate
+    ) -> StudentWithFullUserResponse:
+        """
+        Actualiza el perfil completo del estudiante (datos estudiante + usuario).
+        
+        Operaciones:
+            - Valida datos con UserValidators y StudentValidators
+            - Actualiza datos del estudiante (semestre, programa)
+            - Actualiza datos del usuario (nombre, teléfono, etc.)
+            - Actualiza contraseña en Firebase Auth (si se proporciona)
+            - Todas las actualizaciones de Firestore se ejecutan en transacción atómica
+        
+        Args:
+            student_id: ID del estudiante a actualizar
+            student_data: Datos parciales del perfil a actualizar
+        
+        Returns:
+            StudentWithFullUserResponse con los datos actualizados
+        
+        Raises:
+            StudentNotFoundException: Si el estudiante no existe
+            UserNotFoundException: Si el usuario no existe
+            ValidationException: Si los datos de actualización son inválidos
+            UserAlreadyExistsException: Si email/identificación ya existen
+            InvalidEmailDomainException: Si el dominio no corresponde al rol
+            DatabaseException: Si falla la actualización
+        """
+        # 1. OBTENER Y VALIDAR EXISTENCIA DEL ESTUDIANTE
+        student = await self.student_repo.get_by_id(student_id)
+        if not student:
+            raise StudentNotFoundException(student_id)
+        
+        user_id = student.get("id_usuario")
+        if not user_id:
+            raise ValidationException("Estudiante no tiene usuario asociado")
+        
+        # Obtener usuario actual para comparaciones
+        current_user = await self.user_repo.get_by_id(user_id)
+        if not current_user:
+            raise UserNotFoundException(user_id)
+        
+        # 2. PREPARAR DATOS DE ACTUALIZACIÓN
+        student_updates = {}
+        user_updates = {}
+        password_update = None
+        
+        # Procesar datos del estudiante
+        if student_data.datos_estudiante:
+            student_updates = student_data.datos_estudiante.model_dump(
+                exclude_none=True, 
+                exclude_unset=True
+            )
+
+        # Procesar datos del usuario
+        if student_data.datos_usuario:
+            user_updates = student_data.datos_usuario.model_dump(
+                exclude_none=True,
+                exclude_unset=True
+            )
+            password_update = user_updates.pop("contraseña", None)
+
+        # Verificar que haya al menos un campo para actualizar
+        if not student_updates and not user_updates and not password_update:
+            raise ValidationException("No se proporcionaron campos para actualizar")
+        
+        if student_updates:
+            await self._validate_student_updates(student_updates)
+        
+        # 4. TRANSACCIÓN ATÓMICA: Actualizar Student + User en Firestore
+        if student_updates or user_updates:
+            await self._update_student_and_user_atomic(
+                student_id=student_id,
+                user_id=user_id,
+                student_updates=student_updates,
+                user_updates=user_updates
+            )
+
+        # 5. ACTUALIZAR CONTRASEÑA (fuera de transacción, Firebase Auth separado)
+        if password_update:
+            await self._update_firebase_password_async(user_id, password_update)
+        
+        # 6. RETORNAR DATOS ACTUALIZADOS
+        updated_student = await self.student_repo.get_by_id(student_id)
+        if not updated_student:
+            raise StudentNotFoundException(student_id)
+        
+        user = await self.user_repo.get_by_id(user_id)
+        if not user:
+            raise UserNotFoundException(user_id)
+        
+        return StudentWithFullUserResponse(
+            estudiante=StudentResponse(**updated_student),
+            usuario=UserResponse(**user)
+        )
+    
+    async def _validate_student_updates(self, student_updates: dict) -> None:
+        """
+        Valida actualizaciones de estudiante usando StudentValidators.
+        """
+        # VALIDACIÓN: Semestre válido (si cambió)
+        new_semester = student_updates.get("semestre")
+        if new_semester:
+            await self.student_validators.validate_semester_range(new_semester)
+            logger.info(f"Semestre validado: {new_semester}")
+        
+        logger.debug("Validaciones de estudiante completadas")
+
+    async def _update_student_and_user_atomic(
+        self,
+        student_id: str,
+        user_id: str,
+        student_updates: dict,
+        user_updates: dict
+    ):
+        """
+        Actualiza Student + User en una transacción atómica de Firestore.
+        Similar a _create_user_and_student_atomic pero para UPDATE.
+        """
+        @transactional
+        def run_transaction(transaction):
+            timestamp = datetime.now(timezone.utc)
+            
+            if student_updates:
+                student_ref = self.student_repo.db.collection(
+                    self.student_repo.collection_name
+                ).document(student_id)
+                student_updates["updated_at"] = timestamp
+                transaction.update(student_ref, student_updates)
+            
+            if user_updates:
+                user_ref = self.user_repo.db.collection(
+                    self.user_repo.collection_name
+                ).document(user_id)
+                user_updates["updated_at"] = timestamp
+                transaction.update(user_ref, user_updates)
+        
+        try:
+            transaction = self.student_repo.db.transaction()
+            run_transaction(transaction)
+            logger.info(f"Transacción exitosa: Student {student_id} + User {user_id}")
+        except Exception as e:
+            logger.error(f"Error en transacción atómica: {str(e)}")
+            raise DatabaseException(
+                message="Error al actualizar estudiante y usuario",
+                details={"error": str(e)}
+            )
+    async def _update_firebase_password_async(self, user_id: str, new_password: str):
+        """
+        Actualiza contraseña en Firebase Auth de forma async-safe.
+        Igual que en create pero para UPDATE.
+        """
+        loop = asyncio.get_event_loop()
+        
+        try:
+            await loop.run_in_executor(
+                self._executor,
+                lambda: firebase_auth.update_user(user_id, password=new_password)
+            )
+            logger.info(f"Contraseña actualizada en Firebase Auth: {user_id}")
+        except FirebaseError as e:
+            logger.error(f"Error actualizando contraseña: {str(e)}")
+            raise DatabaseException(
+                message="Error al actualizar contraseña",
+                details={"firebase_error": str(e)}
+            )
+        
     async def _create_firebase_user_async(self, usuario_data: UserCreate) -> Any:
         """
         Crea usuario en Firebase Auth de forma async-safe.
@@ -711,45 +694,6 @@ class StudentService:
         paginated_students = students[start:end]
         
         return paginated_students, total
-
-    async def update_student(
-        self, 
-        student_id: str, 
-        student_data: StudentProfileUpdate
-    ) -> StudentWithFullUserResponse:
-        """
-        Actualiza el perfil completo del estudiante (datos estudiante + usuario).
-        
-        Operaciones:
-            - Actualiza datos del estudiante (semestre, programa, etc.)
-            - Actualiza datos del usuario (nombre, teléfono, etc.)
-            - Actualiza contraseña en Firebase Auth (si se proporciona)
-            - Todas las actualizaciones de Firestore se ejecutan en transacción
-        
-        Args:
-            student_id: ID del estudiante a actualizar
-            student_data: Datos parciales del perfil a actualizar
-        
-        Returns:
-            StudentWithFullUserResponse con los datos actualizados
-        
-        Raises:
-            StudentNotFoundException: Si el estudiante no existe
-            ValidationException: Si los datos de actualización son inválidos
-            DatabaseException: Si falla la actualización parcial o completa
-        
-        Notes:
-            - Si falla la actualización de contraseña, no se revierten los cambios en Firestore
-            - Los campos no proporcionados no se actualizan (exclude_unset=True)
-            - La actualización de Firestore es atómica (transacción)
-        
-        Examples:
-            >>> updated = await service.update_student(
-            ...     "student_123",
-            ...     StudentProfileUpdate(datos_estudiante=StudentUpdate(semestre=5))
-            ... )
-        """
-        return await self.update_orchestrator.update_profile(student_id, student_data)
 
     async def deactivate_student(self, student_id: str, reason: str) -> bool:
         """
