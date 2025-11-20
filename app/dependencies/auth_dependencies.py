@@ -90,7 +90,7 @@ async def get_current_student_user(
     current_user: Dict[str, Any] = Depends(get_current_user_from_token)
 ) -> Dict[str, Any]:
     """Verifica que el usuario actual sea un estudiante"""
-    if current_user.get("rol") not in ("Estudiante", "Egresado"):
+    if current_user.get("rol") != ("Estudiante", "Egresado"):
         raise InsufficientPermissionsException(
             message="Se requieren permisos de estudiante",
             required_role="Estudiante"

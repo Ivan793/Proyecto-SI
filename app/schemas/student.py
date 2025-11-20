@@ -1,8 +1,8 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from typing import Optional
 from datetime import datetime
 from app.schemas.types import *
-from app.schemas.user import UserBasicInfo, UserCreate, UserResponse
+from app.schemas.user import UserBasicInfo, UserCreate, UserResponse, UserUpdate
 
 class StudentBase(BaseModel):
     codigo_programa: ProgramCode
@@ -20,8 +20,29 @@ class StudentCreateWithUser(BaseModel):
 
 
 class StudentUpdate(BaseModel):
-    codigo_programa: Optional[ProgramCode] = None
-    activo: Optional[StatusActive] = None
+    semestre: Optional[Semester] = None
+
+    @field_validator('semestre')
+    @classmethod
+    def validate_semester_range(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and (v < 1 or v > 20):
+            raise ValueError("El semestre debe estar entre 1 y 20")
+        return v
+
+
+class StudentProfileUpdate(BaseModel):
+    """Esquema para actualizar perfil completo del estudiante"""
+    datos_estudiante: Optional[StudentUpdate] = None
+    datos_usuario: Optional[UserUpdate] = None
+
+    @model_validator(mode='after')
+    def validate_at_least_one_section(self) -> 'StudentProfileUpdate':
+        """Valida que se proporcione al menos una sección para actualizar"""
+        if not self.datos_estudiante and not self.datos_usuario:
+            raise ValueError("Debe proporcionar datos del estudiante o del usuario para actualizar")
+        return self
+    
+    model_config = ConfigDict(from_attributes=True)
 
 class StudentResponse(StudentBase):
     id_estudiante: StudentId

@@ -2,19 +2,23 @@ from fastapi import APIRouter, Body, Depends, Request, status
 from typing import Dict, Any
 import logging
 
-from app.exceptions.base_exceptions import ValidationException
+from app.dependencies.service_dependencies import get_student_service
+from app.exceptions.base_exceptions import DatabaseException, ValidationException
 from app.schemas.types import ReasonText
 from app.services.student_service import StudentService
-from app.schemas.student import StudentCreateWithUser, StudentUpdate, StudentResponse
-from app.dependencies.auth_dependencies import get_current_student_user
+from app.schemas.student import (
+    StudentCreateWithUser, 
+    StudentProfileUpdate,
+)
+from app.dependencies.auth_dependencies import get_current_student_user, require_student
 from app.core.rate_limiter import auth_rate_limit
 from app.utils.responses import (
-    success_response, created_response, updated_response, 
-    not_found_response, bad_request_response, internal_server_error_response,
-    conflict_response
+    success_response, 
+    created_response, 
+    updated_response, 
 )
 from app.exceptions.student_exceptions import StudentNotFoundException
-from app.exceptions.user_exceptions import InvalidEmailDomainException, UserNotFoundException, UserAlreadyExistsException
+
 
 logger = logging.getLogger(__name__)
 
@@ -33,71 +37,61 @@ router = APIRouter(prefix="/estudiantes", tags=["Estudiantes"])
 @auth_rate_limit()
 async def register_student(
     request: Request,
-    student_data: StudentCreateWithUser = Body(
-        ..., 
-        description="Datos completos del estudiante y del usuario asociado"
-    )
+    student_data: StudentCreateWithUser = Body(...),
+    service: StudentService = Depends(get_student_service)
 ):
     """
-    Endpoint público para registrar un estudiante junto con su usuario asociado.
-    No requiere autenticación previa.
+    Registra un nuevo estudiante con su usuario asociado.
+    
+    - **Transacción atómica**: Si falla algún paso, se revierte todo
+    - **Validaciones**: Email institucional, programa existe, semestre válido, contraseña segura
+    - **Email de verificación**: Se envía automáticamente
+    - **Rate limiting**: Protección contra abuso
     """
-    try:
-        service = StudentService()
-        student = await service.create_student_with_user(student_data)
+    # LAS EXCEPCIONES SE PROPAGAN AL MANEJADOR GLOBAL
+    student = await service.create_student_with_user(student_data)
 
-        logger.info(f" Estudiante registrado correctamente: {student.id_estudiante}")
+    logger.info(f"Estudiante registrado correctamente: {student.id_estudiante}")
 
-        return created_response(
-            data=student.model_dump(),
-            message="Estudiante registrado exitosamente"
-        )
-
-    except UserAlreadyExistsException as e:
-        return conflict_response(message=str(e))
-    except (ValidationException, InvalidEmailDomainException) as e:
-        logger.warning(f"Error de validación: {str(e)}")
-        return bad_request_response(
-            message=str(e)
-        )
-    except Exception as e:
-        logger.error(f" Error registrando estudiante: {str(e)}")
-        return internal_server_error_response()
+    return created_response(
+        data=student.model_dump(),
+        message="Estudiante registrado exitosamente"
+    )
 
 
-# Obtener perfil del estudiante autenticado
 @router.get(
     "/mi-perfil",
     status_code=status.HTTP_200_OK,
-    summary="Obtener perfil del estudiante actual"
+    summary="Obtener perfil del estudiante actual",
+    description="""Obtiene el perfil completo del estudiante autenticado (datos estudiante + usuario).""",
 )
 async def get_my_profile(
     request: Request,
-    current_student: Dict[str, Any] = Depends(get_current_student_user)
+    current_student: Dict[str, Any] = Depends(require_student),
+    service: StudentService = Depends(get_student_service) 
 ):
     """
-    El estudiante autenticado puede ver su propio perfil completo
-    (incluyendo su usuario asociado).
+    Obtiene el perfil completo del estudiante autenticado.
+    
+    - **Requiere autenticación**: Token JWT válido
+    - **Información completa**: Datos de estudiante y usuario
     """
-    try:
-        service = StudentService()
-        
-        # Buscar el estudiante por ID de usuario
-        student = await service.student_repo.get_student_by_user_id(current_student["user_id"])
-        if not student:
-            return not_found_response("Estudiante", "asociado a su usuario")
-        
-        # Obtener información completa del estudiante
-        student_with_user = await service.get_student_with_user(student["id_estudiante"])
-        
-        return success_response(
-            data=student_with_user.model_dump(),
-            message="Perfil obtenido correctamente"
-        )
-        
-    except Exception as e:
-        logger.error(f" Error obteniendo perfil: {str(e)}")
-        return internal_server_error_response()
+    # LAS EXCEPCIONES SE PROPAGAN AL MANEJADOR GLOBAL
+    
+    # Obtener estudiante por user_id del token
+    student = await service.student_repo.get_student_by_user_id(
+        current_student["user_id"]
+    )
+    
+    # Obtener perfil completo
+    student_with_user = await service.get_student_with_user(
+        student["id_estudiante"]
+    )
+    
+    return success_response(
+        data=student_with_user.model_dump(),
+        message="Perfil obtenido correctamente"
+    )
 
 
 
@@ -105,51 +99,43 @@ async def get_my_profile(
 @router.put(
     "/mi-perfil",
     status_code=status.HTTP_200_OK,
-    summary="Actualizar perfil del estudiante actual"
+    summary="Actualizar perfil del estudiante actual",
+    description="""Actualiza el perfil completo del estudiante autenticado (datos estudiante + usuario).""",
 )
 async def update_my_profile(
     request: Request,
-    student_data: StudentUpdate,
-    current_student: Dict[str, Any] = Depends(get_current_student_user)
+    student_data: StudentProfileUpdate,
+    current_student: Dict[str, Any] = Depends(require_student),
+    service: StudentService = Depends(get_student_service)
 ):
     """
-    El estudiante autenticado puede actualizar ciertos campos de su perfil,
-    como el semestre actual o el programa académico.
+    Actualiza el perfil completo del estudiante autenticado.
+    
+    - **Requiere autenticación**: Token JWT válido con rol Estudiante
+    - **Transacción atómica**: Estudiante y usuario se actualizan juntos en Firestore
+    - **Contraseña**: Se actualiza en Firebase Auth (operación separada)
+    - **Campos opcionales**: Solo se actualizan los campos proporcionados
+    - **Validaciones**: Semestre válido, coherencia con año de ingreso, etc.
     """
-    try:
-        service = StudentService()
-        
-        # Buscar el estudiante por ID de usuario
-        student = await service.student_repo.get_student_by_user_id(current_student["user_id"])
-        if not student:
-            return not_found_response("Estudiante", "asociado a su usuario")
-        
-        # Actualizar solo campos permitidos para el estudiante
-        allowed_fields = {"semestre", "codigo_programa"}  # Campos editables por el estudiante
-        update_data = {
-            k: v for k, v in student_data.model_dump(exclude_none=True).items()
-            if k in allowed_fields
-        }
-        
-        if update_data:
-            updated_student = await service.update_student(
-                student["id_estudiante"], 
-                StudentUpdate(**update_data)
-            )
-            return updated_response(
-                data=updated_student.model_dump(),
-                message="Perfil actualizado exitosamente"
-            )
-        else:
-            return bad_request_response(message="No hay campos válidos para actualizar")
-        
-    except StudentNotFoundException:
-        return not_found_response("Estudiante", "asociado a su usuario")
-    except (ValidationException, InvalidEmailDomainException) as e:
-        logger.warning(f"Error de validación: {str(e)}")
-        return bad_request_response(
-            message=str(e)
-        )
-    except Exception as e:
-        logger.error(f"Error actualizando perfil: {str(e)}")
-        return internal_server_error_response()
+    # LAS EXCEPCIONES SE PROPAGAN AL MANEJADOR GLOBAL
+    
+    # Obtener estudiante por user_id del token
+    student = await service.student_repo.get_student_by_user_id(
+        current_student["user_id"]
+    )
+    
+    # Actualizar perfil con transacción atómica
+    updated_profile = await service.update_student(
+        student["id_estudiante"], 
+        student_data
+    )
+    
+    logger.info(
+        f"Perfil actualizado exitosamente: {student['id_estudiante']}",
+        extra={"user_id": current_student["user_id"]}
+    )
+    
+    return updated_response(
+        data=updated_profile.model_dump(),
+        message="Perfil actualizado exitosamente"
+    )

@@ -7,6 +7,7 @@ from app.schemas.types import ReasonText
 from app.services.teacher_service import TeacherService
 from app.schemas.teacher import (
     TeacherCreateWithUser,
+    TeacherProfileUpdate,
     TeacherUpdate, 
     TeacherResponse
 )
@@ -39,6 +40,11 @@ async def create_teacher_with_user(
     current_admin: Dict[str, Any] = Depends(get_current_admin_user),
     service: TeacherService = Depends(get_teacher_service)
 ):
+    """
+    Crea profesor con usuario.
+    
+    - **LAS EXCEPCIONES SE PROPAGAN AL MANEJADOR GLOBAL**
+    """
     teacher = await service.create_teacher_with_user(teacher_data)
     
     logger.info(
@@ -63,8 +69,13 @@ async def get_teachers(
     activos: bool = Query(True, description="Filtrar solo profesores activos"),
     params: PaginationParams = Depends(),
     _: Dict[str, Any] = Depends(get_current_admin_user),
+    service: TeacherService = Depends(get_teacher_service)
 ):
-    service = TeacherService()
+    """
+    Lista profesores.
+    
+    - **LAS EXCEPCIONES SE PROPAGAN AL MANEJADOR GLOBAL**
+    """
     teachers, total = await service.get_all_teachers(
         active_only=activos,
         page=params.page,
@@ -79,7 +90,6 @@ async def get_teachers(
         message="Profesores obtenidos exitosamente"
     )
 
-
 @router.get(
     "/{teacher_id}",
     status_code=status.HTTP_200_OK,
@@ -93,6 +103,11 @@ async def get_teacher_by_id(
     _: Dict[str, Any] = Depends(get_current_admin_user),
     service: TeacherService = Depends(get_teacher_service)
 ):
+    """
+    Obtiene profesor por ID.
+    
+    - **LAS EXCEPCIONES SE PROPAGAN AL MANEJADOR GLOBAL**
+    """
     teacher = await service.get_teacher(teacher_id)
     
     return success_response(
@@ -114,6 +129,11 @@ async def get_teacher_with_user(
     _: Dict[str, Any] = Depends(require_admin_or_teacher),
     service: TeacherService = Depends(get_teacher_service)
 ):
+    """
+    Obtiene profesor con información de usuario.
+    
+    - **LAS EXCEPCIONES SE PROPAGAN AL MANEJADOR GLOBAL**
+    """
     teacher_with_user = await service.get_teacher_with_user(teacher_id)
     
     return success_response(
@@ -132,45 +152,45 @@ async def get_teacher_with_user(
 async def get_teacher_groups(
     request: Request,
     teacher_id: str,
-    _: Dict[str, Any] = Depends(get_current_admin_user)
+    _: Dict[str, Any] = Depends(get_current_admin_user),
+    
 ):
-    try:
-        from app.services.group_service import GroupService
-        group_service = GroupService()
-        groups = await group_service.get_groups_by_teacher(teacher_id)
-        
-        return success_response(
-            data=[group.model_dump() for group in groups],
-            message=f"Grupos del profesor {teacher_id} obtenidos correctamente"
-        )
-        
-    except Exception as e:
-        logger.error(f"Error obteniendo grupos del profesor {teacher_id}: {str(e)}")
-        return internal_server_error_response()
 
+    from app.services.group_service import GroupService
+    group_service = GroupService()
+    groups = await group_service.get_groups_by_teacher(teacher_id)
+    
+    return success_response(
+        data=[group.model_dump() for group in groups],
+        message=f"Grupos del profesor {teacher_id} obtenidos correctamente"
+    )
 
 
 @router.put(
     "/{teacher_id}",
     status_code=status.HTTP_200_OK,
     summary="Actualizar profesor",
+    description="Permite a los administradores modificar los datos académicos del docente.",
     responses=ResponseDocumentation.get_standard_responses()
 )
 @admin_rate_limit()
 async def update_teacher(
     request: Request,
     teacher_id: str,
-    teacher_data: TeacherUpdate,
+    teacher_data: TeacherProfileUpdate,
     current_admin: Dict[str, Any] = Depends(get_current_admin_user),
     service: TeacherService = Depends(get_teacher_service)
 ):
+    
+    # Obtener docente por user_id del token
     teacher = await service.update_teacher(teacher_id, teacher_data)
-    
-    logger.info(f"Profesor actualizado: {teacher_id} por {current_admin['nombre_completo']}")
-    
+
+    logger.info(f"Estudiante actualizado: {teacher_id} por {current_admin['nombre_completo']}")
+
+
     return updated_response(
         data=teacher.model_dump(),
-        message="Profesor actualizado exitosamente"
+        message="Estudiante actualizado exitosamente"
     )
 
 
@@ -253,23 +273,19 @@ async def get_teacher_workload(
     teacher_id: str,
     _: Dict[str, Any] = Depends(get_current_admin_user)
 ):
-    try:
-        from app.services.group_service import GroupService
-        group_service = GroupService()
-        groups = await group_service.get_groups_by_teacher(teacher_id)
+    from app.services.group_service import GroupService
+    group_service = GroupService()
+    groups = await group_service.get_groups_by_teacher(teacher_id)
+    
+    workload_data = {
+        "id_docente": teacher_id,
+        "total_grupos": len(groups),
+        "grupos_activos": len([g for g in groups if getattr(g, 'activo', True)]),
+        "detalle_grupos": [group.model_dump() for group in groups]
+    }
+    
+    return success_response(
+        data=workload_data,
+        message="Carga de trabajo obtenida correctamente"
+    )
         
-        workload_data = {
-            "id_docente": teacher_id,
-            "total_grupos": len(groups),
-            "grupos_activos": len([g for g in groups if getattr(g, 'activo', True)]),
-            "detalle_grupos": [group.model_dump() for group in groups]
-        }
-        
-        return success_response(
-            data=workload_data,
-            message="Carga de trabajo obtenida correctamente"
-        )
-        
-    except Exception as e:
-        logger.error(f"Error obteniendo carga de trabajo del profesor {teacher_id}: {str(e)}")
-        return internal_server_error_response()
