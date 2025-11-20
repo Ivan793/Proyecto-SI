@@ -53,39 +53,43 @@ async def get_my_profile(request: Request, current_teacher: Dict[str, Any] = Dep
 # ============================================================
 
 @router.get("/proyectos", response_model=List[ProyectoBase])
-async def obtener_todos_los_proyectos():
+async def obtener_todos_los_proyectos(service: TeacherService = Depends(get_teacher_service)):
     """
     Lista todos los proyectos disponibles públicamente.
     """
     try:
-        proyectos = await teacher_service.list_all_projects()
+        proyectos = await service.list_all_projects()
         return proyectos
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener proyectos: {str(e)}")
 
 
 @router.get("/{id_docente}/perfil")
-async def obtener_informacion_docente(id_docente: str):
+async def obtener_informacion_docente(id_docente: str, service: TeacherService = Depends(get_teacher_service)):
     """
     Obtiene información pública del docente (perfil básico).
     """
     try:
-        docente = await teacher_service.get_teacher_public_info(id_docente)
+        docente = await service.get_teacher_public_info(id_docente)
         return docente
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Docente no encontrado: {str(e)}")
 
 
 @router.get("/{id_docente}/materias")
-async def obtener_materias_docente(id_docente: str):
+async def obtener_materias_docente(id_docente: str, service: TeacherService = Depends(get_teacher_service)):
     """
     Lista las materias que dicta un docente.
     """
     try:
-        materias = await teacher_service.list_teacher_subjects(id_docente)
+        from app.repositories.subject_repository import SubjectService
+        subject_service = SubjectService()
+        materias = await subject_service.get_teachers_for_subject(id_docente)
         return materias
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al listar materias: {str(e)}")
+
+    
 
 
 @router.get("/materias/{codigo_materia}/grupos")
@@ -98,6 +102,8 @@ async def obtener_grupos_materia(codigo_materia: str):
         return grupos
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al listar grupos: {str(e)}")
+    
+    
 
 
 @router.get("/{id_docente}/proyectos", response_model=List[ProyectoBase])

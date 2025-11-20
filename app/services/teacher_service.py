@@ -11,6 +11,7 @@ from google.cloud.firestore_v1 import transactional
 
 from app.exceptions.base_exceptions import NotFoundException, ValidationException, DatabaseException
 from app.repositories.academic_repository import ProgramRepository
+from app.repositories.group_repository import GroupRepository
 from app.repositories.teacher_repository import TeacherRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.teacher import (
@@ -60,7 +61,8 @@ class TeacherService:
         program_repo: ProgramRepository,
         auth_service: AuthService,
         teacher_validators: TeacherValidators,
-        user_validators: UserValidators
+        user_validators: UserValidators,\
+        group_repo = GroupRepository()
     ):
         self.teacher_repo = teacher_repo
         self.user_repo = user_repo
@@ -68,6 +70,7 @@ class TeacherService:
         self.auth_service = auth_service
         self.teacher_validators = teacher_validators
         self.user_validators = user_validators
+        self.group_repo = group_repo
         
         # Thread pool para operaciones bloqueantes (Firebase Auth)
         self._executor = ThreadPoolExecutor(max_workers=5)
@@ -671,10 +674,7 @@ class TeacherService:
         if not teacher:
             raise TeacherNotFoundException(teacher_id)
 
-        # Obtener grupos del docente
-        from app.repositories.group_repository import GroupRepository
-        group_repo = GroupRepository()
-        groups = await group_repo.get_groups_by_teacher(teacher_id)
+        groups = await self.group_repo.get_groups_by_teacher(teacher_id)
         
         # Enriquecer grupos con información básica
         enriched_groups = []
@@ -682,7 +682,7 @@ class TeacherService:
             group_code = group.get("codigo_grupo")
             if group_code:
                 # Obtener información básica del grupo
-                group_details = await group_repo.get_group_with_details(group_code)
+                group_details = await self.group_repo.get_group_with_details(group_code)
                 if group_details:
                     enriched_groups.append({
                         "codigo_grupo": group_code,
@@ -746,25 +746,23 @@ class TeacherService:
             logger.error(f"Error listando materias del docente {teacher_id}: {str(e)}")
             raise DatabaseException("Error al listar materias del docente")
 
-    async def list_subject_groups(self, subject_code: str) -> list:
+    async def list_subject_groups(self, subject_code: str, ) -> list:
         """
         Lista los grupos asociados a una materia específica.
         """
         try:
-            from app.repositories.group_repository import GroupRepository
-            group_repo = GroupRepository()
-            groups = await group_repo.get_groups_by_subject(subject_code)
+
+            groups = await self.group_repo.get_groups_by_subject(subject_code)
             return groups
         except Exception as e:
             logger.error(f"Error listando grupos de la materia {subject_code}: {str(e)}")
             raise DatabaseException("Error al listar grupos de la materia")
 
-    async def list_teacher_projects(self, teacher_id: str) -> list:
+    async def list_teacher_projects(self, teacher_id: str, ) -> list:
         """
         Lista los proyectos en los que participa un docente.
         """
         try:
-            from app.repositories.teacher_repository import TeacherRepository
             projects = await self.teacher_repo.get_projects_by_teacher(teacher_id)
             return projects
         except Exception as e:
