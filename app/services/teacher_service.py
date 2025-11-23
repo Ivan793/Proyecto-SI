@@ -5,7 +5,7 @@ from firebase_admin import auth as firebase_auth
 from firebase_admin.exceptions import FirebaseError
 from app.repositories.proyect_repository import ProyectoRepository
 
-from app.exceptions.base_exceptions import ValidationException, DatabaseException
+from app.exceptions.base_exceptions import NotFoundException, ValidationException, DatabaseException
 from app.repositories.academic_repository import ProgramRepository
 from app.repositories.teacher_repository import TeacherRepository
 from app.repositories.user_repository import UserRepository
