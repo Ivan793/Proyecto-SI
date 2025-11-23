@@ -611,20 +611,20 @@ class TeacherService:
             if not teacher:
                 raise NotFoundException("Docente no encontrado")
 
-            # Aquí obtienes el id del usuario asociado al docente
+            # id del usuario asociado al docente
             user_id = teacher.get("id_usuario")
             if not user_id:
                 raise NotFoundException("El docente no tiene usuario asociado")
 
-            # 🔹 Buscar el usuario en Firestore
+            # Buscar el usuario en Firestore
             user = await self.user_repo.get_by_id(user_id)
             if not user:
                 raise NotFoundException("Usuario asociado no encontrado")
 
-            # 🔹 Construir respuesta con ambos modelos
+            # Construir respuesta con ambos modelos
             return TeacherWithFullUserResponse(
                 docente=TeacherResponse(**teacher),
-                usuario=UserResponse(**user)  # <--- este debe ser el modelo correcto
+                usuario=UserResponse(**user)  # <--- modelo correcto
             )
 
         except Exception as e:
@@ -633,23 +633,15 @@ class TeacherService:
         
         
     async def list_projects_by_teacher_and_subject(self, teacher_id: str, materia: str):
-        # 1. Verificar docente
         docente = await self.teacher_repo.get_by_id(teacher_id)
         if not docente:
-            raise ValueError("DOCENTE_NO_ENCONTRADO")
+            raise NotFoundException("Docente no encontrado")
 
-        # 2. (Opcional) validar la materia si tienes un catálogo o colección de materias
-        # materia_existe = await self.materia_repo.get_by_name(materia)
-        # if not materia_existe:
-        #     raise ValueError("MATERIA_NO_EXISTE")
-
-        # 3. Consultar proyectos
         proyectos = await self.proyect_repo.get_projects_by_teacher_and_subject(
             teacher_id,
             materia
         )
 
         if not proyectos or len(proyectos) == 0:
-            raise ValueError("NO_HAY_PROYECTOS_PARA_MATERIA")
-
+            raise NotFoundException("No hay proyectos para la materia")
         return proyectos
