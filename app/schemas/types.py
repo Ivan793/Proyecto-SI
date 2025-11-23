@@ -146,24 +146,6 @@ UserRole = Annotated[
     Field(description="Rol del usuario en el sistema")
 ]
 
-# ==================== TIPOS DE FACULTAD ====================
-
-FacultyId = Annotated[
-    str,
-    Field(
-        min_length=Limits.USER_ID_MIN,
-        max_length=Limits.USER_ID_MAX,
-        description="Identificador único de la facultad"
-    )
-]
-
-FacultyName = Annotated[
-    str,
-    Field(
-        max_length=50,
-        description="Nombre de la facultad"
-    )
-]
 
 # ==================== TIPOS DE PROGRAMA ACADÉMICO ====================
 

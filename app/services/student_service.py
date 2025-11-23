@@ -5,10 +5,12 @@ from firebase_admin import auth as firebase_auth
 from firebase_admin.exceptions import FirebaseError
 
 from app.exceptions.base_exceptions import ValidationException, DatabaseException
+from app.repositories.academic_repository import ProgramRepository
 from app.repositories.student_repository import StudentRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.student import (
-    StudentUpdate,
+    StudentCreateWithUser, 
+    StudentUpdate, 
     StudentResponse,
     StudentWithFullUserResponse, 
     StudentWithUserResponse
@@ -29,6 +31,8 @@ from firebase_admin._auth_utils import (
 )
 from app.core.validators import validate_user_role_email_match
 from app.services.auth_service import AuthService
+from app.validators.student_validators import StudentValidators
+from app.validators.user_validators import UserValidators
 
 logger = logging.getLogger(__name__)
 
@@ -39,60 +43,80 @@ class StudentService:
         self.student_repo = StudentRepository()
         self.user_repo = UserRepository()
         self.auth_service = AuthService()
+        self.program_repo = ProgramRepository()
+        self.user_validators = UserValidators(self.user_repo)
+        self.student_validators = StudentValidators(self.program_repo)
 
-
-    async def _validate_student_creation_prerequisites(self, usuario_data: UserCreate) -> None:
-        # Validar rol
-        if usuario_data.rol != "Estudiante":
-            raise ValidationException(
-                message="El rol debe ser 'Estudiante' para este endpoint",
-                field="rol"
-            )
+    async def create_student_with_user(
+        self, 
+        student_data: StudentCreateWithUser
+    ) -> StudentResponse:
+        usuario_data = student_data.usuario
         
-        # Validar identificación única
-        existing_by_id = await self.user_repo.get_by_field(
-            "identificacion", 
-            usuario_data.identificacion
-        )
-        if existing_by_id:
-            raise UserAlreadyExistsException(
-                field="identificacion", 
-                value=usuario_data.identificacion
-            )
-        
-        # Validar correo único
-        existing_user = await self.user_repo.get_user_by_email(usuario_data.correo)
-        if existing_user:
-            raise UserAlreadyExistsException(
-                field="correo", 
-                value=usuario_data.correo
-            )
-        
-        # Validar correo único en Firebase Auth
-        if await self._email_exists_in_firebase_auth(usuario_data.correo):
-            raise UserAlreadyExistsException(
-                field="correo", 
-                value=usuario_data.correo
-            )
-        
-        # Validar dominio de correo
         try:
-            validate_user_role_email_match(usuario_data.correo, usuario_data.rol)
-        except ValueError as e:
-            raise InvalidEmailDomainException(role=usuario_data.rol, custom_message=str(e))
-        
-    async def _email_exists_in_firebase_auth(self, email: str) -> bool:
-        """Verifica si el email ya existe en Firebase Authentication"""
-        try:
-            firebase_auth.get_user_by_email(email)
-            return True  # Si no lanza excepción, el usuario existe
-        except firebase_auth.UserNotFoundError:
-            return False  # Usuario no encontrado
+            # VALIDACIONES ESPECÍFICAS DE USUARIO
+            await self.user_validators.validate_all_user_fields(
+                usuario_data, 
+                expected_role="Estudiante"
+            )
+            # VALIDACIONES ESPECÍFICAS DE ESTUDIANTE
+            await self.student_validators.validate_all_student_fields(student_data)
+            
+            # Variables para rollback
+            firebase_user = None
+            user_created = False
+            student_created = False
+            
+            try:
+                firebase_user = await self._create_firebase_user(usuario_data)
+                user_id = firebase_user.uid
+                logger.info(f"Usuario creado en Firebase Auth: {user_id}")
+                
+                await self._create_firestore_user(usuario_data, user_id)
+                user_created = True
+                logger.info(f"Usuario creado en Firestore: {user_id}")
+                
+                student_id = await self._create_student_record(student_data, user_id)
+                student_created = True
+                logger.info(f"Estudiante creado y vinculado: {student_id} -> {user_id}")
+                
+                # Enviar email de verificación
+                try:
+                    email_sent = await self.auth_service.send_email_verification(
+                        usuario_data.correo
+                    )
+                    if email_sent:
+                        logger.info(f"Email de verificación enviado a: {usuario_data.correo}")
+                    else:
+                        logger.warning(f"No se pudo enviar email de verificación a: {usuario_data.correo}")
+                except Exception as e:
+                    # No detener el proceso si falla el envío de email
+                    logger.error(f"Error enviando email de verificación: {str(e)}")
+                
+                return await self._get_created_student(student_id)
+                
+            except FirebaseError as e:
+                logger.error(f"Error de Firebase al crear usuario: {str(e)}")
+                raise DatabaseException(
+                    message="Error al crear usuario en el sistema de autenticación",
+                    details={"firebase_error": str(e)}
+                )
+            except Exception as e:
+                logger.error(f"Error inesperado durante creación: {str(e)}")
+                await self._rollback_student_creation(
+                    firebase_user, user_created, student_created
+                )
+                raise DatabaseException(
+                    message="Error durante la creación del estudiante",
+                    details={"internal_error": str(e)}
+                )
+                
+        except (ValidationException, UserAlreadyExistsException, InvalidEmailDomainException) as e:
+            logger.warning(f"Error de validación/negocio: {str(e)}")
+            raise
         except Exception as e:
-            logger.warning(f"Error verificando email en Firebase Auth: {str(e)}")
-            # En caso de error, asumimos que no existe para permitir que el flujo continúe
-            # La creación fallará después si realmente existe
-            return False
+            logger.error(f"Error inesperado en validaciones iniciales: {str(e)}")
+            raise DatabaseException("Error interno del sistema")
 
     async def _create_firebase_user(self, usuario_data: UserCreate) -> Any:
         try:
@@ -125,6 +149,17 @@ class StudentService:
         
         await self.user_repo.create(user_dict, document_id=user_id)
 
+    async def _create_student_record(self, student_data: StudentCreateWithUser, user_id: str) -> str:
+        """Crea registro de estudiante"""
+        student_dict = {
+            "id_usuario": user_id,
+            "codigo_programa": student_data.codigo_programa,
+            "semestre": student_data.semestre,
+            "anio_ingreso": student_data.anio_ingreso,
+            "periodo": student_data.periodo,
+        }
+        
+        return await self.student_repo.create(student_dict)
 
     async def _get_created_student(self, student_id: str) -> StudentResponse:
         """Obtiene estudiante creado"""

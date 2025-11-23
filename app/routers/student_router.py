@@ -2,6 +2,7 @@ from fastapi import APIRouter, Body, Depends, Request, status
 from typing import Dict, Any
 import logging
 
+from app.exceptions.base_exceptions import ValidationException
 from app.schemas.types import ReasonText
 from app.services.student_service import StudentService
 from app.schemas.student import StudentCreateWithUser, StudentUpdate, StudentResponse
@@ -13,7 +14,7 @@ from app.utils.responses import (
     conflict_response
 )
 from app.exceptions.student_exceptions import StudentNotFoundException
-from app.exceptions.user_exceptions import UserNotFoundException, UserAlreadyExistsException
+from app.exceptions.user_exceptions import InvalidEmailDomainException, UserNotFoundException, UserAlreadyExistsException
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,11 @@ async def register_student(
 
     except UserAlreadyExistsException as e:
         return conflict_response(message=str(e))
+    except (ValidationException, InvalidEmailDomainException) as e:
+        logger.warning(f"Error de validación: {str(e)}")
+        return bad_request_response(
+            message=str(e)
+        )
     except Exception as e:
         logger.error(f" Error registrando estudiante: {str(e)}")
         return internal_server_error_response()
@@ -139,6 +145,11 @@ async def update_my_profile(
         
     except StudentNotFoundException:
         return not_found_response("Estudiante", "asociado a su usuario")
+    except (ValidationException, InvalidEmailDomainException) as e:
+        logger.warning(f"Error de validación: {str(e)}")
+        return bad_request_response(
+            message=str(e)
+        )
     except Exception as e:
         logger.error(f"Error actualizando perfil: {str(e)}")
         return internal_server_error_response()
