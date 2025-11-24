@@ -12,6 +12,7 @@ from google.cloud.firestore_v1 import transactional
 from app.exceptions.base_exceptions import NotFoundException, ValidationException, DatabaseException
 from app.repositories.academic_repository import ProgramRepository
 from app.repositories.group_repository import GroupRepository
+from app.repositories.proyect_repository import ProyectoRepository
 from app.repositories.teacher_repository import TeacherRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.teacher import (
@@ -61,8 +62,9 @@ class TeacherService:
         program_repo: ProgramRepository,
         auth_service: AuthService,
         teacher_validators: TeacherValidators,
-        user_validators: UserValidators,\
-        group_repo = GroupRepository()
+        user_validators: UserValidators,
+        group_repo: GroupRepository,
+        project_repo: ProyectoRepository,
     ):
         self.teacher_repo = teacher_repo
         self.user_repo = user_repo
@@ -71,6 +73,7 @@ class TeacherService:
         self.teacher_validators = teacher_validators
         self.user_validators = user_validators
         self.group_repo = group_repo
+        self.project_repo = project_repo
         
         # Thread pool para operaciones bloqueantes (Firebase Auth)
         self._executor = ThreadPoolExecutor(max_workers=5)
@@ -703,7 +706,7 @@ class TeacherService:
     
 
 # ------------- Francisco ---------------------
-    async def get_teacher_public_info(self, teacher_id: str) -> dict:
+    async def get_teacher_public_info(self, teacher_id: str, ) -> dict:
             """
             Obtiene información pública del docente (solo datos básicos).
             """
@@ -763,20 +766,18 @@ class TeacherService:
         Lista los proyectos en los que participa un docente.
         """
         try:
-            projects = await self.teacher_repo.get_projects_by_teacher(teacher_id)
+            projects = await self.project_repo.get_projects_by_teacher(teacher_id)
             return projects
         except Exception as e:
             logger.error(f"Error listando proyectos del docente {teacher_id}: {str(e)}")
             raise DatabaseException("Error al listar proyectos del docente")
 
-    async def get_project_info(self, project_id: str) -> dict:
+    async def get_project_info(self, project_id: str,) -> dict:
         """
         Obtiene la información detallada de un proyecto.
         """
         try:
-            from app.repositories.proyect_repository import ProjectRepository
-            project_repo = ProjectRepository()
-            project = await project_repo.get_project_detail(project_id)
+            project = await self.project_repo.get_project_detail(project_id)
             if not project:
                 raise ValidationException("Proyecto no encontrado")
             return project
@@ -791,13 +792,23 @@ class TeacherService:
         Lista todos los proyectos disponibles públicamente.
         """
         try:
-            from app.repositories.proyect_repository import ProjectRepository
-            project_repo = ProjectRepository()
-            projects = await project_repo.get_all_projects()
+            projects = await self.project_repo.get_all()
             return projects
         except Exception as e:
             logger.error(f"Error listando todos los proyectos públicos: {str(e)}")
             raise DatabaseException("Error al listar los proyectos públicos")
-
-
+        
     
+    async def list_projects_by_teacher_and_subject(self, teacher_id: str, materia: str):
+        docente = await self.teacher_repo.get_by_id(teacher_id)
+        if not docente:
+            raise NotFoundException("Docente no encontrado")
+
+        proyectos = await self.project_repo.get_projects_by_teacher_and_subject(
+            teacher_id,
+            materia
+        )
+
+        if not proyectos or len(proyectos) == 0:
+            raise NotFoundException("No hay proyectos para la materia")
+        return proyectos

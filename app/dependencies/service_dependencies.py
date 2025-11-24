@@ -1,7 +1,10 @@
+from app.repositories.group_repository import GroupRepository
+from app.repositories.proyect_repository import ProyectoRepository
 from app.repositories.teacher_repository import TeacherRepository
 from app.services.teacher_service import TeacherService
 from functools import lru_cache
 from fastapi import Depends
+
 
 from app.repositories.student_repository import StudentRepository
 from app.repositories.user_repository import UserRepository
@@ -13,6 +16,18 @@ from app.validators.user_validators import UserValidators
 from app.services.student_service import StudentService
 
 # ==================== REPOSITORIOS (SINGLETONS) ====================
+@lru_cache()
+def get_group_repository() -> GroupRepository:
+    """Singleton del repositorio de grupos"""
+    return GroupRepository()
+
+@lru_cache()
+def get_proyecto_repository() -> ProyectoRepository:
+    """Singleton del repositorio de proyectos"""
+    return ProyectoRepository()
+from app.services.teacher_service import TeacherService
+from functools import lru_cache
+from fastapi import Depends
 
 @lru_cache()
 def get_student_repository() -> StudentRepository:
@@ -97,7 +112,10 @@ def get_teacher_service(
     program_repo: ProgramRepository = Depends(get_program_repository),
     auth_service: AuthService = Depends(get_auth_service),
     teacher_validators: TeacherValidators = Depends(get_teacher_validators),
-    user_validators: UserValidators = Depends(get_user_validators)
+    user_validators: UserValidators = Depends(get_user_validators),
+    group_repo: GroupRepository = Depends(get_group_repository),
+    project_repo: ProyectoRepository = Depends(get_proyecto_repository)
+    
 ) -> TeacherService:
     """
     Factory del servicio de docentes con todas las dependencias inyectadas.
@@ -108,5 +126,7 @@ def get_teacher_service(
         program_repo=program_repo,
         auth_service=auth_service,
         teacher_validators=teacher_validators,
-        user_validators=user_validators
+        user_validators=user_validators,
+        group_repo=group_repo,
+        project_repo=project_repo
     )
