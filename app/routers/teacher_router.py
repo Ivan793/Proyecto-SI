@@ -127,7 +127,7 @@ async def obtener_detalle_proyecto(
 
 
 @router.put(
-    "/",
+    "",
     status_code=status.HTTP_200_OK,
     summary="Actualizar profesor",
     description="Permite a los Docentes modificar los datos académicos de su perfil",
