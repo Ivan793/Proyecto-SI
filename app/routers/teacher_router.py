@@ -137,7 +137,7 @@ async def obtener_detalle_proyecto(
 async def update_teacher(
     request: Request,
     teacher_data: TeacherProfileUpdate,
-    current_admin: Dict[str, Any] = Depends(require_teacher),
+    current_admin: Dict[str, Any] = Depends(get_current_teacher_user),
     service: TeacherService = Depends(get_teacher_service)
 ):
     """
