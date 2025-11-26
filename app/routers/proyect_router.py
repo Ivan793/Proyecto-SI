@@ -1,12 +1,10 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from app.schemas.proyect import ProyectoCreate, ProyectoResponse, ProyectoUpdate
-from app.repositories.proyect_repository import ProyectoRepository
+from app.services import proyect_service
 from app.exceptions.base_exceptions import AppException
-from app.services.proyect_service import _validar_existencia_ids
 import json
 
 router = APIRouter(prefix="/api/v1/proyectos", tags=["Proyectos"])
-repository = ProyectoRepository()
 
 
 # ==========================================================
@@ -20,127 +18,212 @@ async def create_proyecto(
     """
     Crea un nuevo proyecto con archivo PDF obligatorio.
     - El campo 'proyecto_data' debe ser un JSON string válido con la estructura de ProyectoCreate.
-    - 'calificacion' siempre será null.
-    - 'estado_calificacion' se guarda automáticamente como 'pendiente'.
+    - Para estudiantes activos: requiere id_docente, id_grupo, codigo_materia
+    - Para egresados: NO requiere id_docente, id_grupo, codigo_materia, y NO puede tener calificación
+    - La detección de egresado/estudiante se hace automáticamente según el rol del primer estudiante
     """
     try:
+        # Parsear el JSON string
         proyecto_dict = json.loads(proyecto_data)
+        
+        # NO crear el schema todavía, pasar el dict directamente al service
+        # El service se encargará de toda la lógica
+        new_proyecto = await proyect_service.create_proyecto_from_dict(proyecto_dict, archivo)
+        
+        return new_proyecto
 
-        # Validar estructura básica de IDs y referencias
-        _validar_existencia_ids(proyecto_dict)
-
-        # Forzar valores iniciales
-        proyecto_dict["calificacion"] = None
-        proyecto_dict["estado_calificacion"] = "pendiente"
-
-        # Crear proyecto
-        new_id = await repository.create_with_pdf(proyecto_dict, archivo)
-        created = await repository.get_by_id(new_id)
-
-        return ProyectoResponse(**created)
-
-    except AppException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="El campo 'proyecto_data' debe ser JSON válido.")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except AppException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 # ==========================================================
-#  Listar proyectos
+# Listar proyectos
 # ==========================================================
 @router.get("/", response_model=list[ProyectoResponse])
-async def list_proyectos():
+async def list_proyectos(include_inactivos: bool = False):
     """
-    Obtiene todos los proyectos activos.
+    Obtiene todos los proyectos.
+    - Por defecto solo muestra proyectos activos
+    - Parámetro opcional: include_inactivos=true para ver también los desactivados
     """
-    proyectos = await repository.get_all()
-    return [ProyectoResponse(**p) for p in proyectos]
+    try:
+        proyectos = proyect_service.list_proyectos(include_inactivos=include_inactivos)
+        return proyectos
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al listar proyectos: {str(e)}")
 
 
 # ==========================================================
-#  Actualizar información general (NO calificación)
+# Obtener proyecto por ID
 # ==========================================================
-@router.put("/{proyect_id}", response_model=ProyectoResponse)
+@router.get("/{proyecto_id}", response_model=ProyectoResponse)
+async def get_proyecto(proyecto_id: str):
+    """
+    Obtiene un proyecto específico por su id_proyecto (ej: '001', '002').
+    """
+    try:
+        proyecto = proyect_service.get_proyecto_by_id_proyecto(proyecto_id)
+        if not proyecto:
+            raise HTTPException(status_code=404, detail=f"Proyecto '{proyecto_id}' no encontrado")
+        return proyecto
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener proyecto: {str(e)}")
+
+
+# ==========================================================
+# Actualizar información general (NO calificación)
+# ==========================================================
+@router.put("/{proyecto_id}", response_model=ProyectoResponse)
 async def update_proyecto(
-    proyect_id: str,
+    proyecto_id: str,
     proyecto_data: str = Form(...),
     archivo: UploadFile = File(None)
 ):
     """
     Actualiza un proyecto. El PDF es opcional.
-    No permite modificar la calificación ni el estado_calificacion.
+    No permite modificar la calificación, estado_calificacion, docente, estudiantes, grupo o materia.
     """
     try:
         proyecto_dict = json.loads(proyecto_data)
 
         # Proteger campos que no deben modificarse aquí
-        proyecto_dict.pop("calificacion", None)
-        proyecto_dict.pop("estado_calificacion", None)
+        campos_protegidos = ["calificacion", "estado_calificacion", "id_docente", 
+                           "id_estudiantes", "id_grupo", "codigo_materia", "es_egresado"]
+        for campo in campos_protegidos:
+            proyecto_dict.pop(campo, None)
 
-        await repository.update_with_pdf(proyect_id, proyecto_dict, archivo)
-        updated = await repository.get_by_id(proyect_id)
-        return ProyectoResponse(**updated)
+        # Validar con el schema de actualización
+        proyecto_update = ProyectoUpdate(**proyecto_dict)
+        
+        # Actualizar proyecto
+        updated = await proyect_service.update_proyecto(proyecto_id, proyecto_update, archivo)
+        
+        if not updated:
+            raise HTTPException(status_code=404, detail=f"Proyecto '{proyecto_id}' no encontrado")
+        
+        return updated
 
-    except AppException as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="El campo 'proyecto_data' debe ser JSON válido.")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except AppException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Error al actualizar proyecto: {str(e)}")
 
 
 # ==========================================================
-#  Actualizar calificación y estado_calificacion
+# Actualizar calificación y estado_calificacion
 # ==========================================================
-@router.put("/{proyect_id}/calificacion", response_model=ProyectoResponse)
+@router.put("/{proyecto_id}/calificacion", response_model=ProyectoResponse)
 async def actualizar_calificacion(
-    proyect_id: str,
+    proyecto_id: str,
     calificacion: float = Form(...)
 ):
     """
-    Actualiza la calificación de un proyecto.
+    Actualiza la calificación de un proyecto DE ESTUDIANTES ACTIVOS.
+    - NO se puede calificar proyectos de egresados
     - Si la nota >= 3 → estado_calificacion = 'aprobado'
     - Si la nota < 3 → estado_calificacion = 'reprobado'
     - Si la nota es null → estado_calificacion = 'pendiente'
     """
     try:
+        # Obtener el proyecto para verificar si es egresado
+        proyecto = proyect_service.get_proyecto_by_id_proyecto(proyecto_id)
+        if not proyecto:
+            raise HTTPException(status_code=404, detail=f"Proyecto '{proyecto_id}' no encontrado")
+        
+        # Verificar si es proyecto de egresado
+        if proyecto.es_egresado:
+            raise HTTPException(
+                status_code=400, 
+                detail="No se puede asignar calificación a proyectos de egresados"
+            )
+
+        # Validar rango de calificación
         if calificacion is not None:
             if calificacion < 0 or calificacion > 5:
                 raise HTTPException(status_code=400, detail="La calificación debe estar entre 0 y 5.")
 
-            estado = "aprobado" if calificacion >= 3 else "reprobado"
-        else:
-            calificacion = None
-            estado = "pendiente"
+        # Crear update con solo la calificación
+        update_data = ProyectoUpdate(calificacion=calificacion)
+        
+        # Actualizar proyecto
+        updated = await proyect_service.update_proyecto(proyecto_id, update_data, archivo=None)
+        
+        if not updated:
+            raise HTTPException(status_code=404, detail=f"Proyecto '{proyecto_id}' no encontrado")
 
-        update_data = {"calificacion": calificacion, "estado_calificacion": estado}
-        await repository.update_with_pdf(proyect_id, update_data, archivo=None)
+        return updated
 
-        updated = await repository.get_by_id(proyect_id)
-        return ProyectoResponse(**updated)
-
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except AppException as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Error al actualizar calificación: {str(e)}")
 
 
 # ==========================================================
-#  Eliminado lógico
+# Eliminado lógico
 # ==========================================================
-@router.delete("/{proyect_id}")
-async def delete_proyecto(proyect_id: str):
+@router.delete("/{proyecto_id}")
+async def delete_proyecto(proyecto_id: str):
     """
     Elimina lógicamente un proyecto (marca como inactivo).
+    Funciona tanto para proyectos de estudiantes activos como de egresados.
     """
     try:
-        success = await repository.soft_delete_proyect(proyect_id)
+        success = proyect_service.delete_proyecto(proyecto_id)
+        
         if not success:
-            raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-        return {"message": "Proyecto desactivado correctamente"}
+            raise HTTPException(status_code=404, detail=f"Proyecto '{proyecto_id}' no encontrado")
+        
+        return {"message": "Proyecto desactivado correctamente", "id_proyecto": proyecto_id}
+        
     except AppException as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Error al eliminar proyecto: {str(e)}")
+
+
+# ==========================================================
+# Endpoint adicional: Listar proyectos de egresados
+# ==========================================================
+@router.get("/egresados/lista", response_model=list[ProyectoResponse])
+async def list_proyectos_egresados():
+    """
+    Obtiene únicamente los proyectos de egresados.
+    """
+    try:
+        todos_proyectos = proyect_service.list_proyectos(include_inactivos=False)
+        proyectos_egresados = [p for p in todos_proyectos if p.es_egresado]
+        return proyectos_egresados
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al listar proyectos de egresados: {str(e)}")
+
+
+# ==========================================================
+# Endpoint adicional: Listar proyectos de estudiantes activos
+# ==========================================================
+@router.get("/estudiantes/lista", response_model=list[ProyectoResponse])
+async def list_proyectos_estudiantes():
+    """
+    Obtiene únicamente los proyectos de estudiantes activos (no egresados).
+    """
+    try:
+        todos_proyectos = proyect_service.list_proyectos(include_inactivos=False)
+        proyectos_estudiantes = [p for p in todos_proyectos if not p.es_egresado]
+        return proyectos_estudiantes
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al listar proyectos de estudiantes: {str(e)}")
